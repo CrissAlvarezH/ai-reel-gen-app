@@ -1,0 +1,125 @@
+{
+  "skill_name": "animated-video",
+  "evals": [
+    {
+      "id": 1,
+      "name": "format_lock_before_build",
+      "request": "Here's my 70-second script about starting my company. Create an animation for it with a voiceover.",
+      "session": "No prior animation for this user exists. The script is first-person and personal. The agent has Remotion, ffmpeg, a TTS option, and time to build.",
+      "checks": [
+        "Names the candidate formats (for example character story, motion graphics, infographic) instead of silently picking one",
+        "Asks about the production route and its cost, or asks the user to rule routes in or out",
+        "Asks for reference footage or photos because a real person is the subject",
+        "Shows style frames and a key-frame board before any full build",
+        "Does not start building a full timeline before the format is confirmed"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "past_film_is_evidence_not_template",
+      "request": "Make a 45-second animated explainer about how our API rate limits work, for LinkedIn in 1:1.",
+      "session": "The same machine holds a finished vertical cartoon project from an earlier brief: a flat 2D character rig, a warm night colour script, captions with a thick dark stroke, and an Instagram-safe layout. The user was only partly happy with that film.",
+      "checks": [
+        "Chooses style, palette, typography and layout from the new brief (explainer, LinkedIn, 1:1)",
+        "Does not reuse the earlier film's rig, colour script or caption look as defaults",
+        "Uses LinkedIn/1:1 framing instead of Instagram vertical safe zones",
+        "Reuses only style-neutral infrastructure (timing from the VO, snapshot/render/review workflow)",
+        "Still confirms the format and a style frame with the user before building"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "short_unnarrated_fast_path",
+      "request": "Make a 30-second hand-drawn stop-motion animation about a cat who learns to code. Cute and charming, for X. Here's a screenshot of the cat.",
+      "session": "No voiceover is wanted. The session runs a model other than Claude Opus 5.5. Remotion and ffmpeg are available, and the video-edit skill's sound-effect library is installed.",
+      "checks": [
+        "Tells the user once that the strongest available model at high effort gives the best results, then continues",
+        "Confirms the named format in one line instead of asking a format question",
+        "Carries the build in one agent rather than parallel animators or a judge panel, while the picture ideas still come from a fresh brainstorm agent",
+        "Designs from the supplied screenshot and sets timing from music or a sound bed",
+        "Prefers on-disk samples over synthesized sound and labels any synthesized sound",
+        "Uses seeded randomness and held drawings for a deterministic stop-motion boil"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "story_alignment_before_build",
+      "request": "Use the animated-video skill to make a short animated video about a story you come up with.",
+      "session": "The user gives no topic, audience, length or tone. Remotion, ffmpeg and a music library are available. The session runs Claude Opus 5.5.",
+      "checks": [
+        "Asks the open intake questions (where it's posted, the feeling or takeaway, length, tone) together, with recommended answers",
+        "Pitches story concepts that genuinely differ, each with its protagonist, want and the pictures for its key beats",
+        "Develops the chosen concept into a timed beat sheet in which every line has a picture with an event in it",
+        "Checks the story for a protagonist who chooses, an escalating middle and a believable turn",
+        "Waits for the user to approve the concept and beat sheet with its pictures before building anything"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "explainer_without_reference",
+      "request": "Make a 60-second vertical animated explainer about what happens in the half second after you tap your card at a checkout. I'll record the voiceover myself later.",
+      "session": "No reference video or image is given. The machine holds a finished luminous-3D explainer from an earlier brief (dark navy, amber data, cyan infrastructure, a globe and a modelled phone). Remotion, three.js, ffmpeg and a sound-effect library are available. The session runs Claude Opus 5.5.",
+      "checks": [
+        "Finds the pictures before pitching: studies how existing explainers pictured the mechanism, gets picture ideas that differ in kind per mechanism from a fresh agent that sees no production rules, and has a separate agent pick for clarity, surprise and spectacle; then pitches differing concepts and a beat sheet naming the picture for every line",
+        "Chooses devices that fit this topic rather than copying the earlier film's (it does not default to a globe, a millisecond clock or numbered packets without a reason)",
+        "Offers visual styles that genuinely differ and shows a style frame of the same beat in each",
+        "Says what each colour means, with the followed thing in the accent as the brightest, most saturated thing in frame, and shows it in the style frames",
+        "Looks up how the real objects and interfaces (card terminal, card chip, payment screens) actually look",
+        "Builds on stand-in word timings from the script and says the film re-times to the real recording",
+        "Shows a key-frame board (one still per beat) and waits for notes before the full animation",
+        "Sets the film's bar from the chosen style's pack and the anchor frames and checks stills against it",
+        "Plans music and sound effects with the first cut, with effects driven by exported picture events"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "rejection_narrows_the_picture",
+      "request": "These style frames feel like you're forcing relevance where there isn't any. I don't like them.",
+      "session": "Mid-production of a vertical explainer about how a social app ranks posts. The rejected frames showed each ranking signal as an invented place (a machine hall, a miniature city). The user gave no other rule. The session runs Claude Opus 5.5.",
+      "checks": [
+        "Writes down what was wrong with those specific pictures (which ones felt forced and why) rather than a rule banning metaphors, invented worlds or machines",
+        "Returns to the picture ideas and proposes new ones of any kind, including metaphors that fit each mechanism more tightly",
+        "Asks the user only if it cannot tell which pictures felt forced, with a recommended reading"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "revision_of_a_finished_film",
+      "request": "This explainer we posted looks uncreative. Make a new version that's a lot more creative.",
+      "session": "A finished, posted 3-minute vertical explainer exists with its Remotion project, narration, talking-head inserts, music and mix. The user is waiting and wants it out fast.",
+      "checks": [
+        "Asks which sections to rebuild, recommending the weakest ones, before fanning out agents across the whole film",
+        "Keeps the posted voice, music, captions and talking heads, and splices only the rebuilt frame ranges into a render of the finished film",
+        "Finds the pictures for the rebuilt sections with a fresh brainstorm and a pick for clarity, surprise and spectacle",
+        "Gets the look approved before fanning out section boards",
+        "For the beat the film will be remembered for, shows rendered directions to pick from rather than descriptions"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "brainstorm_brief_carries_only_user_rules",
+      "request": "Rebuild the middle section of this explainer with new pictures. I want it a lot more creative.",
+      "session": "A finished vertical explainer exists with its Remotion project. In an earlier round the user said one beat's picture (a desk lamp) 'feels too dark' and stated no other rule. The production notes contain a long finish bar and a style guide. The session can launch subagents and runs Claude Opus 5.5.",
+      "checks": [
+        "Gives the brainstorm to a fresh agent whose brief holds the section's script (with what comes before and after), the inventiveness test, any references and the user's stated rules, and nothing else",
+        "Keeps the style pack, the look and production rules out of the brainstorm brief",
+        "Records 'too dark' as a note on that lamp picture rather than banning lamps, metaphors or the earlier film's pictures",
+        "Has a separate fresh agent score the ideas for clarity, surprise and spectacle and pick one per beat",
+        "Shows the picked pictures to the user before building"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "style_without_a_pack",
+      "request": "Make a 40-second pixel-art animation explaining how a password manager keeps your passwords safe, for TikTok.",
+      "session": "The skill's style packs cover handmade 2D, editorial collage, motion graphics, luminous 3D and realistic 3D; none covers pixel art. Remotion and ffmpeg are available. The session runs Claude Opus 5.5.",
+      "checks": [
+        "Confirms pixel art in one line instead of offering other styles",
+        "Builds the style's bar from looked-up pixel-art references (pixel grid, palette limits, frame rate, how light and depth are drawn)",
+        "Does not carry another pack's bar over as defaults (for example luminous 3D's fog, bloom and emissive accents)",
+        "Still runs the picture brainstorm and gets the concept and beat sheet approved before building",
+        "Uses TikTok's vertical framing and safe areas rather than assuming Instagram's"
+      ]
+    }
+  ]
+}

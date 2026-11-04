@@ -1,0 +1,31 @@
+# deps and envs
+node_modules/
+.venv/
+__pycache__/
+# Customer data stays local, including projects, scripts, voices, ideas and preferences.
+/projects/
+/videos/
+/config/
+/LESSONS.md
+/refs/approved/
+/styles/
+# secrets
+.env
+# renders and regenerable media
+out/
+*.raw.mp4
+projects/*/videos/*/public/*.wav
+videos/*/public/*.wav
+# his own recording (formats with footage) and its cut, made again from it by tools/footage.py
+projects/*/videos/*/footage/
+projects/*/videos/*/public/footage.mp4
+# downloaded source photos (credits live in each video's CREDITS.md)
+projects/*/videos/*/assets/src/
+videos/*/assets/src/
+# Inspiración: other accounts' reels (covers, frames, transcripts; not ours to publish)
+inspiration/
+# Mi cuenta: your own reels and their numbers, as downloaded (re-downloadable)
+account/
+# Reel Studio's conversations
+.reel-studio/
+.DS_Store

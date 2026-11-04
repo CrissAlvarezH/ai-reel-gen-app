@@ -1,0 +1,2 @@
+# Inspiración: transcribing other accounts' reels (tools/inspiration.py). Installed from Ajustes → Requisitos.
+faster-whisper

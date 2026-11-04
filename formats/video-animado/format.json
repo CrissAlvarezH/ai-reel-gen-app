@@ -1,0 +1,25 @@
+{
+  "name": "Video animado con voz generada",
+  "summary": "Todo el video es animación sobre una voz generada: guion, voz de Ajustes → Voz, imágenes y escenas en el estilo elegido. No necesitas grabarte.",
+  "default": true,
+  "skill": null,
+  "footage": false,
+  "how": [
+    "Le cuentas la idea; el agente escribe el guion contigo y lo aprueba.",
+    "La voz se genera con la voz de Ajustes → Voz, y sus tiempos marcan cada escena.",
+    "Cada idea del guion tiene su imagen o animación, en el estilo del video.",
+    "Board con un fotograma por parte, efectos de sonido, prueba sin sonido y render."
+  ],
+  "screen": [
+    "La animación ocupa toda la pantalla de principio a fin.",
+    "Subtítulos de la narración, en el estilo del video."
+  ],
+  "editing": [
+    "No hay cortes de grabación: el ritmo lo marcan la voz y los cambios de escena."
+  ],
+  "avoid": [
+    "Escenas quietas mientras la voz explica algo que se puede mostrar."
+  ],
+  "examples": [],
+  "references": []
+}

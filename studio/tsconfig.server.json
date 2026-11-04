@@ -1,0 +1,18 @@
+{
+  // The server runs as-is with Node's built-in type stripping (node server/index.ts, no build step),
+  // so only erasable TypeScript: no enums, namespaces or parameter properties.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["server", "shared", "desktop"]
+}

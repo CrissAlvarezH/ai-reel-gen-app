@@ -1,0 +1,43 @@
+{
+  "name": "Cuaderno de apuntes",
+  "summary": "Como tomar apuntes en vivo: hoja cuadriculada, dibujos a rotulador, flechas a mano y resaltador. Cercano y didáctico, como explicarlo en una servilleta.",
+  "skill": null,
+  "template": null,
+  "palette": [
+    {"name": "Hoja", "hex": "#FAF8F2", "meaning": "el fondo: hoja cuadriculada con margen"},
+    {"name": "Rotulador", "hex": "#1B1B1F", "meaning": "dibujos, flechas y letra"},
+    {"name": "Cuadrícula", "hex": "#D9DEE6", "meaning": "las líneas de la hoja"},
+    {"name": "Resaltador", "hex": "#FFE45C", "meaning": "la idea clave de cada parte"},
+    {"name": "Bolígrafo azul", "hex": "#2F5BD3", "meaning": "notas al margen y ejemplos"},
+    {"name": "Rojo", "hex": "#E5484D", "meaning": "lo que está mal: tachones y errores"}
+  ],
+  "fonts": [
+    {"family": "Caveat 700", "css": "Caveat, cursive", "weight": 700, "google": "Caveat:wght@700", "use": "títulos y palabras escritas a mano", "sample": "¿Y si se cae?"},
+    {"family": "Patrick Hand", "css": "'Patrick Hand', cursive", "google": "Patrick+Hand", "use": "notas al margen y etiquetas", "sample": "más servidores = más gente atendida"},
+    {"family": "Inter 800", "css": "Inter, sans-serif", "weight": 800, "google": "Inter:wght@800", "use": "subtítulos sobre una tira de papel", "sample": "Si se cae uno, siguen los demás."}
+  ],
+  "look": [
+    "Lienzo vertical 1080×1920 con hoja cuadriculada, margen rojo y sombra de página.",
+    "Dibujos de línea a rotulador con trazo irregular: personas de palitos, objetos simples y diagramas.",
+    "Resaltador detrás de la palabra clave; tachones rojos sobre lo incorrecto.",
+    "Post-its para datos y cifras; flechas curvas a mano que unen las ideas.",
+    "Dos colores de acento como mucho por escena."
+  ],
+  "motion": [
+    "Todo se dibuja trazo a trazo, como si una mano lo escribiera en ese momento.",
+    "Animado a 12 fps con un temblor leve en las líneas, para que se vea hecho a mano.",
+    "El resaltador se pasa de izquierda a derecha; los tachones se tachan.",
+    "Se cambia de acto pasando la página."
+  ],
+  "sources": [
+    "Sin fotos: todo se dibuja en código.",
+    "Si hace falta un objeto real, una foto recortada pegada con cinta adhesiva, con licencia libre y en CREDITS.md."
+  ],
+  "avoid": [
+    "Dibujos con mucho detalle: tardan en leerse; menos líneas y más grandes.",
+    "Párrafos en letra manuscrita: lo largo va en el subtítulo en Inter.",
+    "Más de dos colores de acento en una escena."
+  ],
+  "examples": [],
+  "references": []
+}

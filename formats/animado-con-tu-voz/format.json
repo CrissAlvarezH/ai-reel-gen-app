@@ -1,0 +1,32 @@
+{
+  "name": "Video animado sobre tu voz",
+  "summary": "Grabas tu voz (uno o varios audios). El agente transcribe, te propone qué cortar (silencios, errores, tomas repetidas) y lo corta contigo; luego todo el video es animación en el estilo elegido sobre tu voz. No sales en cámara.",
+  "default": false,
+  "skill": "formats/animado-con-tu-voz/SKILL.md",
+  "footage": true,
+  "voiceOnly": true,
+  "how": [
+    "Subes uno o varios audios con tu voz, en orden, al crear el video o después desde su página. Si grabaste en video, también vale: se usa solo el sonido.",
+    "El agente los transcribe y te propone los cortes: silencios largos, errores, muletillas, frases repetidas y tomas falsas. Tú decides en el chat.",
+    "Con los cortes aprobados arma tu voz cortada y su transcripción con tiempos: es la narración del video.",
+    "Cada idea de lo que dices tiene su imagen o animación, en el estilo del video, con los tiempos de tu voz.",
+    "Subtítulos, efectos de sonido, prueba sin sonido y render como en cualquier video."
+  ],
+  "screen": [
+    "La animación ocupa toda la pantalla de principio a fin.",
+    "Subtítulos de lo que dices, en el estilo del video."
+  ],
+  "editing": [
+    "Silencios de más de ~0,4 s se cortan, dejando una respiración natural a cada lado.",
+    "Errores, muletillas largas y frases repetidas: queda la última toma buena.",
+    "Nada se corta sin que lo apruebes: el agente te lista cada corte con su motivo.",
+    "Los cambios de escena caen en los cortes y en las pausas naturales de tu voz."
+  ],
+  "avoid": [
+    "Escenas quietas mientras tu voz explica algo que se puede mostrar.",
+    "Cortar a mitad de palabra o comerse la respiración entre frases.",
+    "Música o efectos por encima de la voz."
+  ],
+  "examples": [],
+  "references": []
+}

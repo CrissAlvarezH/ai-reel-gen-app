@@ -1,0 +1,98 @@
+{
+  "name": "Collage de papel con semitono",
+  "summary": "Recortes de fotos reales en semitono blanco y negro sobre papel crudo, tiras rasgadas y sellos, con amarillo y rojo que siempre significan lo mismo. Animado a mano, a 12 fps.",
+  "default": true,
+  "skill": "styles/collage-semitono/SKILL.md",
+  "template": "template",
+  "cutouts": true,
+  "palette": [
+    {
+      "name": "Papel",
+      "hex": "#EEEAE1",
+      "meaning": "el fondo: papel crudo con grano"
+    },
+    {
+      "name": "Tinta",
+      "hex": "#151413",
+      "meaning": "recortes, títulos y trazos"
+    },
+    {
+      "name": "Blanco",
+      "hex": "#FBFAF6",
+      "meaning": "tiras, papelitos y bordes de los recortes"
+    },
+    {
+      "name": "Amarillo",
+      "hex": "#FFD23F",
+      "meaning": "lo tuyo, lo permitido, lo que viaja"
+    },
+    {
+      "name": "Rojo",
+      "hex": "#E0262B",
+      "meaning": "peligro, lo de otro, atención"
+    }
+  ],
+  "fonts": [
+    {
+      "family": "Anton",
+      "css": "Anton, sans-serif",
+      "use": "títulos en tiras negras rasgadas",
+      "sample": "¿ESTO ES TUYO?",
+      "google": "Anton"
+    },
+    {
+      "family": "Special Elite",
+      "css": "'Special Elite', monospace",
+      "use": "etiquetas de máquina de escribir",
+      "sample": "la sesión dice: usuario Ana",
+      "google": "Special+Elite"
+    },
+    {
+      "family": "Inter 800",
+      "css": "Inter, sans-serif",
+      "weight": 800,
+      "use": "subtítulos sobre tira blanca rasgada",
+      "sample": "Es de otra persona.",
+      "google": "Inter:wght@800"
+    },
+    {
+      "family": "Permanent Marker",
+      "css": "'Permanent Marker', cursive",
+      "use": "anotaciones a rotulador",
+      "sample": "¡ojo aquí!",
+      "google": "Permanent+Marker"
+    }
+  ],
+  "look": [
+    "Lienzo vertical 1080×1920 sobre papel #EEEAE1 con grano.",
+    "Fotos reales recortadas en semitono blanco y negro a 45°, con borde blanco rasgado y sombra suave.",
+    "Grabados antiguos o láminas de tinta en línea limpia, sin semitono.",
+    "Dibujado en código: tiras y papelitos rasgados, títulos en tira negra, etiquetas de máquina de escribir, sellos de goma, círculos de rotulador, flechas, caminos punteados, campos de puntos, círculos sólidos detrás de los sujetos y pantallas de app simples en los teléfonos.",
+    "El color tiene significado y lo mantiene en todo el video; lo demás es negro, blanco y papel."
+  ],
+  "motion": [
+    "Animado a 12 fps (se renderiza a 30): se siente colocado a mano.",
+    "Las piezas caen con un rebote de resorte y se asientan.",
+    "El texto se escribe letra a letra; los trazos de rotulador se dibujan.",
+    "Los sellos golpean (escala 1.8 → 1); los papelitos viajan por caminos punteados.",
+    "Todo se sincroniza con frases de la voz: si cambia la voz, el video se reajusta solo."
+  ],
+  "sources": [
+    "Fotos reales con licencia libre, de las fuentes activas en Ajustes → Extracción de datos (Wikimedia Commons primero, CC0 o dominio público).",
+    "O una foto con el teléfono de un gesto concreto (fondo liso, buena luz).",
+    "Las CC BY y BY-SA se acreditan en CREDITS.md y en el texto de Instagram."
+  ],
+  "avoid": [
+    "3D luminoso o three.js (rechazado: «la estética no me gusta»).",
+    "Símbolos que haya que descifrar: mejor el motivo que se repite en el video o un objeto real.",
+    "Texto pequeño dentro de pantallas de teléfono: lo que hay que leer va en una tira grande fuera.",
+    "Sellos sobre fondos oscuros o del mismo color (se pierden por el modo multiplicar)."
+  ],
+  "examples": [],
+  "references": [
+    "refs/style-collage/ref-1.png",
+    "refs/style-collage/ref-2.png",
+    "refs/style-collage/ref-3.png",
+    "refs/style-collage/ref-4.png"
+  ]
+}

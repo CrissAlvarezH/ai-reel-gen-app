@@ -1,0 +1,44 @@
+{
+  "name": "Plano técnico",
+  "summary": "Diagramas que se trazan solos sobre papel cianotipo: líneas blancas finas, cuadrícula, cotas y anotaciones técnicas. Para explicar sistemas, arquitecturas y flujos.",
+  "skill": null,
+  "template": null,
+  "palette": [
+    {"name": "Cianotipo", "hex": "#1F4E8C", "meaning": "el fondo: papel de plano con grano"},
+    {"name": "Línea", "hex": "#EEF3F8", "meaning": "trazos, cajas y texto"},
+    {"name": "Cuadrícula", "hex": "#5B83B8", "meaning": "retícula, cotas y líneas de llamada"},
+    {"name": "Ámbar", "hex": "#FFB547", "meaning": "lo que importa, el camino que funciona"},
+    {"name": "Coral", "hex": "#FF6B5B", "meaning": "el fallo, el cuello de botella"}
+  ],
+  "fonts": [
+    {"family": "Barlow Condensed 700", "css": "'Barlow Condensed', sans-serif", "weight": 700, "google": "Barlow+Condensed:wght@700", "use": "títulos en mayúsculas, como rótulos de plano", "sample": "ESCALAR HACIA AFUERA"},
+    {"family": "IBM Plex Mono", "css": "'IBM Plex Mono', monospace", "google": "IBM+Plex+Mono", "use": "etiquetas, cotas y datos", "sample": "servidor-02 · 4 vCPU · 16 GB"},
+    {"family": "Inter 600", "css": "Inter, sans-serif", "weight": 600, "google": "Inter:wght@600", "use": "subtítulos en una franja", "sample": "Uno grande o muchos pequeños."}
+  ],
+  "look": [
+    "Lienzo vertical 1080×1920 azul cianotipo con cuadrícula fina y grano de papel.",
+    "Todo dibujado en código como un plano: cajas, cilindros, servidores, flechas con cotas y líneas de llamada.",
+    "Sin fotos; si hace falta un objeto real, va convertido a línea blanca.",
+    "Un solo esquema que crece a lo largo del video: cada acto añade una parte al plano.",
+    "Sellos de revisión en recuadro («APROBADO», «FALLA») en ámbar o coral."
+  ],
+  "motion": [
+    "Los trazos se dibujan a velocidad constante, como un plotter.",
+    "Las cotas se despliegan desde el centro hacia los extremos.",
+    "La cámara recorre un plano grande con paneos y zooms suaves en lugar de cambiar de escena.",
+    "El texto mono aparece letra a letra; los datos cuentan hasta su valor.",
+    "Fluido a 30 fps: preciso, no artesanal."
+  ],
+  "sources": [
+    "No necesita fotos: los objetos se dibujan en SVG.",
+    "Si una foto es imprescindible, se convierte a línea blanca y se acredita en CREDITS.md."
+  ],
+  "avoid": [
+    "Demasiadas líneas a la vez: el plano se vuelve ruido; dibujar solo lo que la voz nombra.",
+    "Texto mono pequeño: lo que hay que leer va en Barlow grande o en el subtítulo.",
+    "Colores fuera de la paleta o el ámbar y el coral sin su significado.",
+    "3D luminoso o three.js."
+  ],
+  "examples": [],
+  "references": []
+}

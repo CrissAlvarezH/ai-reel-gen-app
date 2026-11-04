@@ -1,0 +1,42 @@
+# deps and envs
+node_modules/
+.venv/
+__pycache__/
+# Local customer workspaces and preferences (keep on disk, never in the app repository).
+/projects/
+/videos/
+/config/
+/LESSONS.md
+/CLAUDE.md
+/refs/approved/
+# third-party style references (not ours to publish)
+/refs/style-collage/
+# Only the product's built-in styles belong in this repository.
+/styles/*
+!/styles/collage-semitono/
+!/styles/cuaderno-apuntes/
+!/styles/plano-tecnico/
+# secrets
+.env
+# renders and regenerable media
+out/
+*.raw.mp4
+projects/*/videos/*/public/*.wav
+videos/*/public/*.wav
+# his own recording (formats with footage) and its cut, made again from it by tools/footage.py
+projects/*/videos/*/footage/
+projects/*/videos/*/public/footage.mp4
+# downloaded source photos (re-downloadable; credits live in each video's CREDITS.md)
+projects/*/videos/*/assets/src/
+videos/*/assets/src/
+# Inspiración: other accounts' reels (covers, frames, transcripts; not ours to publish)
+inspiration/
+# Mi cuenta: each project's own reels and numbers, as downloaded (re-downloadable)
+account/
+.DS_Store
+# the studio's chat transcripts (per project: projects/<id>/.reel-studio/chats) and its index (.reel-studio/index.sqlite)
+studio/data/
+.reel-studio/
+# studio installer: staged resources and built apps
+studio/build/
+studio/dist/

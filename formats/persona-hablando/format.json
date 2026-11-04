@@ -1,0 +1,35 @@
+{
+  "name": "Persona hablando + animaciones",
+  "summary": "Te grabas hablando a cámara. El agente transcribe, te propone qué cortar (silencios, errores, tomas repetidas) y lo corta contigo; luego pone animaciones en el estilo elegido que acompañan lo que dices.",
+  "default": false,
+  "skill": "formats/persona-hablando/SKILL.md",
+  "overlay": "formats/persona-hablando/overlay",
+  "footage": true,
+  "how": [
+    "Subes uno o varios clips, en orden, al crear el video o después desde su página.",
+    "El agente los transcribe y te propone los cortes: silencios largos, errores, muletillas, frases repetidas y tomas falsas. Tú decides en el chat.",
+    "Con los cortes aprobados arma el video cortado y su transcripción con tiempos: tu voz es la narración.",
+    "Propone qué animación acompaña cada idea, en el estilo del video, y la pone junto a ti o a pantalla completa con tu voz debajo.",
+    "Subtítulos, efectos de sonido, prueba sin sonido y render como en cualquier video."
+  ],
+  "screen": [
+    "Tú a pantalla completa la mayor parte del tiempo, con la cara siempre visible.",
+    "Las animaciones entran en la zona libre (arriba o abajo) o como tarjeta: cifras, listas, conceptos.",
+    "Lo que se entiende mejor viéndolo ocupa toda la pantalla unos segundos, con tu voz debajo.",
+    "Subtítulos de lo que dices, en el estilo del video."
+  ],
+  "editing": [
+    "Silencios de más de ~0,4 s se cortan, dejando una respiración natural a cada lado.",
+    "Errores, muletillas largas y frases repetidas: queda la última toma buena.",
+    "Nada se corta sin que lo apruebes: el agente te lista cada corte con su motivo.",
+    "Un salto de imagen en un corte se tapa con un zoom leve o con una animación."
+  ],
+  "avoid": [
+    "Tapar la cara o la boca con animaciones.",
+    "Cortar a mitad de palabra o comerse la respiración entre frases.",
+    "Animaciones que solo repiten lo que dices sin sumar nada.",
+    "Música o efectos por encima de la voz."
+  ],
+  "examples": [],
+  "references": []
+}
