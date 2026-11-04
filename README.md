@@ -13,6 +13,8 @@ paper-collage style, narrated with ElevenLabs, made with Claude Code.
   - [Ideas de contenido](#ideas-de-contenido)
   - [Inspiración](#inspiración)
   - [Styles and formats](#styles-and-formats)
+  - [Voice settings](#voice-settings)
+  - [Agent settings](#agent-settings)
   - [Requirements check](#requirements-check)
 - [Repository layout](#repository-layout)
 - [Setup](#setup)
@@ -79,6 +81,21 @@ voice, and you talking to camera with animations.
 ![Visual styles with a sample frame and palette](docs/screenshots/styles.webp)
 
 ![Video formats](docs/screenshots/formats.webp)
+
+### Voice settings
+
+Narration comes from ElevenLabs, and you can turn it off. Pick the voice from your ElevenLabs account, including your
+own clone, then set the model, speed, stability, similarity and style. A video can use a different voice from its own page.
+
+![Voice settings with the ElevenLabs voice, model and sliders](docs/screenshots/voice.webp)
+
+### Agent settings
+
+Agents use the tool installed on your computer, such as Claude Code or Codex, with your own login, so no API key is
+needed. Choose the default tool, see how much of your plan you've used, and decide for each project whether the agent can
+use Chrome.
+
+![Agent settings with Claude Code and Codex, plan usage and the Chrome switch](docs/screenshots/agent.webp)
 
 ### Requirements check
 
