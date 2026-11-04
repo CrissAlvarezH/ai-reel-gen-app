@@ -3,6 +3,91 @@
 Short narrated explainer reels (9:16, Spanish), animated in code with [Remotion](https://remotion.dev) in a halftone
 paper-collage style, narrated with ElevenLabs, made with Claude Code.
 
+## Contents
+
+- [Features](#features)
+  - [Video library](#video-library)
+  - [Video workspace](#video-workspace)
+  - [Claude panel](#claude-panel)
+  - [Mi cuenta](#mi-cuenta)
+  - [Ideas de contenido](#ideas-de-contenido)
+  - [Inspiración](#inspiración)
+  - [Styles and formats](#styles-and-formats)
+  - [Requirements check](#requirements-check)
+- [Repository layout](#repository-layout)
+- [Setup](#setup)
+- [New reel](#new-reel)
+- [Studio (local UI)](#studio-local-ui)
+- [Desktop app and installer](#desktop-app-and-installer)
+- [Rebuild a reel's media](#rebuild-a-reels-media)
+- [License](#license)
+
+## Features
+
+Reel Studio is a desktop app where each channel is a project and each video has its own Claude Code agent. The
+screenshots come from a real project, with the account's name and photo blurred; the app's interface is in Spanish.
+
+### Video library
+
+Every video in the project, with its style, length, number of versions and how far along it is. The sidebar lists each
+video's agent and what it needs from you, and the selector at the top switches between projects.
+
+![Video library with a project's videos and the agents sidebar](docs/screenshots/library.webp)
+
+### Video workspace
+
+Watch every rendered version and jump through the acts on the timeline. Edit the script, split into hook, context,
+development and the rest, then press **Comentar aquí** to send the agent a note about that exact moment. The tabs under
+the player hold the Instagram caption, ready to copy, and the fields for a comment-to-DM automation.
+
+![Video player with its acts timeline next to the script](docs/screenshots/reel.webp)
+
+### Claude panel
+
+Ask for a video in plain language and follow each step the agent takes while it researches, writes and renders. Each
+message includes where you are in the app, so "esto" or "aquí" needs no explaining. A selector in the chat sets how much
+the agent can do without asking, and it can also use Chrome with your signed-in sessions.
+
+![Claude panel showing the steps of a video's conversation](docs/screenshots/chat.webp)
+
+### Mi cuenta
+
+Your Instagram reels and their numbers: the best performers, each reel's views against your median, likes, comments,
+length and date. Search through captions, transcripts and analyses, or have the agent analyse your reels and propose
+new ideas.
+
+![Instagram account metrics and a table of reels](docs/screenshots/account.webp)
+
+### Ideas de contenido
+
+A board for each project's video ideas, with content verticals on top and lists you can drag cards between. The agent
+can change it too, and you can attach an idea to your next conversation.
+
+![Content ideas board with verticals and lists](docs/screenshots/ideas.webp)
+
+### Inspiración
+
+Study other accounts' reels. Add an account or a reel link and the app downloads, transcribes and analyses it: hook,
+structure, pace, visuals and call to action. You can then use a reel as a reference in your next message.
+
+### Styles and formats
+
+A style is how a video looks; a format is how it's made. Three styles ship with the app, and the agent can help you
+create more from your own references. Formats cover animation over a generated voice, animation over your recorded
+voice, and you talking to camera with animations.
+
+![Visual styles with a sample frame and palette](docs/screenshots/styles.webp)
+
+![Video formats](docs/screenshots/formats.webp)
+
+### Requirements check
+
+The app checks what this computer needs (Node, ffmpeg, Python and its packages, transcription) and shows what's missing.
+
+![Requirements list in the settings](docs/screenshots/requirements.webp)
+
+## Repository layout
+
 ```
 .claude/skills/   Claude Code skills: reel-studio (the process, any style) and the cstack video skills
 styles/           visual styles: style.json, and for collage-semitono its SKILL.md and examples
@@ -12,7 +97,7 @@ tools/            shared Python: cutout.py (photo → halftone cutout), image se
                   pexels.py, pixabay.py, unsplash.py), social.py (Instagram scraper, via the studio),
                   tts.py (ElevenLabs, voice from the project's config/voice.json),
                   el_words.py (word timings), standin_words.py, sheet.py
-refs/             shared style references; customer-approved frames stay local
+refs/             local style references, not in this repository (third-party images, approved frames)
 projects/<id>/    one per channel (the studio's project selector): videos/<slug>/ (one folder per reel), config/
                   (profile.json, voice.json, account.json, images.json, social.json, chat.json), ideas.json,
                   account/ (Mi cuenta), inspiration/ (other accounts' reels) and its conversations.
@@ -116,3 +201,7 @@ ffmpeg -y -i audio/vo.mp3 -ar 48000 public/vo.wav
 CONCURRENCY=3 ./render.sh <name>
 ```
 Image credits for each reel are in its `CREDITS.md`.
+
+## License
+
+[MIT](LICENSE). Some skills come from third parties: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
