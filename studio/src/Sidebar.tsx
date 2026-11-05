@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {AlertCircle, Circle, CircleDot, Film, FolderOpen, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Palette, Plus, Settings as SettingsIcon, Sparkles, UserRound} from 'lucide-react';
+import {AlertCircle, CalendarClock, Circle, CircleDot, Film, FolderOpen, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Palette, Plus, Settings as SettingsIcon, Sparkles, UserRound} from 'lucide-react';
 import {cn} from '@/lib/utils';
 import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState} from './api';
 import {AgentLogo} from './AgentLogo';
@@ -126,6 +126,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
         {generalState}
       </NavLink>
       <NavLink href="#/ideas" icon={Lightbulb} label="Ideas de contenido" active={page === 'ideas'} compact={compact} />
+      <NavLink href="#/automatizaciones" icon={CalendarClock} label="Automatizaciones" active={page === 'automations'} compact={compact} />
       <NavLink href="#/inspiracion" icon={Sparkles} label="Inspiración" active={page === 'inspiration'} compact={compact} />
       <NavLink href="#/estilos" icon={Palette} label="Estilos" active={page === 'styles'} compact={compact} />
       <NavLink href="#/formatos" icon={Film} label="Formatos" active={page === 'formats'} compact={compact} />

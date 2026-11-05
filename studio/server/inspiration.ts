@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
-import {PROJECT, PROJECT_DIR, ROOT, rel} from './workspace.ts';
+import {PROJECT, PROJECT_DIR, ROOT, rel, withProject} from './workspace.ts';
 import {GROUP, killTree, readJson, writeJson as writeJsonFile} from './platform.ts';
 import {getKey} from './settings.ts';
 import {httpError} from './reels.ts';
@@ -102,6 +102,12 @@ type ReelFile = {
 const jobs = new Map<string, InspirationJob>(); // by account
 let looseJob: InspirationJob | null = null; // fetching loose reels (their owners aren't known yet)
 const busy = new Map<string, 'processing' | 'analyzing'>(); // by "<account>/<code>"
+// An automation's work on an account (refreshProjectAccount), by folder: it goes on with its project closed and shows
+// when that project opens.
+type Step = {job: InspirationJob; busy: Map<string, 'processing' | 'analyzing'>; ctrl: AbortController};
+const steps = new Map<string, Step>();
+const stepOf = (u: string) => steps.get(accDir(u));
+const working = (u: string) => jobs.has(u) || !!stepOf(u);
 const refreshing = new Set<string>(); // "<account>/<code>" whose metrics are being read again
 let looseError: string | null = null; // the last loose download's problem
 
@@ -122,6 +128,7 @@ export function reset() {
   gen++;
   for (const c of stops.values()) c.abort();
   stops.clear();
+  for (const [dir, s] of steps) if (!dir.startsWith(ROOT + path.sep)) s.ctrl.abort(); // another project doesn't stop them; another workspace does
   jobs.clear();
   busy.clear();
   refreshing.clear();
@@ -162,7 +169,7 @@ function reel(u: string, c: string, med: number | null): InspirationReel | null 
     /* gone */
   }
   const analysis = readJson<ReelAnalysis>(path.join(d, 'analysis.json'));
-  const b = busy.get(`${u}/${c}`);
+  const b = busy.get(`${u}/${c}`) ?? stepOf(u)?.busy.get(c);
   const meta = readJson<Record<string, unknown>>(path.join(d, 'meta.json'));
   return {
     account: u,
@@ -211,7 +218,7 @@ export function metaFields(raw: Record<string, unknown>) {
 function summary(u: string): InspirationAccount | null {
   const a = readAccount(u);
   if (!a) return null;
-  return {...a, profile: a.profile ?? null, avatar: fs.existsSync(path.join(accDir(u), 'avatar.jpg')), reels: reelCodes(u).length, median: accountMedian(u), job: jobs.get(u) ?? null};
+  return {...a, profile: a.profile ?? null, avatar: fs.existsSync(path.join(accDir(u), 'avatar.jpg')), reels: reelCodes(u).length, median: accountMedian(u), job: jobs.get(u) ?? stepOf(u)?.job ?? null};
 }
 
 export async function status(): Promise<InspirationStatus> {
@@ -517,7 +524,7 @@ export async function add(input: unknown, limitIn: unknown, kind?: AddKind, refr
   alive(g);
   const {accounts, urls} = est;
   const src = requireSource();
-  const runningNow = accounts.filter((u) => jobs.has(u));
+  const runningNow = accounts.filter(working);
   if (runningNow.length) throw httpError(409, `ya se está descargando o analizando: ${runningNow.map((u) => `@${u}`).join(', ')}`);
   if (urls.length && looseJob) throw httpError(409, 'ya se están descargando reels sueltos; espera a que termine');
 
@@ -582,6 +589,131 @@ export async function add(input: unknown, limitIn: unknown, kind?: AddKind, refr
   return est;
 }
 
+// An automation's update of an account, in any project, open or not: its newest reels with their numbers and its profile,
+// and of those reels, whatever's missing (video, frames and transcript; the agent's analysis). One already done, or longer
+// than maxSeconds or of unknown length, only gets its numbers. A switch of project doesn't lose what was paid for: paths from the project, only in here. ctrl: stops it
+// (a download in flight finishes; it's paid). null: another workspace opened, nothing else was saved.
+export async function refreshProjectAccount(project: string, u: string, limit: number, maxSeconds: number, ctrl: AbortController) {
+  const root = ROOT;
+  const opened = project === PROJECT;
+  const here = <T>(fn: () => T) => withProject(project, fn);
+  const step: Step = {job: {stage: 'fetching', done: 0, total: 0, started: Date.now()}, busy: new Map(), ctrl};
+  const {src, dir, known, reading} = here(() => {
+    if (!USER.test(u) || !readAccount(u)) throw httpError(404, `@${u} ya no está en Inspiración`);
+    const dir = accDir(u);
+    if (steps.has(dir) || (opened && (jobs.has(u) || pipelines.has(u)))) throw httpError(409, `ya se está descargando o analizando @${u}`);
+    return {
+      src: requireSource(),
+      dir,
+      known: reelCodes(u).length,
+      reading: Promise.all([
+        fetchItems([u], u, limit, (c) => readJson<ReelFile>(path.join(dir, c, 'reel.json'))?.caption ?? null),
+        profileOf(u).catch((e: Error) => (console.error(`perfil de @${u}:`, e), null)),
+      ]),
+    };
+  });
+  steps.set(dir, step);
+  changed();
+  try {
+    const [{items, problem}, prof] = await reading;
+    if (ROOT !== root) return null;
+    const {fresh, covers} = here(() => {
+      if (!readAccount(u)) throw httpError(404, `@${u} se borró de Inspiración durante la descarga`);
+      if (!store(items, u).has(u)) throw new Error(`${src.label} no devolvió reels de @${u}: ¿la cuenta es privada, no tiene reels o el nombre está mal escrito?`);
+      const codes = reelCodes(u);
+      return {
+        fresh: codes.length - known,
+        covers: codes.flatMap((c) => {
+          const url = readReel(u, c)?.displayUrl;
+          const thumb = path.join(reelDir(u, c), 'thumb.jpg');
+          return url && !fs.existsSync(thumb) ? [{url, thumb}] : [];
+        }),
+      };
+    });
+    await Promise.all(covers.map((c) => download(c.url, c.thumb).catch(() => {})));
+    if (prof?.picture) await download(prof.picture, path.join(dir, 'avatar.jpg')).catch((e) => console.error(`foto de @${u}:`, e));
+    if (ROOT !== root) return null;
+    here(() => {
+      const a = readAccount(u);
+      if (a) saveAccount({...a, fullName: prof?.fullName ?? a.fullName, profile: prof?.profile ?? a.profile, error: problem});
+    });
+    const codes = [...new Set(items.filter((it) => !it.error && it.videoUrl && CODE.test(it.shortCode ?? '')).map((it) => it.shortCode!))];
+    const eligible = here(() => codes.filter((c) => (readReel(u, c)?.duration ?? Infinity) <= maxSeconds));
+    const work = await completeReels(u, eligible, dir, step, here, () => {
+      if (ROOT !== root || ctrl.signal.aborted) throw new Stopped('detenido');
+    });
+    return {reels: codes.length, fresh, skipped: codes.length - eligible.length, ...work, profile: !!prof, problem: problem ?? work.problem};
+  } catch (e) {
+    if (ROOT !== root) return null;
+    if (!(e instanceof Stopped)) here(() => setAccountError(u, (e as Error).message));
+    throw e;
+  } finally {
+    steps.delete(dir);
+    changed();
+  }
+}
+
+// What these reels are missing, one transcription at a time across the studio as in pipeline(). A reel that fails says so
+// and the rest go on; nothing done at all is the step's failure.
+async function completeReels(u: string, codes: string[], dir: string, step: Step, here: <T>(fn: () => T) => T, live: () => void) {
+  const has = (c: string, f: string) => fs.existsSync(path.join(dir, c, f));
+  const errors: string[] = [];
+  const each = async (stage: 'processing' | 'analyzing', list: string[], slot: typeof processSlot, work: (c: string) => Promise<void>) => {
+    Object.assign(step.job, {stage, done: 0, total: list.length});
+    changed();
+    await Promise.all(
+      list.map((c) =>
+        slot(async () => {
+          live(); // waited in the queue
+          step.busy.set(c, stage);
+          changed();
+          try {
+            await work(c);
+          } catch (e) {
+            live(); // stopped: not this reel's failure
+            errors.push((e as Error).message);
+            here(() => {
+              const r = readReel(u, c);
+              if (r) writeJson(path.join(reelDir(u, c), 'reel.json'), {...r, error: (e as Error).message});
+            });
+          } finally {
+            step.busy.delete(c);
+            step.job.done++;
+            changed();
+          }
+        }),
+      ),
+    );
+    live();
+  };
+
+  live();
+  const toProcess = codes.filter((c) => !has(c, 'transcript.json') || !has(c, 'hook.jpg'));
+  if (toProcess.length && !(await transcriberReady())) throw new Error('falta la transcripción: instálala en Ajustes → Requisitos → Transcripción');
+  await each('processing', toProcess, processSlot, (c) => processDir(path.join(dir, c), step.ctrl.signal, true));
+  const med = here(() => accountMedian(u));
+  const toAnalyse = here(() => codes.filter((c) => processed(reelDir(u, c)) && !readReel(u, c)?.error && !has(c, 'analysis.json')));
+  await each('analyzing', toAnalyse, analyseSlot, (c) => here(() => analyseReel(u, c, med, live, step.ctrl.signal)));
+  const analysed = toAnalyse.filter((c) => has(c, 'analysis.json')).length;
+  if (errors.length && !analysed) throw new Error(errors[0]);
+
+  // The account as a whole, as after a scan, when there's something new to say and enough reels.
+  let problem = errors.length ? `${errors.length} reel${errors.length > 1 ? 's' : ''} con error (${errors[0]})` : null;
+  const worth = here(() => reelCodes(u).filter((c) => fs.existsSync(path.join(reelDir(u, c), 'analysis.json'))).length >= MIN_FOR_MEDIAN && (toAnalyse.length > 0 || !readAccount(u)?.analysis));
+  if (worth) {
+    Object.assign(step.job, {stage: 'summary', done: 0, total: 1});
+    changed();
+    await analyseAccount(u, live, step.ctrl.signal, here).catch((e: Error) => {
+      live();
+      here(() => setAccountError(u, `análisis de la cuenta: ${e.message}`));
+      problem ??= `análisis de la cuenta: ${e.message}`;
+    });
+  }
+  return {processed: toProcess.filter((c) => has(c, 'transcript.json') && has(c, 'hook.jpg')).length, analysed, problem};
+}
+
+// An account an automation can update: one scanned in the open project (not one with only loose reels).
+export const isFollowed = (u: unknown): u is string => typeof u === 'string' && USER.test(u) && !!readAccount(u)?.followed;
 
 // "Actualizar métricas": read one reel's metrics and metadata again from the scraper (one reel's price). The video
 // isn't downloaded or analysed again; its links are fresh, so a reel that failed can then be processed.
@@ -701,10 +833,11 @@ export const analyseSlot = limiter(3);
 // videoUrl): cover, frame sheets, transcript. Its last stderr line is the error. Also Mi cuenta's (account.ts).
 // Stopped (signal): what it left half-way (the video, the audio, a partial download) is deleted.
 const processReel = (u: string, c: string, signal?: AbortSignal) => processDir(reelDir(u, c), signal);
-export function processDir(d: string, signal?: AbortSignal) {
+// outlives: reset() doesn't kill it (an automation's: its signal does).
+export function processDir(d: string, signal?: AbortSignal, outlives = false) {
   return new Promise<void>((resolve, reject) => {
     const p = spawn(venvPy(), [path.join(ROOT, 'tools', 'inspiration.py'), d], {cwd: ROOT, env: process.env, detached: GROUP});
-    procs.add(p);
+    if (!outlives) procs.add(p);
     let err = '';
     const timer = setTimeout(() => killTree(p), 10 * 60_000);
     const unhook = onAbort(signal, () => killTree(p));
@@ -736,8 +869,8 @@ const ANALYST = () => {
   ].join('\n');
 };
 
-async function analyseReel(u: string, c: string, med: number | null, g: number, signal?: AbortSignal) {
-  alive(g);
+async function analyseReel(u: string, c: string, med: number | null, check: () => void, signal?: AbortSignal) {
+  check();
   const r = reel(u, c, med);
   if (!r) throw new Error('el reel ya no está');
   const d = reelDir(u, c);
@@ -749,7 +882,7 @@ async function analyseReel(u: string, c: string, med: number | null, g: number, 
   ].join('\n\n');
   const images = [r.files.hook ? path.join(d, 'hook.jpg') : null, ...r.files.sheets.slice(0, 4).map((s) => path.join(d, s))].filter((x): x is string => !!x);
   const reply = await agentCli.ask(prompt, ANALYST(), {model: 'smart', images, timeout: 4 * 60_000, signal});
-  alive(g);
+  check();
   writeJson(path.join(d, 'analysis.json'), parseAnalysis(reply));
 }
 
@@ -813,27 +946,33 @@ const STRATEGIST = () => {
   ].join('\n');
 };
 
-async function analyseAccount(u: string, g: number, signal?: AbortSignal) {
-  const med = accountMedian(u);
-  const rs = reels(u).filter((r) => r.analysis);
-  const lines = rs
-    .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
-    .map((r) =>
-      [
-        `[${r.code}] ${r.posted?.slice(0, 10) ?? '—'} · ${n(r.views)} vistas${r.ratio != null ? ` (${r.ratio.toFixed(1)}×)` : ''} · ${n(r.likes)} likes · ${n(r.comments)} coment. · ${r.duration != null ? Math.round(r.duration) : '—'} s · ${r.transcript?.wps ?? '—'} pal/s`,
-        `  Tema: ${r.analysis!.topic}`,
-        `  Gancho: «${r.analysis!.hook.text}» — ${r.analysis!.hook.visual}`,
-        `  Estructura: ${r.analysis!.structure.map((s) => s.tag).join(' → ')}`,
-        `  Visual: ${r.analysis!.visuals.join('; ')}`,
-        `  CTA: ${r.analysis!.cta ?? 'ninguna'}`,
-      ].join('\n'),
-    );
-  const prompt = `Cuenta @${u}: ${rs.length} reels analizados; mediana de vistas ${n(med)}.\n\n${lines.join('\n\n')}`;
-  const text = await agentCli.ask(prompt, STRATEGIST(), {model: 'smart', timeout: 4 * 60_000, signal});
-  alive(g);
-  const a = readAccount(u);
-  if (!a) return; // removed meanwhile
-  saveAccount({...a, analysis: {text: text.trim(), at: Date.now(), reels: rs.length}});
+// here: runs what reads its project (an automation's may be closed).
+async function analyseAccount(u: string, check: () => void, signal?: AbortSignal, here = <T>(fn: () => T) => fn()) {
+  let count = 0;
+  const text = await here(() => {
+    const med = accountMedian(u);
+    const rs = reels(u).filter((r) => r.analysis);
+    count = rs.length;
+    const lines = rs
+      .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
+      .map((r) =>
+        [
+          `[${r.code}] ${r.posted?.slice(0, 10) ?? '—'} · ${n(r.views)} vistas${r.ratio != null ? ` (${r.ratio.toFixed(1)}×)` : ''} · ${n(r.likes)} likes · ${n(r.comments)} coment. · ${r.duration != null ? Math.round(r.duration) : '—'} s · ${r.transcript?.wps ?? '—'} pal/s`,
+          `  Tema: ${r.analysis!.topic}`,
+          `  Gancho: «${r.analysis!.hook.text}» — ${r.analysis!.hook.visual}`,
+          `  Estructura: ${r.analysis!.structure.map((s) => s.tag).join(' → ')}`,
+          `  Visual: ${r.analysis!.visuals.join('; ')}`,
+          `  CTA: ${r.analysis!.cta ?? 'ninguna'}`,
+        ].join('\n'),
+      );
+    const prompt = `Cuenta @${u}: ${rs.length} reels analizados; mediana de vistas ${n(med)}.\n\n${lines.join('\n\n')}`;
+    return agentCli.ask(prompt, STRATEGIST(), {model: 'smart', timeout: 4 * 60_000, signal});
+  });
+  check();
+  here(() => {
+    const a = readAccount(u);
+    if (a) saveAccount({...a, analysis: {text: text.trim(), at: Date.now(), reels: count}}); // else removed meanwhile
+  });
 }
 
 // Process what's missing, then, for a followed account, analyse what isn't yet and the account (with enough
@@ -907,7 +1046,7 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
           busy.set(`${u}/${c}`, 'analyzing');
           changed();
           try {
-            await analyseReel(u, c, med, g, ctrl.signal);
+            await analyseReel(u, c, med, () => alive(g), ctrl.signal);
           } catch (e) {
             if (g === gen && !stopped()) fail(c, e);
           } finally {
@@ -927,7 +1066,7 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
     if (a?.followed && !opts.analyse && analysed >= MIN_FOR_MEDIAN && (toAnalyse.length || !a.analysis || opts.reanalyse)) {
       Object.assign(job, {stage: 'summary', done: 0, total: 1});
       changed();
-      await analyseAccount(u, g, ctrl.signal).catch((e) => {
+      await analyseAccount(u, () => alive(g), ctrl.signal).catch((e) => {
         if (e instanceof Stale || stopped()) throw e;
         setAccountError(u, `análisis de la cuenta: ${(e as Error).message}`);
       });
@@ -949,7 +1088,7 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
 // "Procesar" (pending and failed reels) and "Volver a analizar" (every reel and the account).
 export function processAccount(u: string, reanalyse = false) {
   checkAccount(u);
-  if (pipelines.has(u) || jobs.has(u)) throw httpError(409, `@${u} ya está trabajando`);
+  if (pipelines.has(u) || working(u)) throw httpError(409, `@${u} ya está trabajando`);
   setAccountError(u, null);
   void pipeline(u, {reanalyse});
 }
@@ -958,7 +1097,7 @@ export function processAccount(u: string, reanalyse = false) {
 export async function analyseOne(u: string, c: string) {
   checkAccount(u);
   if (!CODE.test(c) || !readReel(u, c)) throw httpError(404, 'reel no encontrado');
-  if (pipelines.has(u) || jobs.has(u) || busy.has(`${u}/${c}`)) throw httpError(409, `@${u} está trabajando; espera a que termine`);
+  if (pipelines.has(u) || working(u) || busy.has(`${u}/${c}`)) throw httpError(409, `@${u} está trabajando; espera a que termine`);
   if (!processed(reelDir(u, c)) && !(await transcriberReady())) throw httpError(400, 'falta la transcripción: instálala en Ajustes → Requisitos → Transcripción');
   void pipeline(u, {analyse: [c]});
 }
@@ -967,7 +1106,7 @@ export async function analyseOne(u: string, c: string) {
 // finishes on its own: it's already paid and capped).
 export function stopAccount(u: string) {
   checkAccount(u);
-  const c = stops.get(u);
+  const c = stops.get(u) ?? stepOf(u)?.ctrl;
   if (!c) throw httpError(409, `@${u} no tiene nada en marcha`);
   c.abort();
   changed();
@@ -975,7 +1114,7 @@ export function stopAccount(u: string) {
 
 export function removeAccount(u: string) {
   checkAccount(u);
-  if (jobs.has(u)) throw httpError(409, `@${u} está trabajando; espera a que termine`);
+  if (working(u)) throw httpError(409, `@${u} está trabajando; espera a que termine`);
   fs.rmSync(accDir(u), {recursive: true, force: true});
   changed();
 }
@@ -983,11 +1122,11 @@ export function removeAccount(u: string) {
 export function removeReel(u: string, c: string) {
   checkAccount(u);
   if (!CODE.test(c) || !readReel(u, c)) throw httpError(404, 'reel no encontrado');
-  if (busy.has(`${u}/${c}`) || refreshing.has(`${u}/${c}`)) throw httpError(409, 'ese reel está trabajando; espera a que termine');
+  if (busy.has(`${u}/${c}`) || stepOf(u)?.busy.has(c) || refreshing.has(`${u}/${c}`)) throw httpError(409, 'ese reel está trabajando; espera a que termine');
   fs.rmSync(reelDir(u, c), {recursive: true, force: true});
   // An account that was only there for its loose reels goes when its last one does.
   const a = readAccount(u);
-  if (a && !a.followed && !reelCodes(u).length && !jobs.has(u)) fs.rmSync(accDir(u), {recursive: true, force: true});
+  if (a && !a.followed && !reelCodes(u).length && !working(u)) fs.rmSync(accDir(u), {recursive: true, force: true});
   changed();
 }
 

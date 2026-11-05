@@ -13,7 +13,7 @@
 // The agent can also use the scraper itself, through tools/social.py, which calls this server (scrape*).
 import fs from 'node:fs';
 import path from 'node:path';
-import {CONFIG, PROJECT, PROJECT_DIR, rel} from './workspace.ts';
+import {CONFIG, PROJECT, PROJECT_DIR, ROOT, rel, withProject} from './workspace.ts';
 import {readJson, writeJson as writeJsonFile} from './platform.ts';
 import {getKey} from './settings.ts';
 import {httpError} from './reels.ts';
@@ -23,12 +23,12 @@ import {authorName, getProfile} from './config.ts';
 import {transcriberReady} from './requirements.ts';
 import * as db from './db.ts';
 import * as index from './projects-index.ts';
+import {MAX_ACCOUNT_REELS} from '../shared/types.ts';
 import type {AccountStatus, InspirationProfile, InspirationRef, OwnReel, OwnReelCard, OwnReelList, ReelAnalysis, ReelTranscript, ServerEvent} from '../shared/types.ts';
 
 const CODE = /^[A-Za-z0-9_-]{5,40}$/;
 const TOP = 3; // "Los que mejor van"
 export const FIRST = 10; // reels the first download brings; "Cargar más" adds as many again
-const MAX = 200;
 
 const CONFIG_FILE = () => path.join(CONFIG, 'account.json');
 const accDir = (u: string) => path.join(PROJECT_DIR, 'account', u);
@@ -51,12 +51,11 @@ const changed = () => {
   broadcast({type: 'account'});
 };
 
-// Downloads in memory (one at a time); a workspace switch forgets them and what's in flight gives up.
-let job: AccountStatus['job'] = null;
+// Downloads going on, one per account folder. Those from the page give up if another project or workspace opens.
+const jobs = new Map<string, NonNullable<AccountStatus['job']>>();
 let gen = 0;
 export function reset() {
   gen++;
-  job = null;
   run?.ctrl.abort();
   run = null;
   busy.clear();
@@ -102,7 +101,7 @@ export async function status(): Promise<AccountStatus> {
     avatar: fs.existsSync(path.join(accDir(u), 'avatar.jpg')),
     fetched: a?.fetched ?? null,
     ...withBusy(u, index.ownSummary(PROJECT, u, TOP)),
-    job,
+    job: jobs.get(accDir(u)) ?? null,
     error: a?.error ?? null,
     scraper,
     analysis,
@@ -115,7 +114,7 @@ const requireUser = () => {
   if (!u) throw httpError(400, 'aún no hay cuenta configurada en Mi cuenta');
   return u;
 };
-const clampLimit = (v: unknown, def: number) => Math.max(1, Math.min(MAX, Math.round(Number(v)) || def));
+const clampLimit = (v: unknown, def: number) => Math.max(1, Math.min(MAX_ACCOUNT_REELS, Math.round(Number(v)) || def));
 
 // What downloading the newest limit reels (and the profile) would cost at most.
 export async function estimate(limitIn: unknown) {
@@ -124,31 +123,32 @@ export async function estimate(limitIn: unknown) {
   return {limit, ...(await insp.cost([{limit, known: dirs(accDir(u)).length}], 0))};
 }
 
-// Download the newest limit reels (their numbers as of now) and the profile. Waits until it's done.
-export async function fetchLatest(limitIn: unknown) {
-  const u = requireUser();
-  insp.requireSource();
-  if (job) throw httpError(409, 'ya se está descargando la cuenta');
-  const limit = clampLimit(limitIn, FIRST);
-  const g = gen;
-  job = {limit, started: Date.now()};
+// Download the newest limit reels (their numbers as of now) and the profile, into the open project's account as
+// of this call: all it needs from the project is read before its first await (see refreshProject). alive: whether
+// the result still matters. Null if it stopped mattering.
+async function download(u: string, limit: number, alive: () => boolean) {
+  const dir = accDir(u);
+  if (jobs.has(dir)) throw httpError(409, 'ya se está descargando la cuenta');
+  jobs.set(dir, {limit, started: Date.now()});
   changed();
-  const prev = readJson<AccountFile>(path.join(accDir(u), 'account.json'));
-  const save = (a: Partial<AccountFile>) => writeJson(path.join(accDir(u), 'account.json'), {username: u, fullName: null, profile: null, fetched: null, error: null, ...prev, ...a});
+  const scraper = insp.source().label;
+  const old = (c: string) => readJson<ReelFile>(path.join(dir, c, 'reel.json'));
+  const prev = readJson<AccountFile>(path.join(dir, 'account.json'));
+  const save = (a: Partial<AccountFile>) => writeJson(path.join(dir, 'account.json'), {username: u, fullName: null, profile: null, fetched: null, error: null, ...prev, ...a});
   let problem: string | null = null;
+  let reels = 0;
   try {
     const [res, prof] = await Promise.all([
-      insp.fetchItems([u], u, limit, (c) => readReel(u, c)?.caption ?? null),
+      insp.fetchItems([u], u, limit, (c) => old(c)?.caption ?? null),
       insp.profileOf(u).catch((e: Error) => (console.error(`perfil de @${u}:`, e), null)),
     ]);
-    if (g !== gen) return status();
+    if (!alive()) return null;
     problem = res.problem;
     for (const it of res.items) {
       const code = it.shortCode ?? '';
       if (it.error || !CODE.test(code)) continue;
-      const old = readReel(u, code);
       const m = insp.metricsOf(it);
-      writeJson(path.join(reelDir(u, code), 'reel.json'), {
+      writeJson(path.join(dir, code, 'reel.json'), {
         code,
         url: it.url ?? `https://www.instagram.com/reel/${code}/`,
         caption: m.caption,
@@ -161,26 +161,45 @@ export async function fetchLatest(limitIn: unknown) {
         metricsAt: m.metricsAt,
         videoUrl: m.videoUrl,
         displayUrl: m.displayUrl,
-        added: old?.added ?? Date.now(),
+        added: old(code)?.added ?? Date.now(),
       } satisfies ReelFile);
-      writeJson(path.join(reelDir(u, code), 'meta.json'), it.raw ?? it);
-      const thumb = path.join(reelDir(u, code), 'thumb.jpg');
+      writeJson(path.join(dir, code, 'meta.json'), it.raw ?? it);
+      reels++;
+      const thumb = path.join(dir, code, 'thumb.jpg');
       if (m.displayUrl && !fs.existsSync(thumb)) await insp.download(m.displayUrl, thumb).catch((e) => console.error(`portada de ${code}:`, e));
     }
-    if (prof?.picture) await insp.download(prof.picture, path.join(accDir(u), 'avatar.jpg')).catch((e) => console.error(`foto de @${u}:`, e));
-    if (g !== gen) return status();
-    if (!res.items.length) problem = problem ?? `${insp.source().label} no devolvió reels de @${u} (¿la cuenta es privada o no existe?)`;
+    if (prof?.picture) await insp.download(prof.picture, path.join(dir, 'avatar.jpg')).catch((e) => console.error(`foto de @${u}:`, e));
+    if (!alive()) return null;
+    if (!res.items.length) problem = problem ?? `${scraper} no devolvió reels de @${u} (¿la cuenta es privada o no existe?)`;
     save({fullName: prof?.fullName ?? prev?.fullName ?? null, profile: prof?.profile ?? prev?.profile ?? null, fetched: Date.now(), error: problem});
+    return {username: u, reels, problem, profile: !!prof};
   } catch (e) {
-    if (g === gen) save({error: (e as Error).message});
+    if (alive()) save({error: (e as Error).message});
     throw e;
   } finally {
-    if (g === gen) {
-      job = null;
-      changed();
-    }
+    jobs.delete(dir);
+    if (alive()) changed();
   }
+}
+
+// From the page: waits until it's done.
+export async function fetchLatest(limitIn: unknown) {
+  const u = requireUser();
+  insp.requireSource();
+  const g = gen;
+  await download(u, clampLimit(limitIn, FIRST), () => g === gen);
   return status();
+}
+
+// An automation's step, in a project that may not be the open one: paths and scraper are read within withProject,
+// and opening another project doesn't waste what was paid for (only another workspace does).
+export function refreshProject(project: string, limitIn: unknown) {
+  const root = ROOT;
+  return withProject(project, () => {
+    const u = requireUser();
+    insp.requireSource();
+    return download(u, clampLimit(limitIn, FIRST), () => ROOT === root);
+  });
 }
 
 // The table: one page of the reels, filtered and in order (query string: q, minRatio, sinceDays, dur, sort,
@@ -247,7 +266,7 @@ export function file(c: string, f: string) {
 type Busy = 'queued' | 'processing' | 'analyzing';
 const busy = new Map<string, Busy>(); // by "<user>/<code>"
 const owner = new Map<string, AbortController>(); // the run each busy reel belongs to
-const refreshing = new Set<string>(); // "<user>/<code>" whose metrics are being read again
+const refreshing = new Set<string>(); // the folders of the reels whose metrics are being read again
 let run: {done: number; total: number; started: number; ctrl: AbortController} | null = null;
 
 const sheetsOf = (d: string) => {
@@ -395,25 +414,24 @@ export function stopAnalysis() {
 // What reading one reel's numbers again costs at most.
 export const refreshCost = () => insp.cost([], 1);
 
-// "Actualizar métricas": one reel's numbers, metadata and links again (one reel's price), e.g. when its video's
-// link expired before it was analysed.
-export async function refreshReel(c: string) {
-  const u = requireUser();
-  insp.requireSource();
-  const r = CODE.test(c) ? readReel(u, c) : null;
-  if (!r) throw httpError(404, 'reel no encontrado');
-  const k = `${u}/${c}`;
-  if (refreshing.has(k)) throw httpError(409, 'ya se están actualizando sus métricas');
-  const g = gen;
-  refreshing.add(k);
+// One reel's numbers, metadata and links again (one reel's price), in the open project's account as of this call: as
+// in download, all it needs from the project is read before its first await. Null if the result stopped mattering.
+async function readAgain(u: string, c: string, alive: () => boolean) {
+  const dir = path.join(accDir(u), c);
+  const read = () => readJson<ReelFile>(path.join(dir, 'reel.json'));
+  const r = CODE.test(c) ? read() : null;
+  if (!r) throw httpError(404, 'ese reel no está en Mi cuenta');
+  if (refreshing.has(dir)) throw httpError(409, 'ya se están actualizando sus métricas');
+  const scraper = insp.source().label;
+  refreshing.add(dir);
   try {
     const {items} = await insp.fetchItems([r.url], null, 1);
-    if (g !== gen) return null;
+    if (!alive()) return null;
     const it = items.find((i) => i.shortCode === c && !i.error);
-    if (!it) throw httpError(502, `${insp.source().label} no devolvió este reel: ¿lo borraste o la cuenta ahora es privada?`);
-    const now = readReel(u, c) ?? r;
+    if (!it) throw httpError(502, `${scraper} no devolvió este reel: ¿lo borraste o la cuenta ahora es privada?`);
+    const now = read() ?? r;
     const m = insp.metricsOf(it);
-    writeJson(path.join(reelDir(u, c), 'reel.json'), {
+    writeJson(path.join(dir, 'reel.json'), {
       ...now,
       caption: m.caption,
       posted: m.posted ?? now.posted,
@@ -427,14 +445,38 @@ export async function refreshReel(c: string) {
       displayUrl: m.displayUrl,
       error: /caduc|enlace del video/.test(now.error ?? '') ? null : (now.error ?? null),
     } satisfies ReelFile);
-    writeJson(path.join(reelDir(u, c), 'meta.json'), it.raw ?? it);
+    writeJson(path.join(dir, 'meta.json'), it.raw ?? it);
+    return m;
   } finally {
-    if (g === gen) {
-      refreshing.delete(k);
-      changed();
-    }
+    refreshing.delete(dir);
+    if (alive()) changed();
   }
-  return reel(c);
+}
+
+// "Actualizar métricas", e.g. when its video's link expired before it was analysed.
+export async function refreshReel(c: string) {
+  const u = requireUser();
+  insp.requireSource();
+  const g = gen;
+  return (await readAgain(u, c, () => g === gen)) && reel(c);
+}
+
+// An automation's step, in a project that may not be the open one (see refreshProject).
+export function refreshProjectReel(project: string, c: string) {
+  const root = ROOT;
+  return withProject(project, () => {
+    const u = requireUser();
+    insp.requireSource();
+    return readAgain(u, c, () => ROOT === root);
+  });
+}
+
+// A reel of the open project's Mi cuenta: what an automation's step keeps of it.
+export function ownReelRef(code: unknown) {
+  const u = username();
+  const r = u && typeof code === 'string' && CODE.test(code) ? readReel(u, code) : null;
+  if (!r) throw httpError(400, 'ese reel no está en Mi cuenta: elige otro');
+  return {code: code as string, label: r.caption.replace(/\s+/g, ' ').trim().slice(0, 80)};
 }
 
 /* ───── The scraper for the agent (tools/social.py) ───── */

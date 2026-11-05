@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {Agent, AgentChoice, AgentUsage, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
+import type {Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -329,6 +329,20 @@ export const inspirationApi = {
   removeAccount: (account: string) => del(`/api/inspiration/accounts/${account}`),
   removeReel: (account: string, code: string) => del(`/api/inspiration/accounts/${account}/reels/${code}`),
   file: (r: {account: string; code: string}, f: string) => `/inspiration-files/${r.account}/${r.code}/${f}`,
+};
+
+/* ───── Automatizaciones ───── */
+
+// Every change answers with the whole view.
+const automationsCall = (method: string, path: string, body?: unknown) =>
+  fetch(path, {method, headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)}).then((r) => json<AutomationsView>(r));
+export const automationsApi = {
+  view: () => automationsCall('GET', '/api/automations'),
+  add: (input: AutomationInput) => automationsCall('POST', '/api/automations', input),
+  edit: (id: string, input: AutomationInput) => automationsCall('PUT', `/api/automations/${id}`, input),
+  remove: (id: string) => automationsCall('DELETE', `/api/automations/${id}`),
+  run: (id: string) => automationsCall('POST', `/api/automations/${id}/run`),
+  stop: (run: string) => automationsCall('POST', `/api/automation-runs/${run}/stop`),
 };
 
 /* ───── Ideas de contenido ───── */

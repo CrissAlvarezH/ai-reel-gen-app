@@ -26,6 +26,7 @@ import * as workspace from './workspace.ts';
 import * as inspiration from './inspiration.ts';
 import * as account from './account.ts';
 import * as ideas from './ideas.ts';
+import * as automations from './automations.ts';
 import * as db from './db.ts';
 import * as uploads from './uploads.ts';
 import type {Agent, IdeasBoard, ServerEvent} from '../shared/types.ts';
@@ -74,6 +75,7 @@ app.post('/api/projects/:id/open', handle((req) => workspace.openProject(req.par
 const notBusy = (id: string) => {
   const dir = workspace.projectDir(id);
   if (chat.runningIn(dir)) throw httpError(409, 'Un agente está trabajando en este proyecto: detenlo antes de borrarlo.');
+  if (automations.runningIn(id)) throw httpError(409, 'Hay una automatización en marcha en este proyecto: detenla antes de borrarlo.');
   const slugs = fs.existsSync(path.join(dir, 'videos')) ? fs.readdirSync(path.join(dir, 'videos')) : [];
   if (slugs.some(installing)) throw httpError(409, 'Aún se están instalando las dependencias de un video: inténtalo en un momento.');
 };
@@ -347,6 +349,13 @@ app.get('/account-files/:code/:file', (req: Req, res: Response) => {
   if (!p) return res.sendStatus(404);
   res.sendFile(p);
 });
+// Automatizaciones (server/automations.ts), of the open project. Every change answers with the whole view.
+app.get('/api/automations', handle(() => automations.view()));
+app.post('/api/automations', handle((req) => automations.add(req.body)));
+app.put('/api/automations/:id', handle((req) => automations.edit(req.params.id, req.body)));
+app.delete('/api/automations/:id', handle((req) => automations.remove(req.params.id)));
+app.post('/api/automations/:id/run', handle((req) => automations.runNow(req.params.id)));
+app.post('/api/automation-runs/:id/stop', handle((req) => automations.stop(req.params.id)));
 // Ideas de contenido (server/ideas.ts): the page and the agent (tools/ideas.py, which says its project in ?project=).
 // Every change answers with the whole board and tells the pages.
 const ideasProject = (req: Req) => (typeof req.query.project === 'string' ? req.query.project : undefined);
@@ -568,6 +577,7 @@ for (const a of AGENTS)
 process.env.REEL_STUDIO_URL = `http://${HOST === '0.0.0.0' || HOST === '::' ? '127.0.0.1' : HOST}:${PORT}`;
 server.listen(PORT, HOST, () => {
   console.log(`Reel Studio → http://localhost:${PORT}`);
+  automations.startScheduler(() => send({type: 'automations'}));
   if (HOST === '0.0.0.0') {
     const ips = Object.values(os.networkInterfaces())
       .flat()

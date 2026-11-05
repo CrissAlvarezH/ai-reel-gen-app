@@ -239,6 +239,16 @@ export function newChat(key: string) {
   return {id: c.id};
 }
 
+// A conversation for work nobody is watching (an automation's step): in the history, without a tab or taking the open one.
+export function backgroundChat(key: string) {
+  const s = load(key);
+  const c = {...blank(), closed: true};
+  s.chats.push(c);
+  save(key, s);
+  emitList(key);
+  return c.id;
+}
+
 // Show a conversation (a tab, or one from the history, which reopens its tab).
 export function open(key: string, chat: string) {
   edit(key, chat, (c, s) => {
@@ -468,7 +478,7 @@ function formatLine(key: string) {
 }
 
 // Web search is unrestricted; settings only control API integrations. Read on every turn.
-function imagesText() {
+export function imagesText() {
   const on = getImageSources();
   const usable = (s: (typeof IMAGE_SOURCES)[number]) => on[s.id] && (!s.key || !!getKey(s.key));
   const run = (tool: string, args: string) => `${PY} ${UP()}/tools/${tool} ${args}`;
@@ -581,7 +591,7 @@ const SYSTEM = (key: string) =>
         ...COMMON(),
       ].join('\n');
 
-const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', ideas: 'Ideas de contenido', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', reel: null};
+const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', ideas: 'Ideas de contenido', automations: 'Automatizaciones', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', reel: null};
 const fmtCtx = (c: UiContext | undefined, progress?: string, style?: string, voice?: string, kind?: string) => {
   if (!c || typeof c !== 'object') return '';
   const parts: (string | null | undefined)[] = [PAGES[c.page] ?? (c.slug ? `video ${c.slug}` : null)];
@@ -613,10 +623,15 @@ function handoverText(c: Chat, from: string) {
 }
 
 export type SendInput = {text?: string; comments?: Comment[]; refs?: unknown; ideas?: unknown; images?: unknown; context?: UiContext; note?: string};
+// A turn nobody is watching (server/automations.ts); separate from SendInput, which comes straight from the request.
+// system: added to its system prompt. onDone: when it ends; text is the last thing it said.
+export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boolean; text: string}) => void};
 
 // note: text for the agent only, ahead of the message (not shown in the transcript).
 // chat: which conversation; by default the open one.
-export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdeas, images: rawImages, context, note}: SendInput, chat = load(key).active) {
+// unattended: never asks for permission and can't use his browser, whatever the project's settings say: with his
+// signed-in sessions, what a page says could steer a turn nobody is watching.
+export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdeas, images: rawImages, context, note}: SendInput, chat = load(key).active, unattended?: Unattended) {
   const rk = runKey(key, chat);
   if (runs.has(rk)) throw httpError(409, 'El agente ya está trabajando en esta conversación');
   // Reels from Inspiración, attached with "Usar como referencia" (general conversation only).
@@ -683,7 +698,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
 
   push({id: id(), role: 'user', text: text?.trim() ?? '', comments: comments ?? [], ...(refs.length ? {refs} : {}), ...(ideaRefs.length ? {ideas: ideaRefs} : {}), ...(images.length ? {images} : {}), ts: Date.now()});
 
-  const proc = cli.turn({prompt, systemPrompt: SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR}, model, effort, chrome: getChromeAccess(), mode: modeOf(prev, cli)});
+  const proc = cli.turn({prompt, systemPrompt: unattended ? `${SYSTEM(key)}\n${unattended.system}` : SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR}, model, effort, chrome: !unattended && getChromeAccess(), mode: unattended ? '' : modeOf(prev, cli)});
   // Starts from what it was (a new session from another agent starts empty).
   const run: Run = {dir, proc, pending: new Map(), started: Date.now(), live: '', tool: null, stderr: '', context: resume ? prev.context : undefined};
   const setContext = (ctx: ChatContext) => {
@@ -786,6 +801,16 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
     }
   }
 
+  // Once: a CLI that couldn't start gives both 'error' and 'close'.
+  let ended = false;
+  const end = (ok: boolean, stopped: boolean) =>
+    safe(() => {
+      if (ended) return;
+      ended = true;
+      const said = find(load(key, dir), chat).items.findLast((i) => i.role === 'assistant');
+      unattended?.onDone({ok, stopped, text: said?.role === 'assistant' ? said.text : ''});
+    });
+
   proc.on('close', (code, signal) => {
     for (const p of [...run.pending.values()]) p.expire();
     runs.delete(rk);
@@ -808,12 +833,15 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
     }
     tell({op: 'state', running: false});
     tellList();
+    const stopped = !!signal || !!run.stopped;
+    end(!stopped && !!r?.ok, stopped);
   });
   proc.on('error', (err) => {
     runs.delete(rk);
     push({id: id(), role: 'status', text: `No pude lanzar ${cli.label}: ${err.message}. Revisa Ajustes → Agente.`, error: true, ts: Date.now()});
     tell({op: 'state', running: false});
     tellList();
+    end(false, false);
   });
   return {chat};
 }

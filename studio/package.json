@@ -9,6 +9,7 @@
     "start": "node --disable-warning=ExperimentalWarning server/index.ts",
     "desktop": "electron desktop/main.ts",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.server.json",
+    "test": "node --disable-warning=ExperimentalWarning --test server/*.test.ts",
     "dist": "node --disable-warning=ExperimentalWarning desktop/stage.ts && electron-builder --mac --arm64",
     "dist:dir": "node --disable-warning=ExperimentalWarning desktop/stage.ts && electron-builder --mac --arm64 --dir"
   },

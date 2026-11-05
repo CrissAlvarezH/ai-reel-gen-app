@@ -135,7 +135,7 @@ export type IdeasBoard = {verticals: IdeaVertical[]; lists: IdeaList[]};
 /* ───── Where Cristian is in the UI (sent with every message to the agent) ───── */
 
 export type UiContext = {
-  page: 'account' | 'library' | 'ideas' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
+  page: 'account' | 'library' | 'ideas' | 'automations' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
   slug?: string;
   style?: string; // style open on the Estilos page (styles/<id>)
   videoFormat?: string; // format open on the Formatos page (formats/<id>)
@@ -300,7 +300,7 @@ export type ChatEvent =
   | {op: 'chats'};
 
 // workspace: the studio now works on another folder (every page reloads).
-export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'styles'} | {type: 'formats'} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
+export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'automations'} | {type: 'styles'} | {type: 'formats'} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
 
 /* ───── Profile and voice (config/, set in Ajustes) ───── */
 
@@ -516,3 +516,21 @@ export type AccountStatus = {
 export type Project = {id: string; name: string; created: number; videos: number; current: boolean; avatar: number | null};
 // What deleting a project would take with it. account: its Instagram handle; reels: those downloaded in Mi cuenta.
 export type ProjectContents = {videos: number; ideas: number; verticals: number; account: string | null; reels: number; inspiration: number; conversations: number};
+
+/* ───── Automatizaciones (projects/<id>/automations.json) ───── */
+
+// What a step does; other kinds of action join this union. account: downloads the newest reels of Mi cuenta and its
+// profile. post: reads one of Mi cuenta's reels again (label: its caption when it was chosen, to tell which one it is).
+export const MAX_ACCOUNT_REELS = 200;
+export const MAX_ANALYSIS_SECONDS = 180; // longer reels aren't analysed by an automation: it only updates their numbers
+export type AutomationStep = {type: 'agent'; prompt: string} | {type: 'account'; limit: number} | {type: 'post'; code: string; label: string} | {type: 'external'; username: string; limit: number; maxSeconds: number};
+export type Automation = {id: string; name: string; cron: string; enabled: boolean; steps: AutomationStep[]; created: number};
+export type AutomationInput = Pick<Automation, 'name' | 'cron' | 'enabled' | 'steps'>;
+// interrupted: the studio closed while it was running.
+export type AutomationRunState = 'running' | 'done' | 'error' | 'stopped' | 'interrupted';
+// A step as it was when the run started. chat: its conversation (an agent's, once started). summary: what it ended up saying or doing.
+export type AutomationRunStep = AutomationStep & {state: AutomationRunState | 'pending'; chat: string | null; summary?: string};
+// stopping: asked to stop while a step that can't be cut short finishes.
+export type AutomationRun = {id: string; automation: string; name: string; trigger: 'cron' | 'manual'; started: number; ended: number | null; state: AutomationRunState; stopping?: boolean; error?: string; steps: AutomationRunStep[]};
+// runs: most recent first.
+export type AutomationsView = {automations: (Automation & {running: boolean})[]; runs: AutomationRun[]};

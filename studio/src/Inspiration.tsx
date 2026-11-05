@@ -721,7 +721,7 @@ function ReelsView({
 
 // The account's profile picture (avatar.jpg, read when it's scanned or updated), or its initial. small: in
 // its tab.
-function Avatar({account, small}: {account: InspirationAccount; small?: boolean}) {
+export function Avatar({account, small}: {account: Pick<InspirationAccount, 'username' | 'avatar' | 'profile'>; small?: boolean}) {
   const [broken, setBroken] = useState(false);
   const size = small ? 'size-5' : 'size-12 border';
   if (account.avatar && !broken)

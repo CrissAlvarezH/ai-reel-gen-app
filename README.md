@@ -11,6 +11,7 @@ paper-collage style, narrated with ElevenLabs, made with Claude Code.
   - [Claude panel](#claude-panel)
   - [Mi cuenta](#mi-cuenta)
   - [Ideas de contenido](#ideas-de-contenido)
+  - [Automatizaciones](#automatizaciones)
   - [Inspiración](#inspiración)
   - [Styles and formats](#styles-and-formats)
   - [Voice settings](#voice-settings)
@@ -66,6 +67,20 @@ A board for each project's video ideas, with content verticals on top and lists 
 can change it too, and you can attach an idea to your next conversation.
 
 ![Content ideas board with verticals and lists](docs/screenshots/ideas.webp)
+
+### Automatizaciones
+
+Flows that run on a schedule, per project: a cron expression and a list of steps. A step is either a prompt for an agent
+that runs without you and can't ask anything, an update of Mi cuenta (your newest reels with their numbers, and your
+profile), an update of one of its reels (its numbers and metadata), or an update of an account scanned in Inspiración
+(its newest reels with their numbers, and its profile; of those reels, the ones missing it and no longer than the step's
+maximum duration, up to 3 minutes, get their video, frames, transcript and analysis; the rest only their numbers). These
+updates are charged to your scraper's balance, and that analysis to your agent's subscription. Each step starts when the
+previous one finishes, and a step that fails stops the flow. They only fire while Reel Studio is open and the computer
+is awake; a time missed is not made up for later. The run's history shows how each step went, and an agent's
+conversation opens from there. These agents can't use Chrome.
+
+![Automations page with a scheduled flow of agent, Mi cuenta, post and external account steps](docs/screenshots/automations.webp)
 
 ### Inspiración
 

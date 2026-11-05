@@ -329,6 +329,18 @@ export function openProject(id: string) {
   for (const fn of projectListeners) fn(id);
   return listProjects();
 }
+// Runs a synchronous fn with the bindings on another project, for work of one that isn't open (an automation that
+// starts a turn). Nothing else can run meanwhile and no listener hears it, so the pages stay on the open one.
+export function withProject<T>(id: string, fn: () => T): T {
+  if (!ROOT || !readProject(ROOT, id)) throw bad('proyecto no encontrado', 404);
+  const open = PROJECT;
+  applyProject(id);
+  try {
+    return fn();
+  } finally {
+    applyProject(open);
+  }
+}
 export const projectName = () => (ROOT && PROJECT ? (readProject(ROOT, PROJECT)?.name ?? PROJECT) : '');
 // A path inside the workspace as the agent sees it (from the workspace's root), with forward slashes.
 export const rel = (p: string) => path.relative(ROOT, p).split(path.sep).join('/');
