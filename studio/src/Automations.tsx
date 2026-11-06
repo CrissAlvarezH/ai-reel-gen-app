@@ -10,7 +10,7 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/c
 import {Switch} from '@/components/ui/switch';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
-import {nextRun} from '../shared/cron';
+import {nextRun, nextRuns} from '../shared/cron';
 import {MAX_ACCOUNT_REELS} from '../shared/types';
 import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type AutomationAgent, type InspirationAccount, type OwnReel, type OwnReelList} from './api';
 import {useConfirm} from './confirm';
@@ -51,6 +51,41 @@ const STATE: Record<RunState, {label: string; dot: string; variant: 'secondary' 
   interrupted: {label: 'Interrumpido', dot: 'border-destructive text-destructive', variant: 'destructive'},
 };
 const fmtWhen = (d: Date) => d.toLocaleString('es', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+
+// "Ver próximas ejecuciones": when this schedule will run, 10 at a time.
+function UpcomingRuns({cron}: {cron: string}) {
+  const [open, setOpen] = useState(false);
+  const [n, setN] = useState(10);
+  const runs = open ? nextRuns(cron, n) : [];
+  const year = new Date().getFullYear();
+  return (
+    <Dialog open={open} onOpenChange={(o) => (setOpen(o), setN(10))}>
+      <button type="button" onClick={() => setOpen(true)} className="text-xs font-medium text-foreground underline-offset-4 hover:underline">
+        Ver próximas ejecuciones
+      </button>
+      <DialogContent className="max-w-sm">
+        <DialogTitle>Próximas ejecuciones</DialogTitle>
+        <DialogDescription>
+          Con <code className="font-mono text-xs">{cron}</code>, a la hora de este equipo. Solo corre si Reel Studio está abierto.
+        </DialogDescription>
+        <ol className="flex max-h-[50vh] flex-col overflow-y-auto">
+          {runs.map((d, i) => (
+            <li key={d.getTime()} className="flex items-baseline gap-3 border-b py-1.5 text-sm last:border-0">
+              <span className="w-6 text-right text-xs text-muted-foreground tabular-nums">{i + 1}</span>
+              <span className="first-letter:uppercase">{d.toLocaleDateString('es', {weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== year ? {year: 'numeric'} : {})})}</span>
+              <span className="ml-auto tabular-nums">{d.toLocaleTimeString('es', {hour: '2-digit', minute: '2-digit'})}</span>
+            </li>
+          ))}
+        </ol>
+        {runs.length === n && (
+          <Button type="button" variant="outline" size="sm" className="justify-self-start" onClick={() => setN((x) => x + 10)}>
+            Cargar 10 más
+          </Button>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // A post's cover. A step only knows its code, so a post without one (or no longer in Mi cuenta) finds out by failing.
 function PostThumb({code}: {code: string}) {
@@ -609,6 +644,12 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
                 <Input id="automation-cron" value={cron} onChange={(e) => setCron(e.target.value)} className="font-mono" aria-describedby="automation-cron-next" />
                 <p id="automation-cron-next" className={next ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
                   {next ? `Próxima: ${fmtWhen(next)}` : 'Expresión no válida o que nunca ocurre. Son cinco campos: minuto, hora, día, mes y día de la semana.'}
+                  {next && (
+                    <>
+                      {' · '}
+                      <UpcomingRuns cron={cron} />
+                    </>
+                  )}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {PRESETS.map((p) => (

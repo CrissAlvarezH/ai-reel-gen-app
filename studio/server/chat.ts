@@ -724,7 +724,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
           .progress.map((p) => `${p.label} ${p.done ? '✓' : '✗'}${p.note ? ` (${p.note})` : ''}`)
           .join(', ');
   const st = key === GENERAL ? null : styleOf(key);
-  const style = st ? `${st.name} (styles/${st.id}/style.json${st.ready ? '' : ', sin skill ni plantilla propias'})` : undefined;
+  const style = st ? `${st.name} (styles/${st.id}/style.json${st.ready ? '' : st.skill ? `, su skill ${st.skill}` : ', sin skill ni plantilla propias'})` : undefined;
   const k = key === GENERAL ? null : videoFormatOf(key);
   const kind = k ? `${k.name} (formats/${k.id}/format.json)` : undefined;
   const vv = key === GENERAL || k?.footage ? null : videoVoice(key);

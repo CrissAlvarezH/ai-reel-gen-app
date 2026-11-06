@@ -56,3 +56,10 @@ export function nextRun(expr: string, from = new Date()) {
   }
   return null;
 }
+
+// The next n times it runs after `from`, in order (fewer if it stops happening).
+export function nextRuns(expr: string, n: number, from = new Date()) {
+  const out: Date[] = [];
+  for (let t = nextRun(expr, from); t && out.length < n; t = nextRun(expr, t)) out.push(t);
+  return out;
+}

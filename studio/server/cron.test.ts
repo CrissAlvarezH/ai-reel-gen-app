@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {cronMatches, nextRun, parseCron} from '../shared/cron.ts';
+import {cronMatches, nextRun, nextRuns, parseCron} from '../shared/cron.ts';
 
 test('rejects what cron would reject', () => {
   for (const bad of ['', '* * * *', '* * * * * *', '60 * * * *', '* 24 * * *', '* * 0 * *', '* * * 13 *', '* * * * 8', '*/0 * * * *', '5-1 * * * *', 'a * * * *', '1,,2 * * * *']) assert.equal(parseCron(bad), null, bad);
@@ -36,4 +36,10 @@ test('nextRun', () => {
   assert.deepEqual(nextRun('0 0 29 2 *', now), new Date(2028, 1, 29));
   assert.equal(nextRun('0 0 31 2 *', now), null);
   assert.equal(nextRun('nope', now), null);
+});
+
+test('the next runs, in order, across days', () => {
+  const runs = nextRuns('0 */8 * * *', 4, new Date(2026, 10, 6, 17, 30));
+  assert.deepEqual(runs.map((d) => [d.getDate(), d.getHours()]), [[7, 0], [7, 8], [7, 16], [8, 0]]);
+  assert.deepEqual(nextRuns('nope', 3), []);
 });

@@ -41,6 +41,7 @@ import {useConfirm} from './confirm';
 import {FilterSelect, RatioHelp, SortHead} from './Inspiration';
 import {AnalysisSections, FramesSection, Section, StateBadge, TranscriptSection} from './ReelAnalysis';
 import {projectKey, useStudio} from './studio';
+import {useColumns} from './Columns';
 
 // Mi cuenta (#/cuenta): the creator's own Instagram account. Until it's set, a screen that asks for it.
 // Then its newest reels with their numbers (downloaded with the scraper of Ajustes → Extracción de datos,
@@ -177,6 +178,8 @@ export function Account() {
   const [sort, setSort] = useState(saved.sort);
   const [filters, setFilters] = useState(saved.filters);
   const [q, setQ] = useState(saved.q);
+  // Pal/s is off until he turns it on.
+  const cols = useColumns('account', [{key: 'ratio', label: 'Multiplicador'}, {key: 'views', label: 'Vistas'}, {key: 'likes', label: 'Likes'}, {key: 'comments', label: 'Comentarios'}, {key: 'engagement', label: 'Interacción'}, {key: 'duration', label: 'Duración'}, {key: 'wps', label: 'Palabras por segundo'}, {key: 'posted', label: 'Fecha'}], ['wps']);
   const [search, setSearch] = useState(saved.q.trim()); // q, once he stops typing
   useEffect(() => {
     const t = setTimeout(() => setSearch(q.trim()), 300);
@@ -495,6 +498,7 @@ export function Account() {
                   <X /> Limpiar
                 </Button>
               )}
+              <div className="ml-auto">{cols.picker}</div>
             </div>
             {!list ? null : rows.length === 0 ? (
               <p className="text-sm text-muted-foreground">Ningún reel cumple esos filtros.</p>
@@ -505,30 +509,46 @@ export function Account() {
                     <TableRow>
                       <TableHead className="w-12" />
                       <TableHead>Reel</TableHead>
-                      <SortHead k="ratio" sort={sort} setSort={setSort} hover={<RatioHelp mine />}>
-                        Multiplicador
-                      </SortHead>
-                      <SortHead k="views" sort={sort} setSort={setSort}>
-                        Vistas
-                      </SortHead>
-                      <SortHead k="likes" sort={sort} setSort={setSort} className="hidden xl:table-cell">
-                        Likes
-                      </SortHead>
-                      <SortHead k="comments" sort={sort} setSort={setSort} className="hidden xl:table-cell">
-                        Coment.
-                      </SortHead>
-                      <SortHead k="engagement" sort={sort} setSort={setSort} title="(likes + comentarios) ÷ vistas" className="hidden min-[1700px]:table-cell">
-                        Interacción
-                      </SortHead>
-                      <SortHead k="duration" sort={sort} setSort={setSort}>
-                        Dur.
-                      </SortHead>
-                      <SortHead k="wps" sort={sort} setSort={setSort} title="Palabras por segundo de la voz">
-                        Pal/s
-                      </SortHead>
-                      <SortHead k="posted" sort={sort} setSort={setSort}>
-                        Fecha
-                      </SortHead>
+                      {cols.shown('ratio') && (
+                        <SortHead k="ratio" sort={sort} setSort={setSort} hover={<RatioHelp mine />}>
+                          Multiplicador
+                        </SortHead>
+                      )}
+                      {cols.shown('views') && (
+                        <SortHead k="views" sort={sort} setSort={setSort}>
+                          Vistas
+                        </SortHead>
+                      )}
+                      {cols.shown('likes') && (
+                        <SortHead k="likes" sort={sort} setSort={setSort}>
+                          Likes
+                        </SortHead>
+                      )}
+                      {cols.shown('comments') && (
+                        <SortHead k="comments" sort={sort} setSort={setSort}>
+                          Coment.
+                        </SortHead>
+                      )}
+                      {cols.shown('engagement') && (
+                        <SortHead k="engagement" sort={sort} setSort={setSort} title="(likes + comentarios) ÷ vistas">
+                          Interacción
+                        </SortHead>
+                      )}
+                      {cols.shown('duration') && (
+                        <SortHead k="duration" sort={sort} setSort={setSort}>
+                          Dur.
+                        </SortHead>
+                      )}
+                      {cols.shown('wps') && (
+                        <SortHead k="wps" sort={sort} setSort={setSort} title="Palabras por segundo de la voz">
+                          Pal/s
+                        </SortHead>
+                      )}
+                      {cols.shown('posted') && (
+                        <SortHead k="posted" sort={sort} setSort={setSort}>
+                          Fecha
+                        </SortHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -556,26 +576,36 @@ export function Account() {
                           </p>
                           {r.hook && <p className="line-clamp-1 text-xs text-muted-foreground">«{r.hook}»</p>}
                         </TableCell>
-                        <TableCell
-                          className={cn('tabular-nums', r.ratio == null ? 'text-muted-foreground' : r.ratio >= 2 ? 'font-medium text-emerald-400' : r.ratio < 0.5 ? 'text-muted-foreground' : '')}
-                        >
-                          {r.ratio != null ? `${r.ratio.toFixed(1)}×` : '—'}
-                        </TableCell>
-                        <TableCell className="tabular-nums">
-                          <Value icon={Eye}>{num(r.views)}</Value>
-                        </TableCell>
-                        <TableCell className="hidden text-muted-foreground tabular-nums xl:table-cell">
-                          <Value icon={Heart}>{num(r.likes)}</Value>
-                        </TableCell>
-                        <TableCell className="hidden text-muted-foreground tabular-nums xl:table-cell">
-                          <Value icon={MessageCircle}>{num(r.comments)}</Value>
-                        </TableCell>
-                        <TableCell className="hidden text-muted-foreground tabular-nums min-[1700px]:table-cell">{pct(r.engagement)}</TableCell>
-                        <TableCell className="text-muted-foreground tabular-nums">
-                          <Value icon={Clock}>{r.duration != null ? fmtTime(r.duration) : '—'}</Value>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground tabular-nums">{r.wps?.toFixed(1) ?? '—'}</TableCell>
-                        <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums">{date(r.posted)}</TableCell>
+                        {cols.shown('ratio') && (
+                          <TableCell
+                            className={cn('tabular-nums', r.ratio == null ? 'text-muted-foreground' : r.ratio >= 2 ? 'font-medium text-emerald-400' : r.ratio < 0.5 ? 'text-muted-foreground' : '')}
+                          >
+                            {r.ratio != null ? `${r.ratio.toFixed(1)}×` : '—'}
+                          </TableCell>
+                        )}
+                        {cols.shown('views') && (
+                          <TableCell className="tabular-nums">
+                            <Value icon={Eye}>{num(r.views)}</Value>
+                          </TableCell>
+                        )}
+                        {cols.shown('likes') && (
+                          <TableCell className="text-muted-foreground tabular-nums">
+                            <Value icon={Heart}>{num(r.likes)}</Value>
+                          </TableCell>
+                        )}
+                        {cols.shown('comments') && (
+                          <TableCell className="text-muted-foreground tabular-nums">
+                            <Value icon={MessageCircle}>{num(r.comments)}</Value>
+                          </TableCell>
+                        )}
+                        {cols.shown('engagement') && <TableCell className="text-muted-foreground tabular-nums">{pct(r.engagement)}</TableCell>}
+                        {cols.shown('duration') && (
+                          <TableCell className="text-muted-foreground tabular-nums">
+                            <Value icon={Clock}>{r.duration != null ? fmtTime(r.duration) : '—'}</Value>
+                          </TableCell>
+                        )}
+                        {cols.shown('wps') && <TableCell className="text-muted-foreground tabular-nums">{r.wps?.toFixed(1) ?? '—'}</TableCell>}
+                        {cols.shown('posted') && <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums">{date(r.posted)}</TableCell>}
                       </TableRow>
                     ))}
                   </TableBody>
