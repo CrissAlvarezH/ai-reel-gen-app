@@ -28,6 +28,7 @@ import {
   X,
 } from 'lucide-react';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
+import {Tooltip, TooltipContent, TooltipTrigger} from '@/components/ui/tooltip';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from '@/components/ui/dialog';
@@ -543,7 +544,14 @@ export function Account() {
                         <TableCell className="max-w-0 min-w-56 whitespace-normal">
                           <StateBadge r={r} />
                           <p className="line-clamp-1 font-medium">
-                            {r.video && <Film className="mr-1.5 inline size-3.5 align-[-2px] text-muted-foreground" aria-label={`Hecho aquí: ${r.video.title ?? r.video.slug}`} />}
+                            {r.video && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Film className="mr-1.5 inline size-3.5 align-[-2px] text-muted-foreground" aria-label={`Hecho aquí: ${r.video.title ?? r.video.slug}`} />
+                                </TooltipTrigger>
+                                <TooltipContent>Hecho aquí: salió del video «{r.video.title ?? r.video.slug}» de este proyecto</TooltipContent>
+                              </Tooltip>
+                            )}
                             {r.topic || title(r)}
                           </p>
                           {r.hook && <p className="line-clamp-1 text-xs text-muted-foreground">«{r.hook}»</p>}
