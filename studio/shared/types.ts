@@ -431,7 +431,7 @@ export type InspirationAccount = {
   fetched: number | null;
   reels: number;
   median: number | null;
-  analysis: {text: string; at: number; reels: number} | null; // the account as a whole (markdown)
+  analysis: {text: string; at: number; reels: number; codes?: string[]} | null; // the account as a whole (markdown); codes: the reels it read, most viewed first (absent in older ones)
   job: InspirationJob | null;
   error: string | null; // the last fetch or job failure
 };
@@ -522,8 +522,8 @@ export type ProjectContents = {videos: number; ideas: number; verticals: number;
 // What a step does; other kinds of action join this union. account: downloads the newest reels of Mi cuenta and its
 // profile. post: reads one of Mi cuenta's reels again (label: its caption when it was chosen, to tell which one it is).
 export const MAX_ACCOUNT_REELS = 200;
-export const MAX_ANALYSIS_SECONDS = 180; // longer reels aren't analysed by an automation: it only updates their numbers
-export type AutomationStep = {type: 'agent'; prompt: string} | {type: 'account'; limit: number} | {type: 'post'; code: string; label: string} | {type: 'external'; username: string; limit: number; maxSeconds: number};
+export const MAX_ANALYSIS_SECONDS = 180; // the longest reel an account's "Analizar…" takes
+export type AutomationStep = {type: 'agent'; prompt: string} | {type: 'account'; limit: number} | {type: 'post'; code: string; label: string} | {type: 'external'; username: string; limit: number};
 export type Automation = {id: string; name: string; cron: string; enabled: boolean; steps: AutomationStep[]; created: number};
 export type AutomationInput = Pick<Automation, 'name' | 'cron' | 'enabled' | 'steps'>;
 // interrupted: the studio closed while it was running.

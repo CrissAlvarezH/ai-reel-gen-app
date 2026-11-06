@@ -29,12 +29,12 @@ for (const n of [1, 2]) {
   write(`${d}/analysis.json`, {topic: 'hecho', hook: {text: '', visual: '', why: ''}, structure: [], visuals: [], cta: null, takeaways: [], at: 1});
 }
 
-test('an automation updates an account in its project, and only completes the reels that qualify', async () => {
+test('an automation updates an account in its project without analysing; "Analizar…" with its data updated completes those that qualify', async () => {
   const ws = await import('./workspace.ts');
   const insp = await import('./inspiration.ts');
   ws.openProject('abierto');
   const dir = path.join(root, 'projects/cerrado/inspiration/otra');
-  const run = (limit: number, seconds: number) => insp.refreshProjectAccount('cerrado', 'otra', limit, seconds, new AbortController());
+  const run = (limit: number, seconds?: number) => insp.refreshProjectAccount('cerrado', 'otra', limit, new AbortController(), seconds ? {maxSeconds: seconds, reanalyse: false} : undefined);
 
   // Done already: only their numbers.
   const done = await run(2, 180);
@@ -51,7 +51,24 @@ test('an automation updates an account in its project, and only completes the re
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'CODE3AAAA/reel.json'), 'utf8')).views, 3);
   assert.ok(!fs.existsSync(path.join(dir, 'CODE3AAAA/transcript.json')));
 
-  // Short enough: it does need the transcriber.
+  // Short enough: analysing it needs the transcriber; the automation's update (no analyse) never asks for it.
   await assert.rejects(run(3, 300), /falta la transcripción/);
-  await assert.rejects(run(3, 180).then(() => insp.refreshProjectAccount('cerrado', 'nadie', 2, 180, new AbortController())), /ya no está en Inspiración/);
+  const update = await run(3);
+  assert.deepEqual([update?.reels, update?.processed, update?.analysed], [3, 0, 0]);
+  await assert.rejects(run(3).then(() => insp.refreshProjectAccount('cerrado', 'nadie', 2, new AbortController())), /ya no está en Inspiración/);
+});
+
+test('"Analizar…" picks like the step: the newest reels here, then those short enough', async () => {
+  const ws = await import('./workspace.ts');
+  const insp = await import('./inspiration.ts');
+  const dir = path.join(root, 'projects/cerrado/inspiration/otra');
+  for (const n of [1, 2, 3]) {
+    const f = path.join(dir, `CODE${n}AAAA/reel.json`);
+    fs.writeFileSync(f, JSON.stringify({...JSON.parse(fs.readFileSync(f, 'utf8')), posted: `2026-10-0${n}T00:00:00.000Z`}));
+  }
+  ws.openProject('cerrado');
+  assert.deepEqual(insp.newest('otra', 2, 180), ['CODE2AAAA']); // 3 is the newest but too long; 1 is out of the 2
+  assert.deepEqual(insp.newest('otra', 3, 180), ['CODE2AAAA', 'CODE1AAAA']);
+  assert.throws(() => insp.processAccount('otra', {limit: 0, maxSeconds: 180}), /de 1 a/);
+  assert.throws(() => insp.processAccount('otra', {limit: 2, maxSeconds: 181}), /duración máxima/);
 });

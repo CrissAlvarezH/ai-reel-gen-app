@@ -4,16 +4,19 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
+import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@/components/ui/collapsible';
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger} from '@/components/ui/dialog';
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {HoverCard, HoverCardContent, HoverCardTrigger} from '@/components/ui/hover-card';
 import {Input} from '@/components/ui/input';
+import {Label} from '@/components/ui/label';
+import {Switch} from '@/components/ui/switch';
 import {Progress} from '@/components/ui/progress';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {cn} from '@/lib/utils';
 import {fmtAgo, fmtTime, inspirationApi, useSocket, type InspirationAccount, type InspirationJob, type InspirationList, type InspirationReel, type InspirationStatus} from './api';
-import {BEAT_TAGS} from '../shared/types';
+import {BEAT_TAGS, MAX_ACCOUNT_REELS, MAX_ANALYSIS_SECONDS} from '../shared/types';
 import {md} from './Chat';
 import {useConfirm} from './confirm';
 import {useStudio} from './studio';
@@ -296,6 +299,85 @@ function AddButton({kind, disabled, source}: {kind: 'video' | 'account'; disable
 
 /* ───── An account (or the loose reels) ───── */
 
+// An account's "Analizar…": its newest reels up to a duration, what's missing, then the account; its data read again
+// first only if asked (charged, what an automation's "Actualizar cuenta externa" does), and optionally those already analysed again.
+function AnalyzeDialog({account, onClose}: {account: InspirationAccount; onClose: () => void}) {
+  const confirm = useConfirm();
+  const [limit, setLimit] = useState(Math.min(10, account.reels || 10));
+  const [maxSeconds, setMaxSeconds] = useState(MAX_ANALYSIS_SECONDS);
+  const [scrape, setScrape] = useState(false);
+  const [reanalyse, setReanalyse] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const okLimit = Number.isInteger(limit) && limit >= 1 && limit <= MAX_ACCOUNT_REELS;
+  const okSeconds = Number.isInteger(maxSeconds) && maxSeconds >= 1 && maxSeconds <= MAX_ANALYSIS_SECONDS;
+  const submit = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      if (scrape) {
+        const e = await inspirationApi.estimate(`@${account.username}`, limit, 'account');
+        if (!(await confirm({title: `¿Traer los ${limit} reels más recientes de @${account.username}?`, description: `Antes de analizar se leen otra vez del scraper con sus números de hoy, y su perfil. ${e.charge}.`, action: 'Analizar'}))) return;
+      }
+      await inspirationApi.process(account.username, {limit, maxSeconds, fetch: scrape, reanalyse});
+      onClose();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="size-4 text-muted-foreground" /> Analizar @{account.username}
+          </DialogTitle>
+          <DialogDescription>De sus reels más recientes, los que no pasen de la duración se transcriben y los analiza el agente con tu suscripción. Luego se rehace el análisis general.</DialogDescription>
+        </DialogHeader>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <Label htmlFor="analyze-limit" className="flex-1">Reels más recientes</Label>
+            <Input id="analyze-limit" type="number" min={1} max={MAX_ACCOUNT_REELS} value={Number.isNaN(limit) ? '' : limit} onChange={(e) => setLimit(e.target.valueAsNumber)} className="w-24" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="analyze-seconds" className="flex-1">Duración máxima (segundos)</Label>
+            <Input id="analyze-seconds" type="number" min={1} max={MAX_ANALYSIS_SECONDS} value={Number.isNaN(maxSeconds) ? '' : maxSeconds} onChange={(e) => setMaxSeconds(e.target.valueAsNumber)} className="w-24" />
+          </div>
+          {!okSeconds && <p className="-mt-2 text-xs text-destructive">De 1 a {MAX_ANALYSIS_SECONDS} segundos (3 minutos).</p>}
+          <div className="flex items-start gap-3">
+            <Switch id="analyze-fetch" checked={scrape} onCheckedChange={setScrape} />
+            <Label htmlFor="analyze-fetch" className="flex flex-col items-start gap-0.5">
+              Actualizar datos primero
+              <span className="text-xs font-normal text-muted-foreground">Vistas, likes y perfil de hoy, y reels nuevos si los hay. Gasta saldo. Apagado: solo los que ya tienes aquí.</span>
+            </Label>
+          </div>
+          <div className="flex items-start gap-3">
+            <Switch id="analyze-again" checked={reanalyse} onCheckedChange={setReanalyse} />
+            <Label htmlFor="analyze-again" className="flex flex-col items-start gap-0.5">
+              Volver a analizar los ya analizados
+              <span className="text-xs font-normal text-muted-foreground">Apagado: solo los que falten.</span>
+            </Label>
+          </div>
+          {err && <p className="text-sm text-destructive">{err}</p>}
+          <DialogFooter>
+            <Button type="submit" disabled={busy || !okLimit || !okSeconds}>
+              {busy ? <Loader2 className="animate-spin" /> : <Sparkles />} Analizar
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const STAGE: Record<InspirationJob['stage'], string> = {
   fetching: 'Descargando los reels (suele tardar 1–3 minutos)',
   processing: 'Transcribiendo y sacando fotogramas',
@@ -430,6 +512,7 @@ function ReelsView({
   const c = data?.counts ?? {};
   const todo = (c.pending ?? 0) + (c.error ?? 0) + (account ? (c.processed ?? 0) : 0);
 
+  const [analyzing, setAnalyzing] = useState(false);
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setErr('');
@@ -530,19 +613,8 @@ function ReelsView({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-48">
-                {todo > 0 && (
-                  <DropdownMenuItem disabled={busy || !!job || !transcriber} onSelect={() => void processAll()} title={transcriber ? '' : 'Instala la transcripción en Ajustes → Requisitos'}>
-                    <Wand2 /> Procesar {todo}
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem
-                  disabled={busy || !!job || !c.ready}
-                  onSelect={async () => {
-                    if (await confirm({title: `¿Volver a analizar @${account.username}?`, description: 'El agente analiza otra vez cada reel y la cuenta, con tu suscripción. No se descarga nada ni se gasta saldo del scraper.', action: 'Analizar'}))
-                      void run(() => inspirationApi.process(account.username, true));
-                  }}
-                >
-                  <Sparkles /> Volver a analizar
+                <DropdownMenuItem disabled={busy || !!job || !transcriber} onSelect={() => setAnalyzing(true)} title={transcriber ? '' : 'Instala la transcripción en Ajustes → Requisitos'}>
+                  <Sparkles /> Analizar…
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -563,6 +635,7 @@ function ReelsView({
           </div>
         </div>
       )}
+      {account && analyzing && <AnalyzeDialog account={account} onClose={() => setAnalyzing(false)} />}
       {scope === LOOSE && (
         <div className="flex flex-wrap items-center gap-3">
           <p className="flex-1 text-sm text-muted-foreground">Reels que añadiste por su enlace, de cuentas que no sigues aquí. El Multiplicador sale solo en las cuentas añadidas.</p>
@@ -594,20 +667,38 @@ function ReelsView({
       {err && <p className="text-sm text-destructive">{err}</p>}
 
       {account?.analysis && (
-        <Card>
-          <CardHeader>
-            <CardTitle>La cuenta</CardTitle>
-            <CardDescription>
-              Análisis del agente con {account.analysis.reels} reels · {fmtAgo(account.analysis.at)}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div
-              className="prose prose-sm max-w-none prose-invert prose-headings:mt-4 prose-headings:mb-1 prose-headings:text-base prose-p:my-1.5 prose-ul:my-1.5"
-              dangerouslySetInnerHTML={{__html: md(account.analysis.text.replace(/\[([A-Za-z0-9_-]{5,40})\](?!\()/g, (_, c) => `[${c}](#/inspiracion/@${account.username}/${c})`))}}
-            />
-          </CardContent>
-        </Card>
+        <Collapsible key={account.username} asChild>
+          <Card className="group/account">
+            <CardHeader>
+              <CardTitle>
+                <CollapsibleTrigger className="flex items-center gap-1.5 hover:text-muted-foreground">
+                  <ChevronRight className="size-4 transition-transform group-data-[state=open]/account:rotate-90" />
+                  Análisis general
+                </CollapsibleTrigger>
+              </CardTitle>
+              <CardDescription>
+                Análisis del agente del {new Date(account.analysis.at).toLocaleString('es', {dateStyle: 'long', timeStyle: 'short'})} ({fmtAgo(account.analysis.at)}), con los {account.analysis.reels} reels analizados entonces. Los que llegaron o se analizaron después no entran.
+              </CardDescription>
+              {account.analysis.codes && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {account.analysis.codes.map((c) => (
+                    <a key={c} href={`#/inspiracion/@${account.username}/${c}`} title={c} className="h-14 w-8 overflow-hidden rounded-sm bg-muted ring-foreground/40 hover:ring-2">
+                      <img src={inspirationApi.file({account: account.username, code: c}, 'thumb.jpg')} alt={c} loading="lazy" className="size-full object-cover" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent>
+                <div
+                  className="prose prose-sm max-w-none prose-invert prose-headings:mt-4 prose-headings:mb-1 prose-headings:text-base prose-p:my-1.5 prose-ul:my-1.5"
+                  dangerouslySetInnerHTML={{__html: md(account.analysis.text.replace(/\[([A-Za-z0-9_-]{5,40})\](?!\()/g, (_, c) => `[${c}](#/inspiracion/@${account.username}/${c})`))}}
+                />
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       )}
 
       <div className="flex flex-wrap items-center gap-2">

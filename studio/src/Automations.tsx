@@ -10,7 +10,7 @@ import {Switch} from '@/components/ui/switch';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
 import {nextRun} from '../shared/cron';
-import {MAX_ACCOUNT_REELS, MAX_ANALYSIS_SECONDS} from '../shared/types';
+import {MAX_ACCOUNT_REELS} from '../shared/types';
 import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type InspirationAccount, type OwnReel, type OwnReelList} from './api';
 import {useConfirm} from './confirm';
 import {Avatar} from './Inspiration';
@@ -32,10 +32,10 @@ const STEP_KINDS: Record<AutomationStep['type'], {label: string; icon: LucideIco
   agent: {label: 'Agente', icon: Bot, description: 'Un agente autónomo hace lo que le pidas, sin preguntarte nada.', blank: {type: 'agent', prompt: ''}},
   account: {label: 'Actualizar Mi cuenta', icon: RefreshCw, description: 'Descarga tus reels más recientes con sus números y tu perfil.', blank: {type: 'account', limit: DEFAULT_REELS}},
   post: {label: 'Actualizar un post', icon: Clapperboard, description: 'Trae los números y la metadata de un reel de Mi cuenta.', blank: {type: 'post', code: '', label: ''}},
-  external: {label: 'Actualizar cuenta externa', icon: Sparkles, description: 'Trae los reels más recientes de una cuenta de Inspiración con sus números, y procesa y analiza los que falten.', blank: {type: 'external', username: '', limit: DEFAULT_REELS, maxSeconds: MAX_ANALYSIS_SECONDS}},
+  external: {label: 'Actualizar cuenta externa', icon: Sparkles, description: 'Trae los reels más recientes de una cuenta de Inspiración con sus números, y su perfil. No analiza nada.', blank: {type: 'external', username: '', limit: DEFAULT_REELS}},
 };
 const stepText = (s: AutomationStep) =>
-  s.type === 'agent' ? s.prompt : s.type === 'account' ? `Tus ${s.limit} reels más recientes con sus números, y tu perfil.` : s.type === 'external' ? `Los ${s.limit} reels más recientes de @${s.username}: sus números y su perfil, y procesa y analiza los que falten y duren hasta ${s.maxSeconds} s.` : s.label || `Reel ${s.code}`;
+  s.type === 'agent' ? s.prompt : s.type === 'account' ? `Tus ${s.limit} reels más recientes con sus números, y tu perfil.` : s.type === 'external' ? `Los ${s.limit} reels más recientes de @${s.username} con sus números, y su perfil.` : s.label || `Reel ${s.code}`;
 
 type RunState = AutomationRunStep['state'];
 const STATE: Record<RunState, {label: string; dot: string; variant: 'secondary' | 'outline' | 'destructive'}> = {
@@ -110,7 +110,7 @@ export function Automations() {
       for (const s of a.steps) {
         if (s.type === 'agent') continue;
         const {charge} = await (s.type === 'account' ? accountApi.estimate(s.limit) : s.type === 'external' ? inspirationApi.estimate(s.username, s.limit, 'account') : accountApi.refreshCost());
-        if (!(await confirm({title: `¿Ejecutar «${a.name}»?`, description: `${STEP_KINDS[s.type].label}: ${stepText(s)} ${charge}.${s.type === 'external' ? ' El análisis gasta de tu suscripción del agente.' : ''}`, action: 'Ejecutar'}))) return;
+        if (!(await confirm({title: `¿Ejecutar «${a.name}»?`, description: `${STEP_KINDS[s.type].label}: ${stepText(s)} ${charge}.`, action: 'Ejecutar'}))) return;
       }
     } catch (e) {
       return setErr((e as Error).message);
@@ -396,8 +396,6 @@ function PostStepFields({code, onChange}: {code: string; onChange: (code: string
   );
 }
 
-const validSeconds = (s: number) => Number.isInteger(s) && s >= 1 && s <= MAX_ANALYSIS_SECONDS;
-
 function ExternalRow({account: x}: {account: InspirationAccount}) {
   return (
     <>
@@ -424,7 +422,6 @@ function ExternalStepFields({n, step, onChange}: {n: number; step: Extract<Autom
     inspirationApi.status().then((s) => setAccounts(s.accounts.filter((x) => x.followed)), (e: Error) => setErr(e.message));
   }, []);
   const chosen = accounts?.find((x) => x.username === step.username);
-  const secondsId = `automation-step-${n}-seconds`;
   return (
     <div className="mt-2 flex flex-col gap-1.5">
       {chosen && (
@@ -437,16 +434,6 @@ function ExternalStepFields({n, step, onChange}: {n: number; step: Extract<Autom
       </Button>
       {accounts && step.username && !chosen && <p className="text-xs text-destructive">@{step.username} ya no está en Inspiración: elige otra.</p>}
       <AccountStepFields n={n} limit={step.limit} onChange={(limit) => onChange({...step, limit})} />
-      <div className="mt-1 flex flex-col gap-1.5 rounded-md border p-2">
-        <p className="text-xs font-medium">Condiciones para analizar</p>
-        <div className="flex items-center gap-2">
-          <Label htmlFor={secondsId}>Duración máxima (segundos)</Label>
-          <Input id={secondsId} type="number" min={1} max={MAX_ANALYSIS_SECONDS} value={Number.isNaN(step.maxSeconds) ? '' : step.maxSeconds} onChange={(e) => onChange({...step, maxSeconds: e.target.valueAsNumber})} className="w-24" />
-        </div>
-        <p className={cn('text-xs', validSeconds(step.maxSeconds) ? 'text-muted-foreground' : 'text-destructive')}>
-          {validSeconds(step.maxSeconds) ? 'Los que falten y no pasen de esa duración se transcriben y los analiza el agente con tu suscripción. Los más largos, los de duración desconocida y los ya hechos solo actualizan sus números.' : `De 1 a ${MAX_ANALYSIS_SECONDS} segundos (3 minutos).`}
-        </p>
-      </div>
       {picking && (
         <Dialog open onOpenChange={(o) => !o && setPicking(false)}>
           <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-xl">
@@ -489,7 +476,7 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const next = nextRun(cron);
-  const stepReady = (s: AutomationStep) => (s.type === 'agent' ? !!s.prompt.trim() : s.type === 'post' ? !!s.code : (s.type === 'account' || (!!s.username && validSeconds(s.maxSeconds))) && Number.isInteger(s.limit) && s.limit >= 1 && s.limit <= MAX_ACCOUNT_REELS);
+  const stepReady = (s: AutomationStep) => (s.type === 'agent' ? !!s.prompt.trim() : s.type === 'post' ? !!s.code : (s.type === 'account' || !!s.username) && Number.isInteger(s.limit) && s.limit >= 1 && s.limit <= MAX_ACCOUNT_REELS);
   const ready = !!name.trim() && !!next && steps.length > 0 && steps.every(stepReady);
   const setStep = (i: number, step: AutomationStep) => setSteps((all) => all.map((s, j) => (j === i ? step : s)));
 

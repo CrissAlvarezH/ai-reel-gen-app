@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {cronMatches, nextRun} from '../shared/cron.ts';
-import {MAX_ACCOUNT_REELS, MAX_ANALYSIS_SECONDS} from '../shared/types.ts';
+import {MAX_ACCOUNT_REELS} from '../shared/types.ts';
 import type {Automation, AutomationInput, AutomationRun, AutomationRunState, AutomationRunStep, AutomationStep, AutomationsView} from '../shared/types.ts';
 import * as account from './account.ts';
 import * as chat from './chat.ts';
@@ -72,9 +72,7 @@ function cleanStep(raw: unknown, prior: AutomationStep[]): AutomationStep {
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ACCOUNT_REELS) throw httpError(400, `el paso de cuenta externa descarga de 1 a ${MAX_ACCOUNT_REELS} reels`);
     // One it already had stays, even if the account has left Inspiración: the run says so, and the switch can still turn it off.
     if (!prior.some((p) => p.type === 'external' && p.username === st.username) && !insp.isFollowed(st.username)) throw httpError(400, 'elige una cuenta escaneada en Inspiración');
-    const maxSeconds = Number(st.maxSeconds);
-    if (!Number.isInteger(maxSeconds) || maxSeconds < 1 || maxSeconds > MAX_ANALYSIS_SECONDS) throw httpError(400, `la duración máxima para analizar es de 1 a ${MAX_ANALYSIS_SECONDS} segundos`);
-    return {type: 'external', username: st.username as string, limit, maxSeconds};
+    return {type: 'external', username: st.username as string, limit};
   }
   throw httpError(400, 'ese tipo de paso no existe');
 }
@@ -176,8 +174,8 @@ function finish(id: string, state: AutomationRunState, error?: string) {
 // A step that downloads into Mi cuenta: what it did, or null if another workspace opened meanwhile.
 function fromScraper(project: string, step: Exclude<AutomationStep, {type: 'agent'}>, work: AbortController): Promise<string | null> {
   if (step.type === 'external')
-    return insp.refreshProjectAccount(project, step.username, step.limit, step.maxSeconds, work).then(
-      (r) => r && `@${step.username} actualizada en Inspiración: ${r.reels} reels con sus números (${r.fresh} nuevos); ${r.processed} procesados y ${r.analysed} analizados ahora${r.skipped ? `; ${r.skipped} sin analizar por durar más de ${step.maxSeconds} s o no saberse su duración` : ''}${r.profile ? ', y su perfil' : '; su perfil no se pudo actualizar y conserva los datos anteriores'}.${r.problem ? ` Aviso: ${r.problem}.` : ''}`,
+    return insp.refreshProjectAccount(project, step.username, step.limit, work).then(
+      (r) => r && `@${step.username} actualizada en Inspiración: ${r.reels} reels con sus números (${r.fresh} nuevos, sin analizar)${r.profile ? ', y su perfil' : '; su perfil no se pudo actualizar y conserva los datos anteriores'}.${r.problem ? ` Aviso: ${r.problem}.` : ''}`,
     );
   if (step.type === 'post')
     return account.refreshProjectReel(project, step.code).then((m) => m && `Reel ${step.code} actualizado: ${m.views ?? '?'} vistas, ${m.likes ?? '?'} me gusta y ${m.comments ?? '?'} comentarios.`);

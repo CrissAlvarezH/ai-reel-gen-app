@@ -25,7 +25,7 @@ import {agentCli, onAbort} from './agent.ts';
 import {authorName, getProfile, getSocialSource} from './config.ts';
 import * as sc from './scrapecreators.ts';
 import {transcriberReady, venvPy} from './requirements.ts';
-import {BEAT_TAGS, SOCIAL_SOURCES} from '../shared/types.ts';
+import {BEAT_TAGS, MAX_ACCOUNT_REELS, MAX_ANALYSIS_SECONDS, SOCIAL_SOURCES} from '../shared/types.ts';
 import * as index from './inspiration-index.ts';
 import * as db from './db.ts';
 import type {InspirationAccount, InspirationJob, InspirationList, InspirationProfile, InspirationReel, InspirationRef, InspirationStatus, ReelAnalysis, ReelTranscript, ServerEvent} from '../shared/types.ts';
@@ -589,11 +589,12 @@ export async function add(input: unknown, limitIn: unknown, kind?: AddKind, refr
   return est;
 }
 
-// An automation's update of an account, in any project, open or not: its newest reels with their numbers and its profile,
-// and of those reels, whatever's missing (video, frames and transcript; the agent's analysis). One already done, or longer
-// than maxSeconds or of unknown length, only gets its numbers. A switch of project doesn't lose what was paid for: paths from the project, only in here. ctrl: stops it
+// An automation's "Actualizar cuenta externa", in any project, open or not: its newest reels with their numbers and its
+// profile; new ones stay pending. analyse ("Analizar…" with its data updated first): then, of those reels, whatever's missing
+// (video, frames and transcript; the agent's analysis) and the account; one longer than maxSeconds or of unknown length
+// only gets its numbers. A switch of project doesn't lose what was paid for: paths from the project, only in here. ctrl: stops it
 // (a download in flight finishes; it's paid). null: another workspace opened, nothing else was saved.
-export async function refreshProjectAccount(project: string, u: string, limit: number, maxSeconds: number, ctrl: AbortController) {
+export async function refreshProjectAccount(project: string, u: string, limit: number, ctrl: AbortController, analyse?: {maxSeconds: number; reanalyse: boolean}) {
   const root = ROOT;
   const opened = project === PROJECT;
   const here = <T>(fn: () => T) => withProject(project, fn);
@@ -638,10 +639,11 @@ export async function refreshProjectAccount(project: string, u: string, limit: n
       if (a) saveAccount({...a, fullName: prof?.fullName ?? a.fullName, profile: prof?.profile ?? a.profile, error: problem});
     });
     const codes = [...new Set(items.filter((it) => !it.error && it.videoUrl && CODE.test(it.shortCode ?? '')).map((it) => it.shortCode!))];
-    const eligible = here(() => codes.filter((c) => (readReel(u, c)?.duration ?? Infinity) <= maxSeconds));
+    if (!analyse) return {reels: codes.length, fresh, skipped: 0, processed: 0, analysed: 0, profile: !!prof, problem};
+    const eligible = here(() => codes.filter((c) => (readReel(u, c)?.duration ?? Infinity) <= analyse.maxSeconds));
     const work = await completeReels(u, eligible, dir, step, here, () => {
       if (ROOT !== root || ctrl.signal.aborted) throw new Stopped('detenido');
-    });
+    }, analyse.reanalyse);
     return {reels: codes.length, fresh, skipped: codes.length - eligible.length, ...work, profile: !!prof, problem: problem ?? work.problem};
   } catch (e) {
     if (ROOT !== root) return null;
@@ -655,7 +657,7 @@ export async function refreshProjectAccount(project: string, u: string, limit: n
 
 // What these reels are missing, one transcription at a time across the studio as in pipeline(). A reel that fails says so
 // and the rest go on; nothing done at all is the step's failure.
-async function completeReels(u: string, codes: string[], dir: string, step: Step, here: <T>(fn: () => T) => T, live: () => void) {
+async function completeReels(u: string, codes: string[], dir: string, step: Step, here: <T>(fn: () => T) => T, live: () => void, reanalyse = false) {
   const has = (c: string, f: string) => fs.existsSync(path.join(dir, c, f));
   const errors: string[] = [];
   const each = async (stage: 'processing' | 'analyzing', list: string[], slot: typeof processSlot, work: (c: string) => Promise<void>) => {
@@ -692,7 +694,7 @@ async function completeReels(u: string, codes: string[], dir: string, step: Step
   if (toProcess.length && !(await transcriberReady())) throw new Error('falta la transcripción: instálala en Ajustes → Requisitos → Transcripción');
   await each('processing', toProcess, processSlot, (c) => processDir(path.join(dir, c), step.ctrl.signal, true));
   const med = here(() => accountMedian(u));
-  const toAnalyse = here(() => codes.filter((c) => processed(reelDir(u, c)) && !readReel(u, c)?.error && !has(c, 'analysis.json')));
+  const toAnalyse = here(() => codes.filter((c) => processed(reelDir(u, c)) && !readReel(u, c)?.error && (reanalyse || !has(c, 'analysis.json'))));
   await each('analyzing', toAnalyse, analyseSlot, (c) => here(() => analyseReel(u, c, med, live, step.ctrl.signal)));
   const analysed = toAnalyse.filter((c) => has(c, 'analysis.json')).length;
   if (errors.length && !analysed) throw new Error(errors[0]);
@@ -948,13 +950,13 @@ const STRATEGIST = () => {
 
 // here: runs what reads its project (an automation's may be closed).
 async function analyseAccount(u: string, check: () => void, signal?: AbortSignal, here = <T>(fn: () => T) => fn()) {
-  let count = 0;
+  let codes: string[] = [];
   const text = await here(() => {
     const med = accountMedian(u);
     const rs = reels(u).filter((r) => r.analysis);
-    count = rs.length;
+    rs.sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
+    codes = rs.map((r) => r.code);
     const lines = rs
-      .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
       .map((r) =>
         [
           `[${r.code}] ${r.posted?.slice(0, 10) ?? '—'} · ${n(r.views)} vistas${r.ratio != null ? ` (${r.ratio.toFixed(1)}×)` : ''} · ${n(r.likes)} likes · ${n(r.comments)} coment. · ${r.duration != null ? Math.round(r.duration) : '—'} s · ${r.transcript?.wps ?? '—'} pal/s`,
@@ -971,7 +973,7 @@ async function analyseAccount(u: string, check: () => void, signal?: AbortSignal
   check();
   here(() => {
     const a = readAccount(u);
-    if (a) saveAccount({...a, analysis: {text: text.trim(), at: Date.now(), reels: count}}); // else removed meanwhile
+    if (a) saveAccount({...a, analysis: {text: text.trim(), at: Date.now(), reels: codes.length, codes}}); // else removed meanwhile
   });
 }
 
@@ -981,7 +983,7 @@ async function analyseAccount(u: string, check: () => void, signal?: AbortSignal
 // comes from the creator: a download, "Procesar" or "Analizar video").
 const pipelines = new Set<string>();
 const again = new Set<string>(); // new reels arrived while it ran: go once more at the end
-async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[]} = {}) {
+async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[]; limit?: number; maxSeconds?: number} = {}) {
   if (pipelines.has(u)) return void again.add(u);
   const g = gen;
   pipelines.add(u);
@@ -994,7 +996,8 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
     if (stopped()) throw new Stopped('detenido');
   };
   const followed = !!readAccount(u)?.followed;
-  for (const c of opts.analyse ?? reelCodes(u)) {
+  const codes = opts.analyse ?? (opts.limit ? newest(u, opts.limit, opts.maxSeconds ?? Infinity) : reelCodes(u));
+  for (const c of codes) {
     const r = readReel(u, c);
     if (r?.error) writeJson(path.join(reelDir(u, c), 'reel.json'), {...r, error: null});
   }
@@ -1005,7 +1008,6 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
     if (r) writeJson(path.join(reelDir(u, c), 'reel.json'), {...r, error: (e as Error).message});
   };
   try {
-    const codes = opts.analyse ?? reelCodes(u);
     const d = (c: string, f: string) => fs.existsSync(path.join(reelDir(u, c), f));
     const ready = await transcriberReady();
     live();
@@ -1085,12 +1087,37 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
   }
 }
 
-// "Procesar" (pending and failed reels) and "Volver a analizar" (every reel and the account).
-export function processAccount(u: string, reanalyse = false) {
+// Its `limit` newest reels here that last up to maxSeconds (unknown: out), as refreshProjectAccount picks from what the scraper brings.
+export const newest = (u: string, limit: number, maxSeconds: number) =>
+  reelCodes(u)
+    .map((c) => readReel(u, c))
+    .filter((r): r is ReelFile => !!r)
+    .sort((a, b) => (b.posted ?? '').localeCompare(a.posted ?? ''))
+    .slice(0, limit)
+    .filter((r) => (r.duration ?? Infinity) <= maxSeconds)
+    .map((r) => r.code);
+
+// "Procesar" of loose videos (no limit: their pending and failed reels) and an account's "Analizar…": its newest `limit` reels
+// up to maxSeconds (fetch: read again from the scraper first, which is charged, as "Actualizar cuenta externa" does), what's
+// missing of them (reanalyse: those already analysed too), then the account.
+export function processAccount(u: string, o: {reanalyse?: unknown; limit?: unknown; maxSeconds?: unknown; fetch?: unknown} = {}) {
   checkAccount(u);
   if (pipelines.has(u) || working(u)) throw httpError(409, `@${u} ya está trabajando`);
+  const reanalyse = !!o.reanalyse;
+  if (o.limit == null) {
+    setAccountError(u, null);
+    return void pipeline(u, {reanalyse});
+  }
+  const limit = Number(o.limit);
+  const maxSeconds = Number(o.maxSeconds);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ACCOUNT_REELS) throw httpError(400, `de 1 a ${MAX_ACCOUNT_REELS} reels`);
+  if (!Number.isInteger(maxSeconds) || maxSeconds < 1 || maxSeconds > MAX_ANALYSIS_SECONDS) throw httpError(400, `la duración máxima para analizar es de 1 a ${MAX_ANALYSIS_SECONDS} segundos`);
+  if (!readAccount(u)?.followed) throw httpError(400, `@${u} no es una cuenta escaneada`);
+  if (o.fetch) requireSource();
   setAccountError(u, null);
-  void pipeline(u, {reanalyse});
+  if (!o.fetch) return void pipeline(u, {reanalyse, limit, maxSeconds});
+  // Its failures are already on the account (setAccountError); a stop isn't one.
+  refreshProjectAccount(PROJECT, u, limit, new AbortController(), {maxSeconds, reanalyse}).catch((e) => e instanceof Stopped || console.error(`inspiración @${u}:`, e));
 }
 
 // "Analizar video" (and "Volver a analizar" for one reel): process it if needed, then the agent analyses it.

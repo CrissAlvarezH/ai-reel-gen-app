@@ -293,7 +293,7 @@ app.post('/api/inspiration', handle((req) => inspiration.add(req.body?.input, re
 // The reels table (server/inspiration-index.ts): scope "all", "loose" or an account; filters, order and page in the query string.
 app.get('/api/inspiration/list/:scope', handle((req) => inspiration.list(req.params.scope, req.query as Record<string, unknown>)));
 app.get('/api/inspiration/reels/:code', handle((req) => inspiration.detail(req.params.code, req.query.account)));
-app.post('/api/inspiration/accounts/:user/process', handle((req) => inspiration.processAccount(req.params.user, !!req.body?.reanalyse)));
+app.post('/api/inspiration/accounts/:user/process', handle((req) => inspiration.processAccount(req.params.user, req.body ?? {})));
 app.post('/api/inspiration/accounts/:user/stop', handle((req) => inspiration.stopAccount(req.params.user)));
 app.delete('/api/inspiration/accounts/:user', handle((req) => inspiration.removeAccount(req.params.user)));
 app.post('/api/inspiration/accounts/:user/reels/:code/analyse', handle((req) => inspiration.analyseOne(req.params.user, req.params.code)));
