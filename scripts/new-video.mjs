@@ -136,4 +136,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error(e.message);
     process.exit(1);
   }
+  // Created by the agent of one of Reel Studio's general conversations (it sets these for its agents): that
+  // conversation goes on in this video when its turn ends. The studio decides (one video per turn); never fails the creation.
+  const {REEL_STUDIO: key, REEL_STUDIO_CHAT: chat, REEL_STUDIO_URL: url} = process.env;
+  if (key === '_general' && chat && url) {
+    try {
+      const r = await fetch(`${url}/api/chat/_general/${encodeURIComponent(chat)}/move`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({slug, auto: true})});
+      const j = await r.json().catch(() => ({}));
+      console.error(j.slug ? `Esta conversación pasa al video ${j.slug} al terminar el turno.` : j.note || j.error || '');
+    } catch {
+      // the studio isn't answering: the video is made all the same
+    }
+  }
 }

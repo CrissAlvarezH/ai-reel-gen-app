@@ -230,7 +230,10 @@ function runStep(id: string, name: string, steps: AutomationStep[], i: number, p
         system: AUTONOMOUS(name, i + 1, steps.length),
         ...(step.agent ? {agent: step.agent, model: step.model, effort: step.effort} : {}),
         // Its conversation says why it failed; the run only points there.
-        onDone: ({ok, stopped, text}) => end(ok, stopped, ok || stopped ? text : 'abre su conversación para ver qué pasó.'),
+        onDone: ({ok, stopped, text, video}) => {
+          if (video) mark({video});
+          end(ok, stopped, ok || stopped ? text : 'abre su conversación para ver qué pasó.');
+        },
       });
     });
   } catch (e) {

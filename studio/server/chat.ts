@@ -42,8 +42,9 @@ type Store = {active: string; chats: Chat[]};
 // said: it wrote some reply (a local command like /cost may only answer in the result).
 // pending: the permissions it's waiting on, by their item in the conversation.
 type PendingPermission = {answer: (allow: boolean) => void; expire: () => void; request: string};
-// moveTo: the video its agent asked to go on in (a general conversation), once the turn ends.
-type Run = {dir: string; proc: ChildProcess; pending: Map<string, PendingPermission>; started: number; live: string; tool: string | null; stderr: string; result?: {ok: boolean; text?: string}; stopped?: boolean; context?: ChatContext; said?: boolean; moveTo?: string};
+// moveTo: the video its agent asked to go on in (a general conversation), once the turn ends. moveAuto: it was set by
+// scripts/new-video.sh when its agent created that video ('many': it created more than one, so it stays).
+type Run = {dir: string; proc: ChildProcess; pending: Map<string, PendingPermission>; started: number; live: string; tool: string | null; stderr: string; result?: {ok: boolean; text?: string}; stopped?: boolean; context?: ChatContext; said?: boolean; moveTo?: string; moveAuto?: 'one' | 'many'};
 
 let seq = 0;
 const id = () => `${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -579,7 +580,7 @@ export const instructions = (key: string) => SYSTEM(key);
 // How a general conversation moves to a video. Also told in the prompt to a conversation that started before (a resumed
 // Claude Code session keeps the system prompt it started with).
 const MOVE_LINE =
-  'Moverte a un video: sí puedes. Esta conversación no tiene video y puede pasar a ser la de uno, una sola vez, con todo lo hablado (es la misma sesión). Hazlo cuando él te pida moverte, asignarte o seguir en un video, o cuando crees uno para seguir trabajándolo tú (si creaste varios, pregúntale a cuál): curl -s -X POST "$REEL_STUDIO_URL/api/chat/_general/$REEL_STUDIO_CHAT/move" -H "Content-Type: application/json" -d \'{"slug":"<slug>"}\'. Responde {"slug","when"}: se mueve al terminar este turno y la app abre el video, así que termina el turno ahí y dile que en su próximo mensaje ya sigues en el video. Si responde {"error"}, dile la razón tal cual. Una conversación de video no se mueve a otro.';
+  'Moverte a un video: sí puedes. Esta conversación no tiene video y puede pasar a ser la de uno, una sola vez, con todo lo hablado (es la misma sesión). Al crear un video con scripts/new-video.sh, esta conversación queda asignada a él sola (lo dice su salida); si creas varios en el mismo turno, se queda aquí. Hazlo tú cuando él te pida moverte, asignarte o seguir en un video, o si creaste varios y debes seguir en uno (pregúntale a cuál si está delante): curl -s -X POST "$REEL_STUDIO_URL/api/chat/_general/$REEL_STUDIO_CHAT/move" -H "Content-Type: application/json" -d \'{"slug":"<slug>"}\'. Responde {"slug","when"}: se mueve al terminar este turno y la app abre el video, así que termina el turno ahí y dile que en su próximo mensaje ya sigues en el video. Si responde {"error"}, dile la razón tal cual. Una conversación de video no se mueve a otro.';
 
 const SYSTEM = (key: string) =>
   key === GENERAL
@@ -666,14 +667,29 @@ export function moveToVideo(chat: string, slug: string, dir: string) {
 }
 
 // Its agent asks, during its turn, to go on in a video (the one it created): it moves when the turn ends.
-export function requestMove(key: string, chat: string, slug: unknown) {
+// auto: scripts/new-video.sh asking, as it creates a video for this conversation's agent. One video made this turn:
+// it goes on there; a second one: it stays where it is (nobody said which), unless its agent then asks for one.
+export function requestMove(key: string, chat: string, slug: unknown, auto = false) {
   const only = 'solo se le asigna un video a una conversación que no tiene ninguno';
   if (key !== GENERAL) throw httpError(409, `esta conversación ya tiene video («${videoTitle(key) ?? key}») y no puede cambiarse: ${only}`);
   const r = runs.get(runKey(key, chat));
   if (!r) throw httpError(409, 'solo su agente la mueve, durante su turno');
-  if (r.moveTo) throw httpError(409, `esta conversación ya tiene video asignado («${videoTitle(r.moveTo) ?? r.moveTo}», pasa a él al terminar este turno) y no puede cambiarse: ${only}`);
+  if (auto) {
+    if (typeof slug !== 'string' || !listSlugs().includes(slug)) throw httpError(404, 'ese video no existe en el proyecto abierto');
+    if (r.moveTo && !r.moveAuto) return {slug: r.moveTo, when: 'al terminar este turno'}; // its agent already chose
+    if (r.moveAuto) {
+      r.moveTo = undefined;
+      r.moveAuto = 'many';
+      return {slug: null, note: 'creaste más de un video en este turno: la conversación se queda aquí; si debe seguir en uno, pídelo con move'};
+    }
+    r.moveTo = slug;
+    r.moveAuto = 'one';
+    return {slug, when: 'al terminar este turno'};
+  }
+  if (r.moveTo && !r.moveAuto) throw httpError(409, `esta conversación ya tiene video asignado («${videoTitle(r.moveTo) ?? r.moveTo}», pasa a él al terminar este turno) y no puede cambiarse: ${only}`);
   if (typeof slug !== 'string' || !listSlugs().includes(slug)) throw httpError(404, 'ese video no existe en el proyecto abierto');
   r.moveTo = slug;
+  r.moveAuto = undefined;
   return {slug, when: 'al terminar este turno'};
 }
 
@@ -681,7 +697,8 @@ export type SendInput = {text?: string; comments?: Comment[]; refs?: unknown; id
 // A turn nobody is watching (server/automations.ts); separate from SendInput, which comes straight from the request.
 // system: added to its system prompt. onDone: when it ends; text is the last thing it said.
 // agent/model/effort: the CLI it runs on (an automation's step); absent: the one in Ajustes.
-export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boolean; text: string}) => void; agent?: string; model?: string; effort?: string};
+// onDone's video: the one the conversation moved to when the turn ended (it's among that video's now).
+export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boolean; text: string; video?: string}) => void; agent?: string; model?: string; effort?: string};
 
 // note: text for the agent only, ahead of the message (not shown in the transcript).
 // chat: which conversation; by default the open one.
@@ -875,7 +892,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
       if (ended) return;
       ended = true;
       const said = find(load(key, dir), chat).items.findLast((i) => i.role === 'assistant');
-      unattended?.onDone({ok, stopped, text: said?.role === 'assistant' ? said.text : ''});
+      unattended?.onDone({ok, stopped, text: said?.role === 'assistant' ? said.text : '', video: run.moveTo && here() ? run.moveTo : undefined});
     });
 
   proc.on('close', (code, signal) => {

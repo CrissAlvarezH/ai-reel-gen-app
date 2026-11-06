@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {AlertCircle, CalendarClock, Circle, CircleDot, FolderOpen, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Palette, Plus, Settings as SettingsIcon, Sparkles, Target, UserRound} from 'lucide-react';
+import {AlertCircle, CalendarClock, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Palette, Plus, Settings as SettingsIcon, Sparkles, Target, UserRound} from 'lucide-react';
 import {cn} from '@/lib/utils';
-import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState, type ProgressStep} from './api';
+import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState, type ProgressStep, type ReelSummary} from './api';
 import {ReelProgressRing} from './ReelProgress';
 import {AgentLogo} from './AgentLogo';
 import {useStudio, type UiContext} from './studio';
@@ -74,17 +74,36 @@ function NavLink({href, icon: I, label, active, compact, first, children}: {href
   );
 }
 
+// Published on Instagram (Mi cuenta has its reel): opens it there.
+function Posted({p}: {p: NonNullable<ReelSummary['instagram']>}) {
+  const when = p.posted ? ` el ${new Date(p.posted).toLocaleDateString('es', {day: 'numeric', month: 'long'})}` : '';
+  const views = p.views == null ? '' : ` · ${p.views.toLocaleString('es')} vistas`;
+  return (
+    <a href={p.url} target="_blank" rel="noreferrer" title={`Publicado en Instagram${when}${views}`} aria-label="Publicado en Instagram" className="grid size-6 place-items-center rounded-md text-pink-400 hover:bg-background/60">
+      {/* Instagram's glyph: a rounded square, a lens and the flash dot. */}
+      <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+        <rect x="3" y="3" width="18" height="18" rx="5" />
+        <circle cx="12" cy="12" r="4" />
+        <circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" />
+      </svg>
+    </a>
+  );
+}
+
 export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   const {setOpen, sideOpen} = useStudio();
   const compact = !sideOpen;
   const inUse = useAgentId();
   const [agents, setAgents] = useState<Agent[]>([]);
-  // Each video's progress (Guion → Voz → … → Render), from its files.
-  const [progress, setProgress] = useState<Record<string, ProgressStep[]>>({});
+  // Each video's progress (Guion → Voz → … → Render) and when its files last changed.
+  const [reels, setReels] = useState<Record<string, {progress: ProgressStep[]; updated: number; instagram: ReelSummary['instagram']}>>({});
   const load = useCallback(() => {
     agentsApi.list().then(setAgents, () => {});
-    api.reels().then((list) => setProgress(Object.fromEntries(list.map((r) => [r.slug, r.progress]))), () => {});
+    api.reels().then((list) => setReels(Object.fromEntries(list.map((r) => [r.slug, {progress: r.progress, updated: r.updated, instagram: r.instagram}]))), () => {});
   }, []);
+  // A video's last activity: its conversation's last message or its files, whichever is newer (one made by an
+  // automation, or by the general conversation, has no conversation of its own yet).
+  const last = (a: Agent) => Math.max(a.lastTs ?? 0, (a.slug && reels[a.slug]?.updated) || 0) || null;
   useEffect(() => void load(), [load]);
 
   // Refresh on any agent/file event (debounced; streaming deltas don't change the state).
@@ -115,7 +134,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   const rows = agents
     .filter((a) => a.slug)
     .map((a) => ({a, st: a.state}))
-    .sort((x, y) => (y.a.lastTs ?? 0) - (x.a.lastTs ?? 0));
+    .sort((x, y) => (last(y.a) ?? 0) - (last(x.a) ?? 0));
 
   const generalState =
     general && general.state !== 'idle' && general.state !== 'new' ? (
@@ -173,19 +192,13 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
                     <StateIcon state={st} />
                     <AgentLogo agent={a.agent ?? inUse} />
                     <span className="min-w-0 flex-1 truncate font-medium">{a.title ?? a.slug}</span>
-                    {a.lastTs && st !== 'working' && <span className="flex-none text-[11px] text-muted-foreground">{fmtAgo(a.lastTs)}</span>}
+                    {last(a) && st !== 'working' && <span className="flex-none text-[11px] text-muted-foreground">{fmtAgo(last(a)!)}</span>}
                   </span>
                   {subtitle(a, st) && <span className="line-clamp-2 pl-6 text-xs text-muted-foreground">{subtitle(a, st)}</span>}
                 </button>
-                <div className="mr-1 flex flex-none flex-col items-center gap-0.5">
-                  {progress[a.slug!]?.length ? <ReelProgressRing steps={progress[a.slug!]} className="m-1.5" /> : null}
-                  <button
-                    onClick={() => api.reveal(a.slug!)}
-                    title={`Abrir la carpeta del video (${a.slug})`}
-                    className="flex-none rounded-md p-1.5 text-muted-foreground hover:bg-background/60 hover:text-foreground"
-                  >
-                    <FolderOpen className="size-4" />
-                  </button>
+                <div className="mr-1 flex flex-none flex-col items-center self-start pt-0.5">
+                  {reels[a.slug!]?.progress.length ? <ReelProgressRing steps={reels[a.slug!].progress} className="m-1.5 mb-1" /> : null}
+                  {reels[a.slug!]?.instagram && <Posted p={reels[a.slug!].instagram!} />}
                 </div>
               </div>
             ))}

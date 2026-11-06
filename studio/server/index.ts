@@ -253,7 +253,7 @@ app.get('/chat-images/:name', (req: Req, res: Response) => {
   res.sendFile(p);
 });
 app.post('/api/chat/:key/:chat', chatKey, handle((req) => chat.send(req.params.key, req.body ?? {}, req.params.chat === 'active' ? undefined : req.params.chat)));
-app.post('/api/chat/:key/:chat/move', chatKey, handle((req) => chat.requestMove(req.params.key, req.params.chat, req.body?.slug)));
+app.post('/api/chat/:key/:chat/move', chatKey, handle((req) => chat.requestMove(req.params.key, req.params.chat, req.body?.slug, req.body?.auto === true)));
 app.post('/api/chat/:key/:chat/stop', chatKey, handle((req) => ({stopped: chat.stop(req.params.key, req.params.chat)})));
 app.post('/api/chat/:key/:chat/seen', chatKey, handle((req) => chat.markSeen(req.params.key, req.params.chat)));
 app.post('/api/chat/:key/:chat/open', chatKey, handle((req) => chat.open(req.params.key, req.params.chat)));

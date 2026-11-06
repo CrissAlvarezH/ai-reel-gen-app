@@ -207,7 +207,12 @@ function RunRow({run: r}: {run: AutomationRun}) {
   const [open, setRowOpen] = useState(r.state === 'running');
   const state = STATE[r.state];
   // In the side panel, where its conversation stays as a tab.
-  const show = (chat: string) => chatApi.open('_general', chat).then(() => setOpen(true), () => {});
+  // Its conversation: in the general one, or in the video it made (it moved there).
+  const show = (chat: string, video?: string) =>
+    chatApi.open(video ?? '_general', chat).then(() => {
+      if (video) location.hash = `#/reel/${video}`;
+      setOpen(true);
+    }, () => {});
   return (
     <div className="rounded-md border text-sm">
       <button onClick={() => setRowOpen(!open)} aria-expanded={open} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left hover:bg-muted/50">
@@ -245,7 +250,7 @@ function RunRow({run: r}: {run: AutomationRun}) {
               <p className="mt-1 line-clamp-2 text-sm whitespace-pre-line text-muted-foreground">{stepText(s)}</p>
               {s.summary && <p className="mt-1 line-clamp-4 text-sm whitespace-pre-line">{s.summary}</p>}
               {s.chat && (
-                <Button variant="outline" size="xs" className="mt-1.5" onClick={() => void show(s.chat!)}>
+                <Button variant="outline" size="xs" className="mt-1.5" onClick={() => void show(s.chat!, s.video)}>
                   <MessageSquare /> Ver conversación
                 </Button>
               )}
