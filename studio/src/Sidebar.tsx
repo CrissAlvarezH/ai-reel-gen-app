@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {AlertCircle, CalendarClock, Circle, CircleDot, Film, FolderOpen, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Palette, Plus, Settings as SettingsIcon, Sparkles, UserRound} from 'lucide-react';
+import {AlertCircle, CalendarClock, Circle, CircleDot, FolderOpen, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Palette, Plus, Settings as SettingsIcon, Sparkles, UserRound} from 'lucide-react';
 import {cn} from '@/lib/utils';
 import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState} from './api';
 import {AgentLogo} from './AgentLogo';
@@ -128,8 +128,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
       <NavLink href="#/ideas" icon={Lightbulb} label="Ideas de contenido" active={page === 'ideas'} compact={compact} />
       <NavLink href="#/automatizaciones" icon={CalendarClock} label="Automatizaciones" active={page === 'automations'} compact={compact} />
       <NavLink href="#/inspiracion" icon={Sparkles} label="Inspiración" active={page === 'inspiration'} compact={compact} />
-      <NavLink href="#/estilos" icon={Palette} label="Estilos" active={page === 'styles'} compact={compact} />
-      <NavLink href="#/formatos" icon={Film} label="Formatos" active={page === 'formats'} compact={compact} />
+      <NavLink href="#/estilos" icon={Palette} label="Estilos y formatos" active={page === 'styles' || page === 'formats'} compact={compact} />
       {rows.length > 0 &&
         (compact ? (
           <div className="mx-2 mt-3 flex flex-col gap-0.5 border-t pt-3">

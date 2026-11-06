@@ -5,6 +5,7 @@ import {Dialog, DialogContent, DialogTitle} from '@/components/ui/dialog';
 import {cn} from '@/lib/utils';
 import {api, useSocket, type ReelFormat} from './api';
 import {useStudio} from './studio';
+import {StylesFormatsTabs} from './Styles';
 
 // Formatos: the kinds of video, read from formats/<id>/format.json in the workspace — how a video gets made
 // (all animation over a generated voice, him talking to camera with animations…), what's on screen and how
@@ -72,8 +73,7 @@ function FormatGrid({formats}: {formats: ReelFormat[]}) {
   return (
     <>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Formatos</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Qué tipo de video es y cómo se monta. Cómo se ve lo pone el estilo. Cada formato vive en una carpeta de formats/ en la carpeta de trabajo.</p>
+        <StylesFormatsTabs value="formats" />
       </div>
       {formats.length === 0 ? (
         <div className="grid place-items-center gap-2 rounded-xl border border-dashed p-16 text-center text-muted-foreground">

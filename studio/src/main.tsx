@@ -66,7 +66,7 @@ function App() {
         {page !== 'library' && (
           <>
             <span className="text-muted-foreground">/</span>
-            <span className="text-muted-foreground">{slug ? (reelTitle ?? slug) : ({account: 'Mi cuenta', ideas: 'Ideas de contenido', automations: 'Automatizaciones', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'Nuevo reel'} as Record<string, string>)[page]}</span>
+            <span className="text-muted-foreground">{slug ? (reelTitle ?? slug) : ({account: 'Mi cuenta', ideas: 'Ideas de contenido', automations: 'Automatizaciones', inspiration: 'Inspiración', styles: 'Estilos y formatos', formats: 'Estilos y formatos', settings: 'Ajustes', new: 'Nuevo reel'} as Record<string, string>)[page]}</span>
           </>
         )}
       </header>

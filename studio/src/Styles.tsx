@@ -3,6 +3,7 @@ import {Check, ChevronLeft, Loader2, Palette, Plus} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Badge} from '@/components/ui/badge';
 import {Dialog, DialogContent, DialogTitle} from '@/components/ui/dialog';
+import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {api, profileApi, useSocket, type Style} from './api';
 import {useStudio} from './studio';
 
@@ -30,6 +31,18 @@ function useStyleId() {
     return () => window.removeEventListener('hashchange', on);
   }, []);
   return id;
+}
+
+// Estilos and Formatos share one page: its tabs are the two grids' routes, so links and the agent's context stay as they were.
+export function StylesFormatsTabs({value}: {value: 'styles' | 'formats'}) {
+  return (
+    <Tabs value={value} onValueChange={(v) => (location.hash = v === 'formats' ? '#/formatos' : '#/estilos')}>
+      <TabsList>
+        <TabsTrigger value="styles">Estilos</TabsTrigger>
+        <TabsTrigger value="formats">Formatos</TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
 }
 
 // A video in this style still needs its own skill and template to be made.
@@ -92,8 +105,7 @@ function StyleGrid({styles}: {styles: Style[]}) {
     <>
       <div className="mb-6 flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Estilos</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Cómo se ven los videos. Cada estilo vive en una carpeta de styles/ en la carpeta de trabajo.</p>
+          <StylesFormatsTabs value="styles" />
           {err && <p className="mt-1 text-sm text-destructive">{err}</p>}
         </div>
         <Button onClick={create} disabled={busy} title="Abre una conversación con el agente: te pide el nombre, los colores, referencias e imágenes, y crea el estilo">
