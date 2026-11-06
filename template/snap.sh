@@ -3,6 +3,7 @@
 # usage: ./snap.sh <outdir> <sec> [sec...]   -> <outdir>/t<sec>.png + <outdir>/sheet.png
 # Renders two stills at a time so several agents can share the machine.
 set -e; cd "$(dirname "$0")"; out=$1; shift; mkdir -p "$out"
+[ -f shared-chrome.sh ] && . ./shared-chrome.sh  # one headless Chrome for all videos
 fps=$(node -p "require('./src/format.json').fps" 2>/dev/null || echo 30)
 gl=; [ "$(uname)" = Darwin ] && gl=--gl=angle  # Chrome's ANGLE GL backend: needed on macOS only
 # The workspace, with .venv/ and tools/: up from this video (projects/<id>/videos/<slug>/, or videos/<slug>/ before projects).

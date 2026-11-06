@@ -2,6 +2,7 @@
 # Full render + two-pass loudness-normalize to the platform's target (src/format.json "lufs", -14 by default)
 # with peaks at -1.5 dBTP. usage: [CONCURRENCY=n] ./render.sh <name>
 set -e; cd "$(dirname "$0")"; n=${1:-reel}
+[ -f shared-chrome.sh ] && . ./shared-chrome.sh  # one headless Chrome for all videos
 I=$(node -p "require('./src/format.json').lufs ?? -14" 2>/dev/null || echo -14)
 # Chrome's ANGLE GL backend: needed on macOS, the default works on Linux and Windows.
 gl=; [ "$(uname)" = Darwin ] && gl=--gl=angle
