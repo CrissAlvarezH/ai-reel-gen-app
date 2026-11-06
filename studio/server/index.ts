@@ -223,6 +223,14 @@ const chatKey = (req: Req, res: Response, next: NextFunction) => {
 app.get('/api/chat-options', handle(() => chat.options()));
 app.get('/api/chat-examples', handle(() => chat.examples()));
 app.get('/api/chat/:key', chatKey, handle((req) => chat.list(req.params.key)));
+// For the agent (curl, from the line each turn carries): its instructions as they are now, in plain text.
+app.get('/api/chat/:key/instructions', chatKey, (req, res) => {
+  try {
+    res.type('text/plain').send(chat.instructions(req.params.key));
+  } catch (e) {
+    fail(res, e);
+  }
+});
 app.post('/api/chat/:key/new', chatKey, handle((req) => chat.newChat(req.params.key)));
 app.get('/api/chat/:key/:chat', chatKey, handle((req) => chat.state(req.params.key, req.params.chat)));
 // Images pasted or dropped into the chat (server/uploads.ts): saved first, then named in the message.
@@ -233,6 +241,7 @@ app.get('/chat-images/:name', (req: Req, res: Response) => {
   res.sendFile(p);
 });
 app.post('/api/chat/:key/:chat', chatKey, handle((req) => chat.send(req.params.key, req.body ?? {}, req.params.chat === 'active' ? undefined : req.params.chat)));
+app.post('/api/chat/:key/:chat/move', chatKey, handle((req) => chat.requestMove(req.params.key, req.params.chat, req.body?.slug)));
 app.post('/api/chat/:key/:chat/stop', chatKey, handle((req) => ({stopped: chat.stop(req.params.key, req.params.chat)})));
 app.post('/api/chat/:key/:chat/seen', chatKey, handle((req) => chat.markSeen(req.params.key, req.params.chat)));
 app.post('/api/chat/:key/:chat/open', chatKey, handle((req) => chat.open(req.params.key, req.params.chat)));

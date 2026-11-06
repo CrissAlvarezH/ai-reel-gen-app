@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type {ChildProcess} from 'node:child_process';
-import {ROOT, VIDEOS, formatOf, httpError, styleOf, summary, videoFormatOf} from './reels.ts';
+import {ROOT, VIDEOS, formatOf, httpError, listSlugs, styleOf, summary, title as videoTitle, videoFormatOf} from './reels.ts';
 import {CONFIG, DATA, PROJECT, PROJECT_DIR, projectName, rel as relPath, resource} from './workspace.ts';
 import {EFFORT_LABELS, agentById, agentCli, currentAgent, type AgentCli, type AgentEvent} from './agent.ts';
 import {IS_WIN, PY, VENV_BIN, readJson, writeJson} from './platform.ts';
@@ -33,13 +33,15 @@ const projectLine = () => `Proyecto abierto: «${projectName()}» (${relPath(PRO
 // all and which one is open. Closing a tab only hides it; it stays in the history.
 // agent: the CLI whose session sessionId is (missing: Claude Code, from before there was a choice).
 // model / effort: chosen in its message box ('' = the CLI's default). context: how full it was after its last turn.
-type Chat = {id: string; sessionId: string | null; agent?: string; items: ChatItem[]; created: number; seenAt?: number; closed?: boolean; model?: string; effort?: string; mode?: string; context?: ChatContext};
+// briefing: it just moved to a video, so its next turn is told the video's instructions; moveTold: its agent knows it can move.
+type Chat = {id: string; sessionId: string | null; agent?: string; items: ChatItem[]; created: number; seenAt?: number; closed?: boolean; model?: string; effort?: string; mode?: string; context?: ChatContext; briefing?: boolean; moveTold?: boolean};
 type Store = {active: string; chats: Chat[]};
 // stopped: the studio asked it to stop (the CLI may still exit with code 0 and no signal).
 // said: it wrote some reply (a local command like /cost may only answer in the result).
 // pending: the permissions it's waiting on, by their item in the conversation.
 type PendingPermission = {answer: (allow: boolean) => void; expire: () => void; request: string};
-type Run = {dir: string; proc: ChildProcess; pending: Map<string, PendingPermission>; started: number; live: string; tool: string | null; stderr: string; result?: {ok: boolean; text?: string}; stopped?: boolean; context?: ChatContext; said?: boolean};
+// moveTo: the video its agent asked to go on in (a general conversation), once the turn ends.
+type Run = {dir: string; proc: ChildProcess; pending: Map<string, PendingPermission>; started: number; live: string; tool: string | null; stderr: string; result?: {ok: boolean; text?: string}; stopped?: boolean; context?: ChatContext; said?: boolean; moveTo?: string};
 
 let seq = 0;
 const id = () => `${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -557,16 +559,26 @@ function formatsText() {
   return `Formatos (tipos de video, formats/<id>/format.json; la página Formatos): ${all.map(one).join('; ')}. El formato dice cómo se hace el video; el estilo, cómo se ve.`;
 }
 
+// The line every turn carries: a resumed session keeps the system prompt it started with, so the current one is asked for.
+const CURRENT = '[Reel Studio: tus instrucciones vigentes salen de curl -s "$REEL_STUDIO_URL/api/chat/$REEL_STUDIO/instructions" y mandan sobre las que recibiste al empezar esta conversación. Consúltalas antes de decir que no puedes algo y cuando dudes del perfil, el estilo o la voz.]';
+export const instructions = (key: string) => SYSTEM(key);
+
+// How a general conversation moves to a video. Also told in the prompt to a conversation that started before (a resumed
+// Claude Code session keeps the system prompt it started with).
+const MOVE_LINE =
+  'Moverte a un video: sí puedes. Esta conversación no tiene video y puede pasar a ser la de uno, una sola vez, con todo lo hablado (es la misma sesión). Hazlo cuando él te pida moverte, asignarte o seguir en un video, o cuando crees uno para seguir trabajándolo tú (si creaste varios, pregúntale a cuál): curl -s -X POST "$REEL_STUDIO_URL/api/chat/_general/$REEL_STUDIO_CHAT/move" -H "Content-Type: application/json" -d \'{"slug":"<slug>"}\'. Responde {"slug","when"}: se mueve al terminar este turno y la app abre el video, así que termina el turno ahí y dile que en su próximo mensaje ya sigues en el video. Si responde {"error"}, dile la razón tal cual. Una conversación de video no se mueve a otro.';
+
 const SYSTEM = (key: string) =>
   key === GENERAL
     ? [
         `${authorName()} te escribe desde Reel Studio, la app local que trabaja sobre esta carpeta, desde la biblioteca: es la conversación general, no ligada a un video.`,
         'Sirve para todo lo que no es de un video concreto: ideas de temas y ángulos (skill content-ideas), ganchos y guiones (skill video-script, dentro del proceso de la skill reel-studio), mirar el conjunto de videos del proyecto, o crear uno nuevo.',
         projectLine(),
-        'Cada video tiene su propia conversación (puede estar trabajando ahora mismo): no edites un video que ya existe desde aquí salvo que te lo pida explícitamente.',
+        'Cada video tiene sus propias conversaciones (puede haber una trabajando ahora mismo): no edites un video que ya existe desde aquí salvo que te lo pida explícitamente; para trabajarlo tú, muévete a él (abajo).',
         inspirationNote(),
         accountNote(),
-        `Cuando apruebe una idea y te pida crearla, crea el video con scripts/new-video.sh <slug> [estilo] [formato] (lo crea en el proyecto abierto, ${V()}/<slug>/; estilo: el id de una carpeta de styles/; sin él, el predeterminado; queda en ${V()}/<slug>/style.txt; formato: igual con formats/, en format.txt; para saltarte el estilo pasa "") y escribe su guion en ${V()}/<slug>/audio/vo.txt: aparecerá solo en la biblioteca, y al abrirlo tendrá su propia conversación.`,
+        `Cuando apruebe una idea y te pida crearla, crea el video con scripts/new-video.sh <slug> [estilo] [formato] (lo crea en el proyecto abierto, ${V()}/<slug>/; estilo: el id de una carpeta de styles/; sin él, el predeterminado; queda en ${V()}/<slug>/style.txt; formato: igual con formats/, en format.txt; para saltarte el estilo pasa "") y escribe su guion en ${V()}/<slug>/audio/vo.txt: aparecerá solo en la biblioteca.`,
+        MOVE_LINE,
         formatsText(),
         profileText(),
         voiceText(key),
@@ -622,6 +634,36 @@ function handoverText(c: Chat, from: string) {
   return `Esta conversación la empezó ${from}; ahora la sigues tú en una sesión nueva. Lo hablado hasta ahora (los archivos del video tienen el resto):\n\n${text}`;
 }
 
+// A general conversation goes on in a video: the same session, now among that video's (it opens there). A video's
+// conversation never moves. Its empty tabs there make room for it.
+export function moveToVideo(chat: string, slug: string, dir: string) {
+  const from = load(GENERAL, dir);
+  const c = find(from, chat);
+  from.chats = from.chats.filter((x) => x !== c);
+  if (from.active === chat) from.active = (from.chats.findLast((x) => !x.closed) ?? (from.chats.push(blank()), from.chats.at(-1)!)).id;
+  const to = load(slug, dir);
+  to.chats = to.chats.filter((x) => x.items.length || runs.has(runKey(slug, x.id)));
+  c.closed = false;
+  c.briefing = true;
+  c.items.push({id: id(), role: 'status', text: `Esta conversación pasó al video «${videoTitle(slug) ?? slug}».`, ts: Date.now()});
+  to.chats.push(c);
+  to.active = c.id;
+  save(slug, to, dir);
+  save(GENERAL, from, dir);
+}
+
+// Its agent asks, during its turn, to go on in a video (the one it created): it moves when the turn ends.
+export function requestMove(key: string, chat: string, slug: unknown) {
+  const only = 'solo se le asigna un video a una conversación que no tiene ninguno';
+  if (key !== GENERAL) throw httpError(409, `esta conversación ya tiene video («${videoTitle(key) ?? key}») y no puede cambiarse: ${only}`);
+  const r = runs.get(runKey(key, chat));
+  if (!r) throw httpError(409, 'solo su agente la mueve, durante su turno');
+  if (r.moveTo) throw httpError(409, `esta conversación ya tiene video asignado («${videoTitle(r.moveTo) ?? r.moveTo}», pasa a él al terminar este turno) y no puede cambiarse: ${only}`);
+  if (typeof slug !== 'string' || !listSlugs().includes(slug)) throw httpError(404, 'ese video no existe en el proyecto abierto');
+  r.moveTo = slug;
+  return {slug, when: 'al terminar este turno'};
+}
+
 export type SendInput = {text?: string; comments?: Comment[]; refs?: unknown; ideas?: unknown; images?: unknown; context?: UiContext; note?: string};
 // A turn nobody is watching (server/automations.ts); separate from SendInput, which comes straight from the request.
 // system: added to its system prompt. onDone: when it ends; text is the last thing it said.
@@ -662,9 +704,12 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   const handover = prev.sessionId && !resume ? handoverText(prev, agentById(prev.agent).label) : '';
   // A slash command (/compact, /context, a skill…) goes as it is: the CLI only reads one at the start of the prompt.
   const slash = /^\/[^\s/]/.test(text?.trim() ?? '') && !comments?.length && !refs.length && !ideaRefs.length && !images.length;
+  // A resumed session keeps the system prompt it started with (Claude Code ignores a new one): what changed goes in the prompt.
+  const brief = prev.briefing && resume ? `[Reel Studio: esta conversación pasó a ser la del video ${V()}/${key}/. Desde ahora valen estas instrucciones, en lugar de las de la conversación general:]\n${SYSTEM(key)}` : '';
+  const told = key === GENERAL && resume && !prev.moveTold ? `[Reel Studio: ${MOVE_LINE}]` : '';
   const prompt = slash
     ? text!.trim()
-    : [handover, fmtCtx(context, progress, style, voice, kind), note, commentsText(key, comments), refsText(refs.filter((r) => !r.own)), ownRefsText(refs.filter((r) => r.own)), ideaRefsText(ideaRefs), uploads.agentText(images), text?.trim()].filter(Boolean).join('\n\n');
+    : [handover, brief, told, [fmtCtx(context, progress, style, voice, kind), CURRENT].filter(Boolean).join('\n'), note, commentsText(key, comments), refsText(refs.filter((r) => !r.own)), ownRefsText(refs.filter((r) => r.own)), ideaRefsText(ideaRefs), uploads.agentText(images), text?.trim()].filter(Boolean).join('\n\n');
   const {model, effort} = choiceOf(prev, cli);
 
   // The turn keeps writing to the workspace it started in, even if the studio switches to another one
@@ -696,9 +741,14 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
       tell({op: 'patch', item});
     });
 
+  if (!slash)
+    ed((c) => {
+      delete c.briefing;
+      if (key === GENERAL) c.moveTold = true;
+    });
   push({id: id(), role: 'user', text: text?.trim() ?? '', comments: comments ?? [], ...(refs.length ? {refs} : {}), ...(ideaRefs.length ? {ideas: ideaRefs} : {}), ...(images.length ? {images} : {}), ts: Date.now()});
 
-  const proc = cli.turn({prompt, systemPrompt: unattended ? `${SYSTEM(key)}\n${unattended.system}` : SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR}, model, effort, chrome: !unattended && getChromeAccess(), mode: unattended ? '' : modeOf(prev, cli)});
+  const proc = cli.turn({prompt, systemPrompt: unattended ? `${SYSTEM(key)}\n${unattended.system}` : SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_CHAT: chat, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR}, model, effort, chrome: !unattended && getChromeAccess(), mode: unattended ? '' : modeOf(prev, cli)});
   // Starts from what it was (a new session from another agent starts empty).
   const run: Run = {dir, proc, pending: new Map(), started: Date.now(), live: '', tool: null, stderr: '', context: resume ? prev.context : undefined};
   const setContext = (ctx: ChatContext) => {
@@ -835,6 +885,14 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
     tellList();
     const stopped = !!signal || !!run.stopped;
     end(!stopped && !!r?.ok, stopped);
+    const to = run.moveTo;
+    if (to && here())
+      safe(() => {
+        moveToVideo(chat, to, dir);
+        tell({op: 'moved', to});
+        tellList();
+        emitList(to);
+      });
   });
   proc.on('error', (err) => {
     runs.delete(rk);

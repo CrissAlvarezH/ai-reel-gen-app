@@ -297,6 +297,7 @@ export type ChatEvent =
   | {op: 'context'; context: ChatContext}
   | {op: 'options'; model: string; effort: string}
   | {op: 'mode'; mode: string}
+  | {op: 'moved'; to: string} // a general conversation went on in the video it created
   | {op: 'chats'};
 
 // workspace: the studio now works on another folder (every page reloads).

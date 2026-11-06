@@ -646,6 +646,10 @@ export function AgentPanel({slug}: {slug: string | null}) {
     setList((l) => l && {...l, active: id, chats: l.chats.map((c) => (c.id === id ? {...c, closed: false} : c))});
     chatApi.open(key, id).catch(() => {});
   };
+  // The open general conversation created a video and went on in it: follow it there.
+  useSocket((msg) => {
+    if (msg.type === 'chat' && msg.op === 'moved' && msg.slug === key && msg.chat === active) location.hash = `#/reel/${msg.to}`;
+  });
   const create = () => chatApi.create(key).then(({id}) => show(id), () => {});
   const close = (id: string) => chatApi.close(key, id).catch(() => {});
 

@@ -62,7 +62,11 @@ style's template (`template/`), with the look changed to its `style.json`; say s
 ## Steps
 
 1. **New video** — the studio creates it from the first message (folder, title, style, format, size). From a
-   terminal or the general conversation: `scripts/new-video.sh <slug> [style] [format]`.
+   terminal or the general conversation: `scripts/new-video.sh <slug> [style] [format]`. From the general
+   conversation, to go on working it yourself, move this conversation to the video you just created:
+   `curl -s -X POST "$REEL_STUDIO_URL/api/chat/_general/$REEL_STUDIO_CHAT/move" -H "Content-Type: application/json" -d '{"slug":"<slug>"}'`.
+   It moves when your turn ends (same session; the studio opens the video). Only once, and only to a video you
+   created in it: a video's conversation never moves.
 2. **Script** — with the `video-script` skill (hook, holding the answer, timing, checklist), starting from the idea's
    notes if it comes from the board. Platform, language, audience and length
    from the profile; words ≈ the voice's measured pace × the target seconds. Goal: reach, unless told otherwise.
