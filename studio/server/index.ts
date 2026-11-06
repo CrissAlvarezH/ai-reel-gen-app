@@ -27,6 +27,7 @@ import * as workspace from './workspace.ts';
 import * as inspiration from './inspiration.ts';
 import * as account from './account.ts';
 import * as ideas from './ideas.ts';
+import * as audience from './audience.ts';
 import * as automations from './automations.ts';
 import * as db from './db.ts';
 import * as uploads from './uploads.ts';
@@ -273,6 +274,13 @@ app.post('/api/settings/keys/:name/verify', handle((req) => settings.verify(req.
 // Profile and voice (server/config.ts → config/*.json): what the agent's prompts and tools/tts.py follow.
 app.get('/api/profile', handle(() => config.getProfile()));
 app.put('/api/profile', handle((req) => config.setProfile(req.body)));
+// Perfil de audiencia (server/audience.ts): the suggestions save nothing until he picks.
+app.get('/api/audience', handle(() => audience.get()));
+app.put('/api/audience', handle((req) => audience.save(req.body)));
+app.post('/api/audience/suggest/wants', handle((req) => audience.suggestWants(req.body)));
+app.post('/api/audience/suggest/pillars', handle(() => audience.suggestPillars()));
+app.post('/api/audience/suggest/problems', handle((req) => audience.suggestProblems(Array.isArray(req.body?.pillars) ? req.body.pillars.filter((x: unknown) => typeof x === 'string').slice(0, 30) : [])));
+app.post('/api/audience/suggest/levels', handle(() => audience.suggestLevels()));
 app.get('/api/voice', handle(() => config.getVoice()));
 app.put('/api/voice', handle((req) => {
   const v = config.setVoice(req.body);

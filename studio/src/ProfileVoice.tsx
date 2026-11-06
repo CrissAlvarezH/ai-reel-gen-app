@@ -145,7 +145,7 @@ export function ProfileCard() {
 
 // What's particular to the open channel (Ajustes → Proyecto): who it's for and the rules the agent follows there.
 export function ProjectRulesCard() {
-  const f = useDraft<Profile>(profileApi.get, ({audience, caption, notes}) => profileApi.save({audience, caption, notes}));
+  const f = useDraft<Profile>(profileApi.get, ({caption, notes}) => profileApi.save({caption, notes}));
   const p = f.draft;
   return (
     <Card>
@@ -157,8 +157,13 @@ export function ProjectRulesCard() {
         {!p && !f.err && <p className="text-sm text-muted-foreground">Cargando…</p>}
         {p && (
           <>
-            <Field label="Público" hint="Si lo dejas vacío, el agente lo completará cuando lo tenga claro y te avisará.">
-              <Input value={p.audience} onChange={(e) => f.set({audience: e.target.value})} placeholder="Para quién son los videos (p. ej. desarrolladores junior)" />
+            <Field label="Público">
+              <p className="text-sm">
+                {p.audience || <span className="text-muted-foreground">Sin definir.</span>}{' '}
+                <a href="#/audiencia" className="underline underline-offset-2">
+                  Cámbialo en Perfil de audiencia
+                </a>
+              </p>
             </Field>
             <Field label="Reglas del caption" hint="Cómo escribir la descripción de cada publicación.">
               <Textarea value={p.caption} onChange={(e) => f.set({caption: e.target.value})} rows={4} className="text-sm" />

@@ -20,7 +20,7 @@ import {projectKey, read, useStudio, write} from './studio';
 // server announces every change and the page reloads it.
 
 // Whole class names, for Tailwind to find them.
-const COLORS: Record<IdeaColor, {badge: string; dot: string; page: string}> = {
+export const COLORS: Record<IdeaColor, {badge: string; dot: string; page: string}> = {
   blue: {badge: 'border-blue-500/30 bg-blue-500/15 text-blue-300', dot: 'bg-blue-400', page: 'var(--color-blue-400)'},
   green: {badge: 'border-green-500/30 bg-green-500/15 text-green-300', dot: 'bg-green-400', page: 'var(--color-green-400)'},
   amber: {badge: 'border-amber-500/30 bg-amber-500/15 text-amber-300', dot: 'bg-amber-400', page: 'var(--color-amber-400)'},
@@ -32,7 +32,7 @@ const COLORS: Record<IdeaColor, {badge: string; dot: string; page: string}> = {
   gray: {badge: 'border-zinc-500/30 bg-zinc-500/15 text-zinc-300', dot: 'bg-zinc-400', page: 'var(--color-zinc-400)'},
 };
 
-const ICONS: Record<IdeaIcon, LucideIcon> = {
+export const ICONS: Record<IdeaIcon, LucideIcon> = {
   'lightbulb': Lightbulb,
   'wallet': Wallet,
   'piggy-bank': PiggyBank,

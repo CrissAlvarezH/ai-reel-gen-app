@@ -5,6 +5,7 @@ import {TooltipProvider} from '@/components/ui/tooltip';
 import {cn} from '@/lib/utils';
 import {Library} from './Library';
 import {Ideas} from './Ideas';
+import {AudiencePage} from './Audience';
 import {Automations} from './Automations';
 import {Inspiration} from './Inspiration';
 import {Account} from './Account';
@@ -31,14 +32,14 @@ function useHash() {
   return hash;
 }
 
-// Hash routes: #/ (library), #/ideas (Ideas de contenido), #/automatizaciones, #/cuenta (Mi cuenta), #/inspiracion, #/estilos[/<id>], #/formatos[/<id>], #/ajustes[/<section>], #/nuevo (new reel, chat first), #/reel/<slug>
+// Hash routes: #/ (library), #/ideas (Ideas de contenido), #/audiencia (Perfil de audiencia), #/automatizaciones, #/cuenta (Mi cuenta), #/inspiracion, #/estilos[/<id>], #/formatos[/<id>], #/ajustes[/<section>], #/nuevo (new reel, chat first), #/reel/<slug>
 // and #/bienvenida (welcome page, also shown whenever there's no workspace yet).
 function useRoute() {
   const hash = useHash();
   const m = hash.match(/^#\/reel\/([a-z0-9-]+)/);
   if (m) return {page: 'reel' as const, slug: m[1]};
-  const page = hash.startsWith('#/ideas') ? 'ideas' : hash.startsWith('#/automatizaciones') ? 'automations' : hash.startsWith('#/cuenta') ? 'account' : hash.startsWith('#/inspiracion') ? 'inspiration' : hash.startsWith('#/estilos') ? 'styles' : hash.startsWith('#/formatos') ? 'formats' : hash.startsWith('#/ajustes') ? 'settings' : hash.startsWith('#/nuevo') ? 'new' : 'library';
-  return {page: page as 'account' | 'library' | 'ideas' | 'automations' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new', slug: null};
+  const page = hash.startsWith('#/ideas') ? 'ideas' : hash.startsWith('#/audiencia') ? 'audience' : hash.startsWith('#/automatizaciones') ? 'automations' : hash.startsWith('#/cuenta') ? 'account' : hash.startsWith('#/inspiracion') ? 'inspiration' : hash.startsWith('#/estilos') ? 'styles' : hash.startsWith('#/formatos') ? 'formats' : hash.startsWith('#/ajustes') ? 'settings' : hash.startsWith('#/nuevo') ? 'new' : 'library';
+  return {page: page as 'account' | 'library' | 'ideas' | 'audience' | 'automations' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new', slug: null};
 }
 
 function App() {
@@ -66,7 +67,7 @@ function App() {
         {page !== 'library' && (
           <>
             <span className="text-muted-foreground">/</span>
-            <span className="text-muted-foreground">{slug ? (reelTitle ?? slug) : ({account: 'Mi cuenta', ideas: 'Ideas de contenido', automations: 'Automatizaciones', inspiration: 'Inspiración', styles: 'Estilos y formatos', formats: 'Estilos y formatos', settings: 'Ajustes', new: 'Nuevo reel'} as Record<string, string>)[page]}</span>
+            <span className="text-muted-foreground">{slug ? (reelTitle ?? slug) : ({account: 'Mi cuenta', ideas: 'Ideas de contenido', audience: 'Perfil de audiencia', automations: 'Automatizaciones', inspiration: 'Inspiración', styles: 'Estilos y formatos', formats: 'Estilos y formatos', settings: 'Ajustes', new: 'Nuevo reel'} as Record<string, string>)[page]}</span>
           </>
         )}
       </header>
@@ -92,7 +93,7 @@ function App() {
       >
         <Sidebar slug={slug} page={page} />
         {/* each column scrolls on its own (md+), so scrolling the chat never moves the page */}
-        <div className="min-w-0 md:h-[calc(100vh-3.5rem)] md:overflow-y-auto md:overscroll-contain">{slug ? <ReelView key={slug} slug={slug} /> : page === 'account' ? <Account /> : page === 'ideas' ? <Ideas /> : page === 'automations' ? <Automations /> : page === 'inspiration' ? <Inspiration /> : page === 'styles' ? <Styles /> : page === 'formats' ? <Formats /> : page === 'settings' ? <Settings section={settingsSection} /> : page === 'new' ? <NewReel /> : <Library />}</div>
+        <div className="min-w-0 md:h-[calc(100vh-3.5rem)] md:overflow-y-auto md:overscroll-contain">{slug ? <ReelView key={slug} slug={slug} /> : page === 'account' ? <Account /> : page === 'ideas' ? <Ideas /> : page === 'audience' ? <AudiencePage /> : page === 'automations' ? <Automations /> : page === 'inspiration' ? <Inspiration /> : page === 'styles' ? <Styles /> : page === 'formats' ? <Formats /> : page === 'settings' ? <Settings section={settingsSection} /> : page === 'new' ? <NewReel /> : <Library />}</div>
         {panel && <AgentPanel slug={slug} />}
       </div>
     </>

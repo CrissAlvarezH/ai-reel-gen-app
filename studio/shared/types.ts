@@ -138,10 +138,27 @@ export type Idea = {
 export type IdeaList = {id: string; name: string; cards: Idea[]}; // cards in their order
 export type IdeasBoard = {verticals: IdeaVertical[]; lists: IdeaList[]};
 
+/* ───── Perfil de audiencia (projects/<id>/config/audience.json; the "who" is the profile's audience) ───── */
+
+export type AudienceWant = {want: string; so1: string; so2: string}; // What they want → So I can… → So I can…
+export type AudienceLevels = {problem: string; unaware: string; problemAware: string; solutionAware: string; productAware: string};
+export type Audience = {
+  who: string;
+  result: string;
+  product: {what: string; price: string; problems: string}; // what empty: no product
+  wants: AudienceWant[];
+  problems: string[]; // named problems, most important first
+  levels: AudienceLevels[]; // one row per top problem
+  onboarded: boolean;
+};
+export type WantOption = {so1: string; so2: string};
+export type Pillar = {name: string; icon: IdeaIcon; wants: string[]; posts: string[]; narrow: string};
+export type PillarSet = {name: string; pillars: Pillar[]; leftovers: string[]};
+
 /* ───── Where Cristian is in the UI (sent with every message to the agent) ───── */
 
 export type UiContext = {
-  page: 'account' | 'library' | 'ideas' | 'automations' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
+  page: 'account' | 'library' | 'ideas' | 'audience' | 'automations' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
   slug?: string;
   style?: string; // style open on the Estilos page (styles/<id>)
   videoFormat?: string; // format open on the Formatos page (formats/<id>)

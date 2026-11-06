@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
+import type {Audience, AudienceLevels, AudienceWant, PillarSet, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -248,6 +248,17 @@ export const profileApi = {
   save: (p: Partial<Profile>) => put<Profile>('/api/profile', p),
 };
 
+// Perfil de audiencia: the suggestions save nothing (server/audience.ts).
+export const audienceApi = {
+  get: () => fetch('/api/audience').then((r) => json<Audience>(r)),
+  save: (a: Partial<Audience>) => put<Audience>('/api/audience', a),
+  // For the wants in `only`, given the table as it is on the page.
+  wants: (wants: AudienceWant[], only: string[]) => post('/api/audience/suggest/wants', {wants, only}) as Promise<Record<string, WantOption[]>>,
+  pillars: () => post('/api/audience/suggest/pillars') as Promise<PillarSet[]>,
+  problems: (pillars: string[]) => post('/api/audience/suggest/problems', {pillars}) as Promise<{problems: string[]; top: string[]}>,
+  levels: () => post('/api/audience/suggest/levels') as Promise<AudienceLevels[]>,
+};
+
 export const voiceApi = {
   get: () => fetch('/api/voice').then((r) => json<Voice>(r)),
   save: (v: Partial<Voice>) => put<Voice>('/api/voice', v),
@@ -370,7 +381,7 @@ export const ideasApi = {
   renameList: (id: string, name: string) => ideasCall('PUT', `/lists/${seg(id)}`, {name}),
   moveList: (id: string, before: string | null) => ideasCall('POST', `/lists/${seg(id)}/move`, {before}),
   removeList: (id: string) => ideasCall('DELETE', `/lists/${seg(id)}?withCards=1`),
-  addVertical: (input: {name: string; description: string; color: IdeaColor; icon: IdeaIcon}) => ideasCall('POST', '/verticals', input),
+  addVertical: (input: {name: string; description: string; color?: IdeaColor; icon: IdeaIcon}) => ideasCall('POST', '/verticals', input),
   editVertical: (id: string, input: {name?: string; description?: string; color?: IdeaColor; icon?: IdeaIcon}) => ideasCall('PUT', `/verticals/${seg(id)}`, input),
   removeVertical: (id: string) => ideasCall('DELETE', `/verticals/${seg(id)}`),
 };

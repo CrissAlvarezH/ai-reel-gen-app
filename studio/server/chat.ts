@@ -14,6 +14,7 @@ import {authorName, formatText, getChromeAccess, getImageSources, getProfile, ge
 import {agentNote as inspirationNote, refsText, validRefs} from './inspiration.ts';
 import {agentNote as accountNote, ownRefsText, validOwnRefs} from './account.ts';
 import {agentNote as ideasNote, ideaRefsText, validIdeaRefs} from './ideas.ts';
+import {audienceText} from './audience.ts';
 import * as uploads from './uploads.ts';
 import {newVideoStyle} from './styles.ts';
 import {listFormats} from './formats.ts';
@@ -419,7 +420,7 @@ export async function examples(): Promise<string[]> {
 function profileText() {
   const p = getProfile();
   return [
-    `Perfil del creador para este proyecto (${C()}/profile.json; público, reglas del caption e indicaciones se cambian en Ajustes → Proyecto, lo demás en Ajustes → Cuenta → Perfil). Manda sobre lo que digan las skills en idioma, plataforma, público, duración, caption y estilo de los videos nuevos:`,
+    `Perfil del creador para este proyecto (${C()}/profile.json; el público y lo que quiere se cambian en Perfil de audiencia, las reglas del caption e indicaciones en Ajustes → Proyecto, lo demás en Ajustes → Cuenta → Perfil). Manda sobre lo que digan las skills en idioma, plataforma, público, duración, caption y estilo de los videos nuevos:`,
     `- Nombre: ${p.name || '(sin nombre)'}`,
     `- Idioma de los videos y de esta conversación: ${p.language}`,
     `- Plataforma: ${p.platform}`,
@@ -427,7 +428,8 @@ function profileText() {
     styleDefaultLine(),
     p.audience
       ? `- Público: ${p.audience}`
-      : `- Público: sin definir. No lo inventes; si lo necesitas y no está claro, pregúntaselo al creador. Cuando lo tengas claro, por lo que diga o por su cuenta, escríbelo en el campo "audience" de ${C()}/profile.json (máximo 300 caracteres, sin tocar los demás campos) y dile en tu respuesta qué pusiste y que puede cambiarlo en Ajustes → Proyecto.`,
+      : `- Público: sin definir. No lo inventes; si lo necesitas y no está claro, pregúntaselo al creador. Cuando lo tengas claro, por lo que diga o por su cuenta, escríbelo en el campo "audience" de ${C()}/profile.json (máximo 300 caracteres, sin tocar los demás campos) y dile en tu respuesta qué pusiste y que puede cambiarlo en Perfil de audiencia.`,
+    audienceText(C()),
     `- Duración objetivo: unos ${p.duration} s`,
     p.caption && `- Caption de la publicación: ${p.caption}`,
     p.notes && `- Además: ${p.notes}`,
@@ -603,7 +605,7 @@ const SYSTEM = (key: string) =>
         ...COMMON(),
       ].join('\n');
 
-const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', ideas: 'Ideas de contenido', automations: 'Automatizaciones', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', reel: null};
+const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', ideas: 'Ideas de contenido', automations: 'Automatizaciones', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', audience: 'Perfil de audiencia', reel: null};
 const fmtCtx = (c: UiContext | undefined, progress?: string, style?: string, voice?: string, kind?: string) => {
   if (!c || typeof c !== 'object') return '';
   const parts: (string | null | undefined)[] = [PAGES[c.page] ?? (c.slug ? `video ${c.slug}` : null)];
