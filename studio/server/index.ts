@@ -277,6 +277,7 @@ app.put('/api/profile', handle((req) => config.setProfile(req.body)));
 // Perfil de audiencia (server/audience.ts): the suggestions save nothing until he picks.
 app.get('/api/audience', handle(() => audience.get()));
 app.put('/api/audience', handle((req) => audience.save(req.body)));
+app.delete('/api/audience', handle(() => audience.reset()));
 app.post('/api/audience/suggest/wants', handle((req) => audience.suggestWants(req.body)));
 app.post('/api/audience/suggest/pillars', handle(() => audience.suggestPillars()));
 app.post('/api/audience/suggest/problems', handle((req) => audience.suggestProblems(Array.isArray(req.body?.pillars) ? req.body.pillars.filter((x: unknown) => typeof x === 'string').slice(0, 30) : [])));

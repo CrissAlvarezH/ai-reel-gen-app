@@ -30,6 +30,10 @@ test('the "who" is the profile\'s audience; the rest is in audience.json, cleane
   // A partial save keeps the rest.
   assert.deepEqual(aud.save({product: {what: 'un curso', price: '$50', problems: ''}}).wants, a.wants);
   assert.match(aud.audienceText('cfg'), /ayuda a papás ocupados a conseguir bajar de peso[\s\S]*un curso \(\$50\)[\s\S]*dolor de espalda[\s\S]*cfg\/audience\.json/);
+
+  // Reset: back to the onboarding, the "who" stays.
+  const r = aud.reset();
+  assert.deepEqual([r.who, r.result, r.wants, r.onboarded], ['papás ocupados', '', [], false]);
 });
 
 test('the AI\'s answer is read even wrapped in prose or a fence', async () => {

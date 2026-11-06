@@ -1,7 +1,9 @@
 import {useEffect, useRef, useState} from 'react';
-import {ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brain, Check, Clock, Flame, Heart, Layers, Loader2, Package, Pencil, Plus, Sparkles, Target, X, type LucideIcon} from 'lucide-react';
+import {ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brain, Check, Clock, Flame, Heart, Layers, Loader2, MoreHorizontal, Package, Pencil, Plus, RotateCcw, Sparkles, Target, X, type LucideIcon} from 'lucide-react';
+import {AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
+import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {Progress} from '@/components/ui/progress';
@@ -1017,6 +1019,73 @@ const TABS: {id: Step; title: string; icon: LucideIcon; count?: (a: Audience, v:
   {id: 'levels', title: 'Lo que piensa', icon: Brain, count: (a) => a.levels.length},
 ];
 
+// ⋯ → Reiniciar: deletes the whole profile once he types the phrase, and the onboarding opens again.
+const PHRASE = 'borrar datos de audiencia';
+function ResetMenu({onReset}: {onReset: (a: Audience) => void}) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const ok = typed.trim().toLowerCase() === PHRASE;
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ok || busy) return;
+    setBusy(true);
+    setErr('');
+    try {
+      onReset(await audienceApi.reset());
+      setOpen(false);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="Más opciones">
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-auto">
+          <DropdownMenuItem variant="destructive" className="whitespace-nowrap" onSelect={() => (setTyped(''), setErr(''), setOpen(true))}>
+            <RotateCcw /> Empezar de cero
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
+        <AlertDialogContent>
+          <form onSubmit={submit} className="flex flex-col gap-4">
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Borrar el perfil de audiencia?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Se borra la promesa, el producto, lo que quiere, los problemas y lo que piensa, y vuelves al paso 1. Tu público y las verticales de Ideas de contenido se quedan.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span>
+                Escribe <strong className="font-semibold">{PHRASE}</strong> para confirmar
+              </span>
+              <Input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} disabled={busy} autoComplete="off" spellCheck={false} placeholder={PHRASE} />
+            </label>
+            {err && <p className="text-sm text-destructive">{err}</p>}
+            <AlertDialogFooter>
+              <AlertDialogCancel type="button" disabled={busy}>
+                Cancelar
+              </AlertDialogCancel>
+              <Button type="submit" variant="destructive" disabled={!ok || busy}>
+                {busy && <Loader2 className="animate-spin" />} Borrar y empezar de cero
+              </Button>
+            </AlertDialogFooter>
+          </form>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 export function AudiencePage() {
   const {uiRef} = useStudio();
   uiRef.current = {page: 'audience'};
@@ -1067,6 +1136,15 @@ export function AudiencePage() {
     return <main className="mx-auto flex max-w-6xl flex-col gap-6 p-6">{err ? <p className="text-sm text-destructive">{err}</p> : <Loader2 className="size-5 animate-spin text-muted-foreground" />}</main>;
 
   const props = {a: draft, set, persist: () => persist(), verticals};
+  const reset = (a: Audience) => {
+    wantOptions.clear();
+    setSaved(a);
+    setDraft(a);
+    setStep(0);
+    setTab('offer');
+    setEditing(false);
+    setErr('');
+  };
 
   if (!saved.onboarded) {
     const s = STEPS[step];
@@ -1075,9 +1153,12 @@ export function AudiencePage() {
     const go = (i: number) => void commit({}, () => setStep(i));
     return (
       <main className="@container mx-auto flex max-w-6xl flex-col gap-8 p-6">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Conoce a tu audiencia</h1>
-          <p className="text-sm text-muted-foreground">Seis pasos. La IA te ayuda en los que más cuestan, y todo se puede cambiar después.</p>
+        <div className="flex items-start gap-4">
+          <div className="flex flex-1 flex-col gap-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Conoce a tu audiencia</h1>
+            <p className="text-sm text-muted-foreground">Seis pasos. La IA te ayuda en los que más cuestan, y todo se puede cambiar después.</p>
+          </div>
+          <ResetMenu onReset={reset} />
         </div>
         <div className="grid gap-8 @3xl:grid-cols-[12rem_minmax(0,1fr)]">
           <Stepper step={step} a={draft} verticals={verticals} go={go} />
@@ -1125,15 +1206,18 @@ export function AudiencePage() {
   const Editor = EDITORS[tab];
   return (
     <main className="@container mx-auto flex max-w-6xl flex-col gap-6 p-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Perfil de audiencia</h1>
-        <p className="text-sm text-muted-foreground">Lo que el agente sabe de tu público. Lo tiene en cuenta en cada mensaje.</p>
+      <div className="flex items-start gap-4">
+        <div className="flex flex-1 flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Perfil de audiencia</h1>
+          <p className="text-sm text-muted-foreground">Lo que el agente sabe de tu público. Lo tiene en cuenta en cada mensaje.</p>
+        </div>
+        <ResetMenu onReset={reset} />
       </div>
       <Tabs value={tab} onValueChange={(v) => (cancel(), setTab(v as Step))} className="gap-6">
         <div className="overflow-x-auto border-b">
-          <TabsList variant="line" className="h-11 gap-4">
+          <TabsList variant="line" className="h-11! gap-4 py-0">
             {TABS.map((t) => (
-              <TabsTrigger key={t.id} value={t.id} className="h-10 flex-none px-1">
+              <TabsTrigger key={t.id} value={t.id} className="h-full flex-none rounded-none px-1 group-data-horizontal/tabs:after:bottom-0! focus-visible:border-transparent focus-visible:text-foreground focus-visible:ring-0 focus-visible:outline-none">
                 <t.icon /> {t.title}
                 {t.count && <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground tabular-nums">{t.count(saved, verticals)}</span>}
               </TabsTrigger>

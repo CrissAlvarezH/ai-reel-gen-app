@@ -252,6 +252,7 @@ export const profileApi = {
 export const audienceApi = {
   get: () => fetch('/api/audience').then((r) => json<Audience>(r)),
   save: (a: Partial<Audience>) => put<Audience>('/api/audience', a),
+  reset: () => del('/api/audience') as Promise<Audience>,
   // For the wants in `only`, given the table as it is on the page.
   wants: (wants: AudienceWant[], only: string[]) => post('/api/audience/suggest/wants', {wants, only}) as Promise<Record<string, WantOption[]>>,
   pillars: () => post('/api/audience/suggest/pillars') as Promise<PillarSet[]>,

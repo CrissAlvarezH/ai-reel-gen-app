@@ -2,6 +2,7 @@
 // thinks, in projects/<id>/config/audience.json. The "who" is the profile's audience (config/profile.json), so everything
 // that already reads it follows. The agent gets the rest with every message (chat.ts). The suggestions follow the
 // creator's guides, through the agent CLI's ask; nothing is saved until he picks.
+import fs from 'node:fs';
 import path from 'node:path';
 import {IDEA_ICONS, type Audience, type AudienceLevels, type AudienceWant, type IdeaIcon, type PillarSet, type WantOption} from '../shared/types.ts';
 import {agentCli} from './agent.ts';
@@ -48,6 +49,12 @@ export function save(input: unknown): Audience {
   const {who: _, ...own} = next;
   writeJson(FILE(), own);
   if (typeof i.who === 'string' && i.who.trim() !== getProfile().audience) setProfile({audience: i.who});
+  return get();
+}
+
+// Starts over: the onboarding opens again. The "who" stays in the profile and the verticals in Ideas de contenido.
+export function reset(): Audience {
+  fs.rmSync(FILE(), {force: true});
   return get();
 }
 
