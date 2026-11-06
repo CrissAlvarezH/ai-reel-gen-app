@@ -35,7 +35,7 @@ function findComposition(node: unknown): CompProps | null {
   return findComposition(props.children);
 }
 
-export type PreviewControls = {seek: (t: number) => void; pause: () => void};
+export type PreviewControls = {seek: (t: number) => void; pause: () => void; toggle: () => void};
 
 // The reel's code failing, said in plain words, with what to ask Claude. The raw message stays below.
 function explain(msg: string): {title: string; detail: string; ask: string} {
@@ -109,12 +109,18 @@ export function LivePreview({
   onTime,
   onDuration,
   controls,
+  initialTime = 0,
+  showControls = true,
+  onPlayingChange,
 }: {
   slug: string;
   entry: string;
   onTime: (t: number) => void;
   onDuration: (d: number) => void;
   controls: React.MutableRefObject<PreviewControls | null>;
+  initialTime?: number;
+  showControls?: boolean;
+  onPlayingChange?: (playing: boolean) => void;
 }) {
   const [comp, setComp] = useState<CompProps | null>(null);
   const [err, setErr] = useState('');
@@ -157,10 +163,18 @@ export function LivePreview({
     const on = (e: {detail: {frame: number}}) => onTime(e.detail.frame / comp.fps);
     p.addEventListener('frameupdate', on);
     p.addEventListener('seeked', on);
-    controls.current = {seek: (t) => p.seekTo(Math.round(t * comp.fps)), pause: () => p.pause()};
+    const playing = () => onPlayingChange?.(true);
+    const paused = () => onPlayingChange?.(false);
+    p.addEventListener('play', playing);
+    p.addEventListener('pause', paused);
+    p.addEventListener('ended', paused);
+    controls.current = {seek: (t) => p.seekTo(Math.round(t * comp.fps)), pause: () => p.pause(), toggle: () => p.toggle()};
     return () => {
       p.removeEventListener('frameupdate', on);
       p.removeEventListener('seeked', on);
+      p.removeEventListener('play', playing);
+      p.removeEventListener('pause', paused);
+      p.removeEventListener('ended', paused);
       controls.current = null;
     };
   }, [comp]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -176,7 +190,8 @@ export function LivePreview({
       compositionWidth={comp.width}
       compositionHeight={comp.height}
       fps={comp.fps}
-      controls
+      controls={showControls}
+      initialFrame={Math.max(0, Math.min(comp.durationInFrames - 1, Math.round(initialTime * comp.fps)))}
       clickToPlay
       style={{width: '100%', height: '100%'}}
       errorFallback={({error}: {error: Error}) => <PreviewError slug={slug} message={error.message} />}

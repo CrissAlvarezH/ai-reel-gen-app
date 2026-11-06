@@ -18,6 +18,7 @@ import {VoiceDialog} from './ProfileVoice';
 import {ConflictNote, SaveBar, saveOnCmdS, useEditable} from './Editable';
 import {ScriptEditor, StructureBar, parts, taggedScript, type ScriptValue} from './ScriptEditor';
 import {LivePreview, type PreviewControls} from './Preview';
+import {SocialPreview} from './SocialPreview';
 import {ReelProgress} from './ReelProgress';
 import {StyleDialog, useStyles} from './StylePicker';
 import {Poster} from './Styles';
@@ -443,6 +444,7 @@ function Player({reel, comments, onComment, seekRef}: PlayerProps) {
           <Button variant="outline" size="icon" className="shrink-0" disabled={!current || revealBusy} onClick={revealSelected} aria-label="Descargar video: mostrar versión seleccionada en su carpeta" title={current ? 'Mostrar esta versión en su carpeta' : 'Renderiza el video para abrir su archivo'}>
             {revealBusy ? <Loader2 className="animate-spin" /> : <Download />}
           </Button>
+          <SocialPreview reel={reel} src={videoSrc} live={live} version={live ? 'En vivo · código actual' : current?.name ?? 'Video'} initialTime={t} onOpen={() => { video.current?.pause(); preview.current?.pause(); }} />
           </div>
         )}
         {revealError && <p role="alert" className="text-sm text-destructive">{revealError}</p>}
