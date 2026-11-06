@@ -1,8 +1,8 @@
 import {useEffect, useRef, useState} from 'react';
-import {ArrowUp, Check, ChevronRight, Loader2, Mic, Plus, Video, X} from 'lucide-react';
+import {ArrowRight, ArrowUp, Check, ChevronRight, Lightbulb, Loader2, Mic, PenLine, Plus, Target, Video, X, type LucideIcon} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
-import {api, useAgentName} from './api';
+import {api, audienceApi, ideasApi, useAgentName} from './api';
 import {AgentPicker, ModelPicker, useChatOptions} from './ChatControls';
 import {useStudio} from './studio';
 import {useStyles} from './StylePicker';
@@ -22,11 +22,56 @@ const mb = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.max
 const VIDEO_EXT = /\.(mp4|mov|m4v|webm|mkv)$/i;
 const AUDIO_OR_VIDEO = /\.(mp4|mov|m4v|webm|mkv|m4a|mp3|wav|aac|ogg|opus|flac)$/i;
 
+// How it starts: he writes the idea (the default), or the agent gets one of these as the first message.
+type Start = 'write' | 'ideas' | 'audience';
+// message: what he sees as his first message (and names the video); prompt: what the agent gets too, unseen.
+const STARTS: {id: Start; icon: LucideIcon; title: string; summary: string; empty?: string; href?: string; link?: string; message?: string; prompt?: string}[] = [
+  {id: 'write', icon: PenLine, title: 'Describir la idea', summary: 'Tú cuentas el tema y el mensaje.'},
+  {
+    id: 'ideas',
+    icon: Lightbulb,
+    title: 'Usar una idea guardada',
+    summary: 'Te recomienda la mejor de tu tablero.',
+    empty: 'Aún no tienes ideas guardadas.',
+    href: '#/ideas',
+    link: 'Crear ideas',
+    message: 'Quiero hacer este reel con una de mis ideas guardadas.',
+    prompt:
+      'Quiero hacer este reel con una de mis ideas de contenido guardadas. Evalúa las del tablero con el criterio del skill content-ideas y mi perfil de audiencia, si lo tengo: cuál le interesaría más a mi público, cuál tiene el gancho más fuerte y cuál se puede hacer bien en un reel, sin repetir un video que ya hice. Tus 3 propuestas son 3 ideas de mi tablero (di de qué lista y vertical sale cada una), la mejor primero con el porqué.',
+  },
+  {
+    id: 'audience',
+    icon: Target,
+    title: 'Idear para tu audiencia',
+    summary: 'Parte de lo que quiere y vive tu público.',
+    empty: 'Aún no has llenado tu perfil de audiencia.',
+    href: '#/audiencia',
+    link: 'Ir al perfil',
+    message: 'Quiero un reel que le interese a mi audiencia.',
+    prompt:
+      'Quiero un reel que de verdad le interese a mi público. Parte de mi perfil de audiencia (lo que quieren y sus «para poder…», los problemas con los que lidian, sobre todo los primeros, y lo que piensan en cada nivel de conciencia) y del criterio del skill content-ideas. Tus 3 propuestas son 3 videos distintos entre sí (otro problema u otro nivel de conciencia), sin repetir lo que ya está en mis ideas guardadas o en mis videos.',
+  },
+];
+
+// Which starts can be used: ideas needs a saved card; the audience needs its onboarding done with something in it.
+function useStarts() {
+  const [can, setCan] = useState<Record<Start, boolean> | null>(null);
+  useEffect(() => {
+    Promise.all([
+      ideasApi.board().then((b) => b.lists.some((l) => l.cards.length > 0), () => false),
+      audienceApi.get().then((a) => a.onboarded && !!(a.result || a.wants.length || a.problems.length || a.levels.length), () => false),
+    ]).then(([ideas, audience]) => setCan({write: true, ideas, audience}));
+  }, []);
+  return can;
+}
+
 export function NewReel() {
   const agent = useAgentName();
   const {uiRef, setOpen} = useStudio();
   uiRef.current = {page: 'new'};
   const [text, setText] = useState('');
+  const [start, setStart] = useState<Start>('write');
+  const can = useStarts();
   const [sent, setSent] = useState('');
   const [err, setErr] = useState('');
   const input = useRef<HTMLTextAreaElement>(null);
@@ -68,16 +113,17 @@ export function NewReel() {
   const needsClips = !!kind?.footage;
   const voice = !!kind?.voiceOnly;
   const uploading = needsClips && clips.some((c) => !c.id && !c.error);
-  const ready = !!text.trim() && (!needsClips || (clips.some((c) => c.id) && !uploading));
+  const ready = !!(start !== 'write' || text.trim()) && (!needsClips || (clips.some((c) => c.id) && !uploading));
 
   const submit = async () => {
-    const msg = text.trim();
+    const how = STARTS.find((x) => x.id === start);
+    const msg = how?.message ?? text.trim();
     if (!msg || sent || !ready) return;
     setSent(msg);
     setErr('');
     try {
       const ids = needsClips ? clips.flatMap((c) => (c.id ? [c.id] : [])) : undefined;
-      const {slug} = await api.create(msg, {...uiRef.current}, style ?? undefined, kind?.id, ids, chosen ? {model: chosen.model, effort: chosen.effort} : undefined);
+      const {slug} = await api.create(msg, {...uiRef.current}, style ?? undefined, kind?.id, ids, chosen ? {model: chosen.model, effort: chosen.effort} : undefined, how?.prompt);
       setOpen(true);
       location.hash = `#/reel/${slug}`;
     } catch (e) {
@@ -101,10 +147,21 @@ export function NewReel() {
             <h1 className="text-2xl font-semibold tracking-tight">¿De qué va el próximo reel?</h1>
             <p className="mt-1 text-sm text-muted-foreground">Cuéntale a {agent} la idea. El nombre del video sale de tu primer mensaje.</p>
           </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {STARTS.map((x) => (
+              <StartCard key={x.id} start={x} active={start === x.id} usable={x.id === 'write' || can?.[x.id]} onPick={() => setStart(x.id)} />
+            ))}
+          </div>
           <div className="flex flex-col gap-1.5">
+            {start !== 'write' ? (
+              <Button size="lg" className="self-end" onClick={submit} disabled={!ready} title={needsClips && !clips.some((c) => c.id) ? (voice ? 'Sube tu audio primero' : 'Sube tu grabación primero') : uploading ? 'Esperando a que termine de subir' : undefined}>
+                Continuar <ArrowRight />
+              </Button>
+            ) : (
             <div className="relative">
               <Textarea
                 ref={input}
+                autoFocus
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
@@ -121,6 +178,7 @@ export function NewReel() {
                 <ArrowUp />
               </Button>
             </div>
+            )}
             <div className="flex flex-wrap items-center gap-0.5">
               <AgentPicker />
               <ModelPicker options={options} model={shown?.model ?? ''} effort={shown?.effort ?? ''} onChange={(o) => options && setPickedModel({agent: options.agent, ...o})} open={modelMenu} onOpenChange={setModelMenu} side="bottom" />
@@ -193,6 +251,44 @@ export function NewReel() {
         </>
       )}
     </main>
+  );
+}
+
+// A way to start. Can't be picked while what it needs is missing: says so, with a link to go do it.
+function StartCard({start: x, active, usable, onPick}: {start: (typeof STARTS)[number]; active: boolean; usable: boolean | undefined; onPick: () => void}) {
+  const body = (
+    <>
+      <span className={cn('grid size-8 flex-none place-items-center rounded-md', active ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground')}>
+        <x.icon className="size-4" />
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5 pr-5">
+        <span className="text-sm font-medium">{x.title}</span>
+        <span className="text-xs text-muted-foreground">{x.summary}</span>
+      </span>
+    </>
+  );
+  if (usable === false)
+    return (
+      <div className="flex flex-col gap-2 rounded-lg border border-dashed p-2.5">
+        <div className="flex gap-3 opacity-50">{body}</div>
+        <p className="text-xs text-muted-foreground">
+          {x.empty}{' '}
+          <a href={x.href} className="inline-flex items-center font-medium text-foreground underline-offset-4 hover:underline">
+            {x.link} <ChevronRight className="size-3.5" />
+          </a>
+        </p>
+      </div>
+    );
+  return (
+    <button
+      onClick={onPick}
+      disabled={usable === undefined}
+      aria-pressed={active}
+      className={cn('relative flex gap-3 rounded-lg border p-2.5 text-left transition-colors hover:border-foreground/40 disabled:opacity-50', active ? 'border-foreground/70 bg-muted/50' : 'bg-card/40')}
+    >
+      {body}
+      {active && <Check className="absolute top-2.5 right-2.5 size-4" />}
+    </button>
   );
 }
 

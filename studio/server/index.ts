@@ -186,8 +186,14 @@ const FIRST_TURN =
   'Antes de nada: en este primer turno NO investigues, no busques en internet, no leas skills ni archivos, no transcribas nada, no escribas ni cambies archivos y no uses ninguna herramienta. ' +
   'Responde solo con un párrafo breve, de tres o cuatro frases, con tu análisis de la idea (qué promete, a quién le sirve, qué ángulo ves y qué le falta) y termina con esta pregunta, tal cual y en su propia línea: ¿Empiezo la investigación para la creación? ' +
   'Cuando responda que sí, arranca el proceso completo (skill reel-studio). Si te corrige o añade algo, ajusta el párrafo y vuelve a preguntar: no empieces hasta su sí.';
+// Started from a card (Usar una idea guardada, Idear para tu audiencia): no idea yet, so the first turn proposes three.
+const FIRST_PICK =
+  'Antes de nada: en este primer turno solo puedes leer, sin cambiar nada: el tablero de ideas (tools/ideas.py show), el perfil de audiencia (config/audience.json) y los títulos de los videos que ya hizo (videos/*/title.txt). No busques en internet, no escribas ni cambies archivos. ' +
+  'Responde con una o dos frases de análisis y luego 3 propuestas numeradas, la que recomiendas primero. Cada una: un título corto en negrita, de qué va el video en una frase, a quién le pega (el problema o deseo de su perfil y el nivel de conciencia al que le habla) y el gancho de apertura entre comillas. ' +
+  'Termina con esta pregunta, tal cual y en su propia línea: ¿Con cuál empezamos? ' +
+  'Cuando elija una (o la corrija o combine), actualiza title.txt con ese tema y arranca el proceso completo (skill reel-studio): investigación, guion y video. Si ninguna le convence, propone otras 3 distintas y vuelve a preguntar.';
 app.post('/api/reels', handle(async (req) => {
-  const {text, context, style: styleId, videoFormat, clips, model, effort} = req.body ?? {};
+  const {text, brief, context, style: styleId, videoFormat, clips, model, effort} = req.body ?? {};
   const {slug, title, style, kind, uploaded} = await create(text, styleId, videoFormat, clips, (s, ok, log) => {
     send({type: 'changed', slug: s});
     if (!ok) chat.note(s, `npm install falló en videos/${s}${log ? `\n${log.trim().split('\n').slice(-5).join('\n')}` : ''}`, true);
@@ -196,7 +202,7 @@ app.post('/api/reels', handle(async (req) => {
   chat.send(slug, {
     text,
     context: {...(context ?? {}), page: 'reel', slug},
-    note: `[Video nuevo: acabo de crear videos/${slug}/ desde ${style.template}/ a partir de este mensaje, con el título «${title}» (en title.txt), el estilo «${style.name}» (styles/${style.id}/style.json, en style.txt)${style.ready ? '' : `, que aún no tiene skill ni plantilla propias: su aspecto sale de su style.json, sobre la plantilla ${style.template}/`}${kind ? ` y el formato «${kind.name}» (formats/${kind.id}/format.json, en format.txt${kind.skill ? `; su skill: ${kind.skill}` : ''})` : ''}.${uploaded.length ? ` Subió su grabación: ${uploaded.map((n) => `footage/${n}`).join(', ')}.` : ''} npm install corre en segundo plano: no renderices ni hagas stills hasta que exista node_modules/.bin/remotion.]\n\n[${FIRST_TURN}]`,
+    note: `[Video nuevo: acabo de crear videos/${slug}/ desde ${style.template}/ a partir de este mensaje, con el título «${title}» (en title.txt), el estilo «${style.name}» (styles/${style.id}/style.json, en style.txt)${style.ready ? '' : `, que aún no tiene skill ni plantilla propias: su aspecto sale de su style.json, sobre la plantilla ${style.template}/`}${kind ? ` y el formato «${kind.name}» (formats/${kind.id}/format.json, en format.txt${kind.skill ? `; su skill: ${kind.skill}` : ''})` : ''}.${uploaded.length ? ` Subió su grabación: ${uploaded.map((n) => `footage/${n}`).join(', ')}.` : ''} npm install corre en segundo plano: no renderices ni hagas stills hasta que exista node_modules/.bin/remotion.]\n\n${typeof brief === 'string' && brief.trim() ? `[${FIRST_PICK}]\n\n[Lo que pidió al empezar (él solo ve su mensaje): ${brief.trim().slice(0, 4000)}]` : `[${FIRST_TURN}]`}`,
   });
   return {slug, title};
 }));

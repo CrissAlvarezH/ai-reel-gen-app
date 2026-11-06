@@ -22,6 +22,7 @@ import {useStudio} from './studio';
 
 const PRESETS = [
   {label: 'Cada hora', cron: '0 * * * *'},
+  {label: 'Cada 4 horas', cron: '0 */4 * * *'},
   {label: 'Cada día a las 9', cron: '0 9 * * *'},
   {label: 'Lunes a viernes a las 9', cron: '0 9 * * 1-5'},
   {label: 'Los lunes a las 9', cron: '0 9 * * 1'},
@@ -477,7 +478,9 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
   const [err, setErr] = useState('');
   const next = nextRun(cron);
   const stepReady = (s: AutomationStep) => (s.type === 'agent' ? !!s.prompt.trim() : s.type === 'post' ? !!s.code : (s.type === 'account' || !!s.username) && Number.isInteger(s.limit) && s.limit >= 1 && s.limit <= MAX_ACCOUNT_REELS);
-  const ready = !!name.trim() && !!next && steps.length > 0 && steps.every(stepReady);
+  // What's missing, said next to Guardar so a greyed-out button isn't a riddle.
+  const missing = !name.trim() ? 'Ponle un nombre' : !next ? 'Revisa el horario' : !steps.length ? 'Añade un paso' : !steps.every(stepReady) ? `Completa el paso ${steps.findIndex((s) => !stepReady(s)) + 1}` : '';
+  const ready = !missing;
   const setStep = (i: number, step: AutomationStep) => setSteps((all) => all.map((s, j) => (j === i ? step : s)));
 
   const submit = async (e: React.FormEvent) => {
@@ -526,7 +529,7 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
               <Point key={i} icon={STEP_KINDS[s.type].icon}>
                 <div className="flex items-center justify-between gap-2">
                   <StepHead n={i + 1} type={s.type} />
-                  <Button type="button" variant="ghost" size="icon-sm" title="Quitar paso" aria-label={`Quitar el paso ${i + 1}`} disabled={steps.length === 1} onClick={() => setSteps((all) => all.filter((_, j) => j !== i))}>
+                  <Button type="button" variant="ghost" size="icon-sm" title="Quitar paso" aria-label={`Quitar el paso ${i + 1}`} onClick={() => setSteps((all) => all.filter((_, j) => j !== i))}>
                     <X />
                   </Button>
                 </div>
@@ -563,7 +566,8 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
             </Point>
           </ol>
           {err && <p className="text-sm text-destructive">{err}</p>}
-          <div className="flex justify-end gap-2">
+          <div className="flex items-center justify-end gap-2">
+            {missing && <span className="mr-auto text-xs text-muted-foreground">{missing} para guardar.</span>}
             <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
               Cancelar
             </Button>

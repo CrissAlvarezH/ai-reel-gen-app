@@ -15,9 +15,9 @@ export const api = {
   reel: (slug: string) => fetch(`/api/reels/${slug}`).then((r) => json<ReelDetail>(r)),
   // A new reel from its first message: the server names it and hands the message to its agent.
   // videoFormat: the kind of video (formats/<id>); clips: his recording, staged with uploadClip(), in order;
-  // choice: the model and effort picked for it, if he changed them.
-  create: (text: string, context?: unknown, style?: string, videoFormat?: string, clips?: string[], choice?: {model: string; effort: string}) =>
-    fetch('/api/reels', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text, context, style, videoFormat, clips, ...choice})}).then((r) => json<{slug: string; title: string}>(r)),
+  // choice: the model and effort picked for it, if he changed them; brief: instructions for the agent only, not shown.
+  create: (text: string, context?: unknown, style?: string, videoFormat?: string, clips?: string[], choice?: {model: string; effort: string}, brief?: string) =>
+    fetch('/api/reels', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text, brief, context, style, videoFormat, clips, ...choice})}).then((r) => json<{slug: string; title: string}>(r)),
   // Deletes the video and everything of it, for good.
   remove: (slug: string) => fetch(`/api/reels/${slug}`, {method: 'DELETE'}).then((r) => json(r)),
   // The video's visual style (style.txt).
