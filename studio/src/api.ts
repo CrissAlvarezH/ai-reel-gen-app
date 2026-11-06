@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
+import type {AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -361,6 +361,7 @@ const automationsCall = (method: string, path: string, body?: unknown) =>
   fetch(path, {method, headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)}).then((r) => json<AutomationsView>(r));
 export const automationsApi = {
   view: () => automationsCall('GET', '/api/automations'),
+  agents: () => fetch('/api/automations/agents').then((r) => json<AutomationAgent[]>(r)),
   add: (input: AutomationInput) => automationsCall('POST', '/api/automations', input),
   edit: (id: string, input: AutomationInput) => automationsCall('PUT', `/api/automations/${id}`, input),
   remove: (id: string) => automationsCall('DELETE', `/api/automations/${id}`),

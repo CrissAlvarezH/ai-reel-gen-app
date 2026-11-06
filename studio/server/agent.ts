@@ -25,7 +25,8 @@ export type AgentEvent =
   | {kind: 'permission_cancel'; id: string}
   | {kind: 'result'; ok: boolean; text?: string};
 
-export type AskOptions = {model?: 'fast' | 'smart'; images?: string[]; timeout?: number; signal?: AbortSignal};
+// onModel: told the model that answered (as its CLI names it), when it says.
+export type AskOptions = {model?: 'fast' | 'smart'; images?: string[]; timeout?: number; signal?: AbortSignal; onModel?: (model: string) => void};
 
 // model / effort: '' or missing = the CLI's own default.
 // chrome: Ajustes → Agente's switch; only Claude Code has this.
@@ -334,7 +335,7 @@ export const claude: AgentCli = {
     return out;
   },
 
-  ask(prompt, system, {model = 'fast', images = [], timeout = 30000, signal} = {}) {
+  ask(prompt, system, {model = 'fast', images = [], timeout = 30000, signal, onModel} = {}) {
     // No tools, no session saved, run outside the workspace so it doesn't load its CLAUDE.md. The message
     // goes in as stream-json so it can carry images. Haiku ~3 s; Sonnet for analysis.
     const content = [
@@ -358,6 +359,8 @@ export const claude: AgentCli = {
         const r = jsonLines(out).find((e) => e.type === 'result') as {is_error?: boolean; result?: string} | undefined;
         if (!r) return reject(new Error(err.trim().split('\n').pop() || 'respuesta ilegible de claude'));
         if (r.is_error) return reject(new Error(r.result || 'claude devolvió un error'));
+        const init = jsonLines(out).find((e) => e.type === 'system' && typeof (e as {model?: unknown}).model === 'string') as {model: string} | undefined;
+        onModel?.(init?.model ?? (model === 'fast' ? 'haiku' : 'sonnet'));
         resolve(String(r.result ?? ''));
       });
       p.stdin.end(JSON.stringify({type: 'user', message: {role: 'user', content}}) + '\n');
@@ -640,7 +643,7 @@ export const codex: AgentCli = {
     return []; // reasoning, todo_list, warnings
   },
 
-  ask(prompt, system, {model = 'fast', images = [], timeout = 30000, signal} = {}) {
+  ask(prompt, system, {model = 'fast', images = [], timeout = 30000, signal, onModel} = {}) {
     // Read-only, no session saved, without the user's config (plugins, hooks), outside the workspace so it
     // doesn't read its instructions. Its default model; less reasoning for the fast answers.
     const args = [
@@ -676,6 +679,8 @@ export const codex: AgentCli = {
         if (failed) return reject(new Error(failed.error?.message || 'codex devolvió un error'));
         const msgs = evs.filter((e) => e.type === 'item.completed' && e.item?.type === 'agent_message').map((e) => e.item!.text ?? '');
         if (!evs.some((e) => e.type === 'turn.completed') || !msgs.length) return reject(new Error(err.trim().split('\n').pop() || 'respuesta ilegible de codex'));
+        const m = codexDefaultModel();
+        if (m) onModel?.(m);
         resolve(msgs[msgs.length - 1]);
       });
       p.stdin.end(prompt);

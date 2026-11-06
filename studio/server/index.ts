@@ -384,6 +384,7 @@ app.get('/account-files/:code/:file', (req: Req, res: Response) => {
 });
 // Automatizaciones (server/automations.ts), of the open project. Every change answers with the whole view.
 app.get('/api/automations', handle(() => automations.view()));
+app.get('/api/automations/agents', handle(() => chat.automationAgents()));
 app.post('/api/automations', handle((req) => automations.add(req.body)));
 app.put('/api/automations/:id', handle((req) => automations.edit(req.params.id, req.body)));
 app.delete('/api/automations/:id', handle((req) => automations.remove(req.params.id)));

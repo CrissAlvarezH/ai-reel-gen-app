@@ -2,7 +2,7 @@
 // It judges itself when the saved script changes (by him or the agent), a few seconds after the last change, and on
 // Revisar. Opening a video never spends a check: it shows the last one, marked when the script changed since.
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {Check, ChevronDown, ChevronRight, Lightbulb, MessageSquarePlus, RefreshCw, Target} from 'lucide-react';
+import {Check, ChevronDown, ChevronRight, Lightbulb, MessageSquarePlus, RefreshCw, Sparkles, Target} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@/components/ui/collapsible';
 import {cn} from '@/lib/utils';
@@ -14,6 +14,13 @@ const SETTLE = 10_000; // the agent writes vo.txt and then beats.json, sometimes
 
 const tone = (score: number) => (score >= 75 ? 'text-emerald-500' : score >= 50 ? 'text-amber-400' : 'text-red-500');
 const bar = (pct: number) => (pct >= 0.75 ? 'bg-emerald-500' : pct >= 0.5 ? 'bg-amber-400' : 'bg-red-500');
+// "Claude Code · claude-sonnet-5-5-2026…" → "Sonnet 5.5"; another CLI's model as it names it.
+export function modelName(full: string) {
+  const id = full.split(' · ').pop() ?? full;
+  const m = /(opus|sonnet|haiku|fable)(?:-(\d{1,2})(?:-(\d{1,2}))?)?(?!\d)/i.exec(id);
+  if (!m) return id;
+  return [m[1][0].toUpperCase() + m[1].slice(1).toLowerCase(), m[2] && (m[3] ? `${m[2]}.${m[3]}` : m[2])].filter(Boolean).join(' ');
+}
 const word = (score: number) => (score >= 75 ? 'Bien alineado' : score >= 50 ? 'A medias' : 'Poco alineado');
 
 // The score as a ring; while judging, a turning arc.
@@ -125,6 +132,11 @@ export function AudienceFit({slug, script}: {slug: string; script: string}) {
             {c && level && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground" title={level.hint}>
                 <span className={cn('size-1.5 rounded-full', level.dot)} /> {level.label}
+              </span>
+            )}
+            {c?.model && (
+              <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground" title={`Analizado con ${c.model}`}>
+                <Sparkles className="size-3" /> {modelName(c.model)}
               </span>
             )}
             {c?.problem && <span className="max-w-64 truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground" title={c.problem}>«{c.problem}»</span>}

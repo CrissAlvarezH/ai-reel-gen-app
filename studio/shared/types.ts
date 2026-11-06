@@ -164,6 +164,7 @@ export type ScriptCheck = {
   fixes: {line: string; why: string; try: string}[];
   script: string; // hash of the script it judged
   at: number;
+  model?: string; // who judged it: the agent and its model ("Claude Code · claude-sonnet-…"); older checks don't say
 };
 export type ScriptCheckState = {audience: boolean; script: boolean; running: boolean; stale: boolean; check: ScriptCheck | null; error: string};
 export type WantOption = {so1: string; so2: string};
@@ -562,7 +563,8 @@ export type ProjectContents = {videos: number; ideas: number; verticals: number;
 // profile. post: reads one of Mi cuenta's reels again (label: its caption when it was chosen, to tell which one it is).
 export const MAX_ACCOUNT_REELS = 200;
 export const MAX_ANALYSIS_SECONDS = 180; // the longest reel an account's "Analizar…" takes
-export type AutomationStep = {type: 'agent'; prompt: string} | {type: 'account'; limit: number} | {type: 'post'; code: string; label: string} | {type: 'external'; username: string; limit: number};
+// agent step: agent/model/effort pin the CLI it runs on (absent: the one in Ajustes, with its starting choice).
+export type AutomationStep = {type: 'agent'; prompt: string; agent?: string; model?: string; effort?: string} | {type: 'account'; limit: number} | {type: 'post'; code: string; label: string} | {type: 'external'; username: string; limit: number};
 export type Automation = {id: string; name: string; cron: string; enabled: boolean; steps: AutomationStep[]; created: number};
 export type AutomationInput = Pick<Automation, 'name' | 'cron' | 'enabled' | 'steps'>;
 // interrupted: the studio closed while it was running.
@@ -572,4 +574,6 @@ export type AutomationRunStep = AutomationStep & {state: AutomationRunState | 'p
 // stopping: asked to stop while a step that can't be cut short finishes.
 export type AutomationRun = {id: string; automation: string; name: string; trigger: 'cron' | 'manual'; started: number; ended: number | null; state: AutomationRunState; stopping?: boolean; error?: string; steps: AutomationRunStep[]};
 // runs: most recent first.
+// Automatizaciones → a step's agent: each CLI that can run one, with its models and what a new conversation starts on.
+export type AutomationAgent = {id: string; label: string; ready: boolean; default: boolean; models: AgentModel[]; choice: {model: string; effort: string}};
 export type AutomationsView = {automations: (Automation & {running: boolean})[]; runs: AutomationRun[]};

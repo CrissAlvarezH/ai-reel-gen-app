@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type {ScriptCheck, ScriptCheckCriterion, ScriptCheckLevel, ScriptCheckState} from '../shared/types.ts';
+import {agentCli} from './agent.ts';
 import * as audience from './audience.ts';
 import {readJson, writeJson} from './platform.ts';
 import {VIDEOS, isPlaceholder} from './reels.ts';
@@ -122,7 +123,10 @@ export function agentText(slug: string): string {
 
 async function judge(script: string): Promise<ScriptCheck> {
   const a = audience.get();
-  const answer = await audience.ask(`${audience.context(a)}
+  let model = '';
+  const ask = async (prompt: string) =>
+    audience.parseJson(await agentCli.ask(prompt, 'You answer only with the JSON asked for, nothing else.', {model: 'smart', timeout: 4 * 60_000, onModel: (m) => (model = m)}));
+  const answer = await ask(`${audience.context(a)}
 
 My audience profile:
 - What they want (What they want | So I can… | So I can…):
@@ -149,5 +153,5 @@ Answer with a JSON object:
  "good": ["up to 3 things that already work for my audience"],
  "fixes": [{"line": "the script line to change, quoted exactly (or \\"\\" if it's about something missing)", "why": "why it misses my audience", "try": "a rewrite or what to add, in my audience's words"}]}
 Give at most 3 fixes, the ones that would raise the score the most.`);
-  return clean(answer, script);
+  return {...clean(answer, script), model: [agentCli.label, model].filter(Boolean).join(' · ')};
 }

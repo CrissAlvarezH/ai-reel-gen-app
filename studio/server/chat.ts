@@ -7,7 +7,7 @@ import path from 'node:path';
 import type {ChildProcess} from 'node:child_process';
 import {ROOT, VIDEOS, formatOf, httpError, listSlugs, styleOf, summary, title as videoTitle, videoFormatOf} from './reels.ts';
 import {CONFIG, DATA, PROJECT, PROJECT_DIR, projectName, rel as relPath, resource} from './workspace.ts';
-import {EFFORT_LABELS, agentById, agentCli, currentAgent, type AgentCli, type AgentEvent} from './agent.ts';
+import {AGENTS, EFFORT_LABELS, agentById, agentCli, currentAgent, type AgentCli, type AgentEvent} from './agent.ts';
 import {IS_WIN, PY, VENV_BIN, readJson, writeJson} from './platform.ts';
 import {getKey} from './settings.ts';
 import {authorName, formatText, getChromeAccess, getImageSources, getProfile, getVoice, lastChatChoice, setLastChatChoice, videoVoice} from './config.ts';
@@ -21,7 +21,7 @@ import {newVideoStyle} from './styles.ts';
 import {listFormats} from './formats.ts';
 import * as footage from './footage.ts';
 import {BEAT_TAGS, IMAGE_SOURCES, type ImageSourceId} from '../shared/types.ts';
-import type {AgentInfo, AgentState, ChatCommand, ChatContext, ChatEvent, ChatItem, ChatList, ChatOptions, ChatState, Comment, ServerEvent, UiContext} from '../shared/types.ts';
+import type {AgentInfo, AutomationAgent, AgentState, ChatCommand, ChatContext, ChatEvent, ChatItem, ChatList, ChatOptions, ChatState, Comment, ServerEvent, UiContext} from '../shared/types.ts';
 
 // Where things are, as the agent sees them from the workspace (its cwd): the open project's videos and
 // config, and the way back up to the workspace from a video's folder (for the shared tools and .venv).
@@ -166,6 +166,16 @@ const STUDIO_COMMANDS: ChatCommand[] = [
   {name: 'model', description: 'Cambia el modelo de esta conversación', args: '<modelo>', studio: true},
   {name: 'effort', description: 'Cambia el esfuerzo de razonamiento', args: '<nivel>', studio: true},
 ];
+// Automatizaciones: every CLI a step can run on, with its models; ready = installed and signed in.
+export async function automationAgents(): Promise<AutomationAgent[]> {
+  return Promise.all(
+    AGENTS.map(async (cli) => {
+      const s = await cli.status().catch(() => null);
+      return {id: cli.id, label: cli.label, ready: !!(s?.installed && s.loggedIn), default: cli.id === currentAgent().id, models: cli.models(), choice: choiceOf({}, cli)};
+    }),
+  );
+}
+
 export function options(): ChatOptions {
   const cli = currentAgent();
   return {agent: cli.id, models: cli.models(), modes: cli.permissionModes?.() ?? [], commands: [...STUDIO_COMMANDS, ...cli.commands()], choice: choiceOf({}, cli)};
@@ -670,7 +680,8 @@ export function requestMove(key: string, chat: string, slug: unknown) {
 export type SendInput = {text?: string; comments?: Comment[]; refs?: unknown; ideas?: unknown; images?: unknown; context?: UiContext; note?: string; audit?: unknown};
 // A turn nobody is watching (server/automations.ts); separate from SendInput, which comes straight from the request.
 // system: added to its system prompt. onDone: when it ends; text is the last thing it said.
-export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boolean; text: string}) => void};
+// agent/model/effort: the CLI it runs on (an automation's step); absent: the one in Ajustes.
+export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boolean; text: string}) => void; agent?: string; model?: string; effort?: string};
 
 // note: text for the agent only, ahead of the message (not shown in the transcript).
 // chat: which conversation; by default the open one.
@@ -703,7 +714,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   const voice = vv ? (!vv.enabled ? 'desactivada' : vv.voiceId ? `${vv.voiceName ?? vv.voiceId}${vv.own ? ' (propia de este video)' : ''}` : 'sin elegir') : undefined;
   // The agent chosen in Ajustes. A conversation whose session belongs to the other one goes on in a new
   // session of this one, which gets what was said so far as text.
-  const cli = currentAgent();
+  const cli = unattended?.agent ? agentById(unattended.agent) : currentAgent();
   const prev = find(load(key), chat);
   const resume = prev.sessionId && agentById(prev.agent).id === cli.id ? prev.sessionId : null;
   const handover = prev.sessionId && !resume ? handoverText(prev, agentById(prev.agent).label) : '';
@@ -715,7 +726,8 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   const prompt = slash
     ? text!.trim()
     : [handover, brief, told, [fmtCtx(context, progress, style, voice, kind), CURRENT].filter(Boolean).join('\n'), note, commentsText(key, comments), refsText(refs.filter((r) => !r.own)), ownRefsText(refs.filter((r) => r.own)), ideaRefsText(ideaRefs), audited, uploads.agentText(images), text?.trim()].filter(Boolean).join('\n\n');
-  const {model, effort} = choiceOf(prev, cli);
+  // A step's own model and effort when it still exists on that CLI (choiceOf falls back to the starting choice).
+  const {model, effort} = choiceOf(unattended?.agent ? {model: unattended.model, effort: unattended.effort} : prev, cli);
 
   // The turn keeps writing to the workspace it started in, even if the studio switches to another one
   // meanwhile (it is stopped then, but its last events still arrive); only the current one's pages hear it.

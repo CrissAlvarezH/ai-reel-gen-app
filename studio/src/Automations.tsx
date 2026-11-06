@@ -6,13 +6,16 @@ import {Dialog, DialogContent, DialogDescription, DialogTitle} from '@/component
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Switch} from '@/components/ui/switch';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
 import {nextRun} from '../shared/cron';
 import {MAX_ACCOUNT_REELS} from '../shared/types';
-import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type InspirationAccount, type OwnReel, type OwnReelList} from './api';
+import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type AutomationAgent, type InspirationAccount, type OwnReel, type OwnReelList} from './api';
 import {useConfirm} from './confirm';
+import {AgentLogo} from './AgentLogo';
+import {EFFORT_LABELS} from './ChatControls';
 import {Avatar} from './Inspiration';
 import {useStudio} from './studio';
 
@@ -254,6 +257,86 @@ function RunRow({run: r}: {run: AutomationRun}) {
   );
 }
 
+// An agent step's CLI, model and effort. Radix's Select can't hold '': the CLI's default model/effort go as DEFAULT.
+const DEFAULT = '__default';
+type AgentStep = Extract<AutomationStep, {type: 'agent'}>;
+// A step that doesn't say yet: the agent in Ajustes, with what a new conversation starts on.
+const withAgent = (s: AgentStep, agents: AutomationAgent[]): AgentStep => {
+  if (s.agent) return s;
+  const d = agents.find((x) => x.default) ?? agents[0];
+  return d ? {...s, agent: d.id, model: d.choice.model, effort: d.choice.effort} : s;
+};
+function AgentStepFields({n, step, agents, onChange}: {n: number; step: AgentStep; agents: AutomationAgent[] | null; onChange: (s: AgentStep) => void}) {
+  if (!agents) return null;
+  const cli = agents.find((x) => x.id === step.agent);
+  const model = cli?.models.find((x) => x.id === step.model) ?? cli?.models[0];
+  const pickAgent = (id: string) => {
+    const x = agents.find((y) => y.id === id)!;
+    onChange({...step, agent: x.id, model: x.choice.model, effort: x.choice.effort});
+  };
+  const pickModel = (id: string) => {
+    const m = cli!.models.find((x) => (x.id || DEFAULT) === id)!;
+    onChange({...step, model: m.id, effort: m.efforts.includes('medium') ? 'medium' : ''});
+  };
+  const label = 'text-xs text-muted-foreground';
+  return (
+    <div className="mt-2 grid gap-2 sm:grid-cols-3">
+      <div className="flex flex-col gap-1">
+        <span className={label}>Agente</span>
+        <Select value={step.agent} onValueChange={pickAgent}>
+          <SelectTrigger size="sm" className="w-full" aria-label={`Agente del paso ${n}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {agents.map((x) => (
+              <SelectItem key={x.id} value={x.id} disabled={!x.ready && x.id !== step.agent}>
+                <AgentLogo agent={x.id} className="size-3.5" /> {x.label}
+                {x.default && <span className="text-muted-foreground">· por defecto</span>}
+                {!x.ready && <span className="text-muted-foreground">· sin sesión</span>}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {cli && cli.models.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <span className={label}>Modelo</span>
+          <Select value={(model?.id ?? '') || DEFAULT} onValueChange={pickModel}>
+            <SelectTrigger size="sm" className="w-full" aria-label={`Modelo del paso ${n}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {cli.models.map((x) => (
+                <SelectItem key={x.id || DEFAULT} value={x.id || DEFAULT}>
+                  {x.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {model && model.efforts.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <span className={label}>Esfuerzo</span>
+          <Select value={step.effort || DEFAULT} onValueChange={(e) => onChange({...step, effort: e === DEFAULT ? '' : e})}>
+            <SelectTrigger size="sm" className="w-full" aria-label={`Esfuerzo del paso ${n}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={DEFAULT}>Por defecto{model.defaultEffort ? ` (${EFFORT_LABELS[model.defaultEffort] ?? model.defaultEffort})` : ''}</SelectItem>
+              {model.efforts.map((e) => (
+                <SelectItem key={e} value={e}>
+                  {EFFORT_LABELS[e] ?? e}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AccountStepFields({n, limit, onChange}: {n: number; limit: number; onChange: (limit: number) => void}) {
   const valid = Number.isInteger(limit) && limit >= 1 && limit <= MAX_ACCOUNT_REELS;
   const id = `automation-step-${n}-reels`;
@@ -474,6 +557,12 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
   const [name, setName] = useState(a?.name ?? '');
   const [cron, setCron] = useState(a?.cron ?? '0 9 * * *');
   const [steps, setSteps] = useState<AutomationStep[]>(a?.steps ?? [STEP_KINDS.agent.blank]);
+  // The CLIs a step can run on; agent steps that don't say yet show (and save) the one in Ajustes.
+  const [agents, setAgents] = useState<AutomationAgent[] | null>(null);
+  useEffect(() => void automationsApi.agents().then(setAgents, () => setAgents([])), []);
+  useEffect(() => {
+    if (agents?.length && steps.some((s) => s.type === 'agent' && !s.agent)) setSteps((all) => all.map((s) => (s.type === 'agent' ? withAgent(s, agents) : s)));
+  }, [agents, steps]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const next = nextRun(cron);
@@ -534,7 +623,10 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
                   </Button>
                 </div>
                 {s.type === 'agent' ? (
-                  <Textarea className="mt-2" value={s.prompt} rows={3} aria-label={`Prompt del paso ${i + 1}`} onChange={(e) => setStep(i, {type: 'agent', prompt: e.target.value})} placeholder={i ? 'Toma 2 ideas de cada vertical y conviértelas en videos, una a una' : 'Crea 1 idea en cada vertical'} />
+                  <>
+                    <AgentStepFields n={i + 1} step={s} agents={agents} onChange={(step) => setStep(i, step)} />
+                    <Textarea className="mt-2" value={s.prompt} rows={3} aria-label={`Prompt del paso ${i + 1}`} onChange={(e) => setStep(i, {...s, prompt: e.target.value})} placeholder={i ? 'Toma 2 ideas de cada vertical y conviértelas en videos, una a una' : 'Crea 1 idea en cada vertical'} />
+                  </>
                 ) : s.type === 'post' ? (
                   <PostStepFields code={s.code} onChange={(code) => setStep(i, {type: 'post', code, label: ''})} />
                 ) : s.type === 'external' ? (

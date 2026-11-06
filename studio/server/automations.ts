@@ -13,6 +13,7 @@ import {cronMatches, nextRun} from '../shared/cron.ts';
 import {MAX_ACCOUNT_REELS} from '../shared/types.ts';
 import type {Automation, AutomationInput, AutomationRun, AutomationRunState, AutomationRunStep, AutomationStep, AutomationsView} from '../shared/types.ts';
 import * as account from './account.ts';
+import {AGENTS} from './agent.ts';
 import * as chat from './chat.ts';
 import * as insp from './inspiration.ts';
 import {IS_MAC, readJson, writeJson} from './platform.ts';
@@ -60,7 +61,17 @@ function cleanStep(raw: unknown, prior: AutomationStep[]): AutomationStep {
   if (st.type === 'agent') {
     const prompt = typeof st.prompt === 'string' ? st.prompt.trim() : '';
     if (!prompt || prompt.length > MAX_PROMPT) throw httpError(400, `cada paso de agente necesita un prompt de hasta ${MAX_PROMPT} caracteres`);
-    return {type: 'agent', prompt};
+    if (st.agent === undefined || st.agent === null) return {type: 'agent', prompt};
+    // Its own CLI, model and effort: ones that CLI offers ('' = its default).
+    const cli = AGENTS.find((x) => x.id === st.agent);
+    if (!cli) throw httpError(400, 'ese agente no existe');
+    const models = cli.models();
+    const model = typeof st.model === 'string' ? st.model : '';
+    const m = models.find((x) => x.id === model);
+    if (!m && !(model === '' && !models.length)) throw httpError(400, `${cli.label} no tiene el modelo «${model}»`);
+    const effort = typeof st.effort === 'string' ? st.effort : '';
+    if (effort && !m?.efforts.includes(effort)) throw httpError(400, `ese modelo de ${cli.label} no tiene el esfuerzo «${effort}»`);
+    return {type: 'agent', prompt, agent: cli.id, model, effort};
   }
   if (st.type === 'account') {
     const limit = Number(st.limit);
@@ -217,6 +228,7 @@ function runStep(id: string, name: string, steps: AutomationStep[], i: number, p
       const note = previous && `Resultado del paso anterior de esta automatización:\n${previous.slice(-4000)}`;
       chat.send(chat.GENERAL, {text: step.prompt, note}, conversation, {
         system: AUTONOMOUS(name, i + 1, steps.length),
+        ...(step.agent ? {agent: step.agent, model: step.model, effort: step.effort} : {}),
         // Its conversation says why it failed; the run only points there.
         onDone: ({ok, stopped, text}) => end(ok, stopped, ok || stopped ? text : 'abre su conversación para ver qué pasó.'),
       });
