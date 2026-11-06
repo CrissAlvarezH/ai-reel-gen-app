@@ -1,5 +1,14 @@
 import {useEffect, useMemo, useState} from 'react';
 import {Marked} from 'marked';
+import {StreamLanguage, type StreamParser} from '@codemirror/language';
+import {css} from '@codemirror/legacy-modes/mode/css';
+import {javascript, json, typescript} from '@codemirror/legacy-modes/mode/javascript';
+import {python} from '@codemirror/legacy-modes/mode/python';
+import {shell} from '@codemirror/legacy-modes/mode/shell';
+import {toml} from '@codemirror/legacy-modes/mode/toml';
+import {html as htmlMode, xml} from '@codemirror/legacy-modes/mode/xml';
+import {yaml} from '@codemirror/legacy-modes/mode/yaml';
+import {classHighlighter, highlightCode} from '@lezer/highlight';
 import {BookOpen, ChevronRight, FileCode2, FileText, FolderOpen, Loader2, Puzzle, RefreshCw, Search} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -16,9 +25,21 @@ const CATEGORIES: {id: SkillCategory; label: string; description: string}[] = [
 ];
 const categoryName = (id: SkillCategory) => CATEGORIES.find((c) => c.id === id)!.label;
 const escape = (s: string) => s.replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]!);
+// Code in a skill gets CodeMirror's colours: a fence's language or a file's extension picks the mode.
+const MODES: Record<string, StreamParser<unknown>> = {sh: shell, bash: shell, zsh: shell, shell, py: python, python, js: javascript, mjs: javascript, cjs: javascript, jsx: javascript, javascript, ts: typescript, tsx: typescript, typescript, json, yaml, yml: yaml, toml, css, xml, svg: xml, html: htmlMode} as Record<string, StreamParser<unknown>>;
+const languages = new Map<string, StreamLanguage<unknown>>();
+function colour(code: string, lang: string) {
+  const mode = MODES[lang.toLowerCase()];
+  if (!mode) return escape(code);
+  if (!languages.has(lang)) languages.set(lang, StreamLanguage.define(mode));
+  let out = '';
+  highlightCode(code, languages.get(lang)!.parser.parse(code), classHighlighter, (text, cls) => { out += cls ? `<span class="${cls}">${escape(text)}</span>` : escape(text); }, () => { out += '\n'; });
+  return out;
+}
 // Skills are local instructions, not HTML. Remote images stay as labels; only web links are opened.
 const markdown = new Marked({gfm: true, renderer: {
   html: ({text}) => escape(text),
+  code: ({text, lang}) => `<pre><code>${colour(text, (lang ?? '').split(/\s/)[0])}</code></pre>`,
   image: ({text}) => `<span class="text-muted-foreground">[Imagen: ${escape(text)}]</span>`,
   link({href, tokens}) {
     const text = this.parser.parseInline(tokens);
@@ -156,7 +177,7 @@ function SkillReader({skill}: {skill: SkillSummary}) {
           <div className="flex min-h-0 min-w-0 flex-col">
             <div className="flex min-h-11 shrink-0 items-center gap-2 border-b px-4 py-2"><span className="min-w-0 flex-1 truncate font-mono text-xs" title={selected}>{selected}</span>{isMarkdown && <Button variant="ghost" size="sm" onClick={() => setRaw((r) => !r)} aria-pressed={raw}>{raw ? 'Vista de lectura' : 'Ver Markdown'}</Button>}</div>
             <div key={selected} className="visible-scroll min-h-0 flex-1 overflow-auto p-5">
-              {fileError ? <p role="alert" className="text-sm text-destructive">{fileError}</p> : !document ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Cargando archivo…</p> : document.content === null ? <p className="text-sm text-muted-foreground">{document.note}</p> : isMarkdown && !raw ? <article className="prose prose-sm max-w-none break-words dark:prose-invert prose-headings:scroll-mt-4 prose-pre:max-w-full prose-pre:overflow-x-auto prose-code:break-words" dangerouslySetInnerHTML={{__html: html}} /> : <pre className="font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">{document.content || 'Archivo vacío.'}</pre>}
+              {fileError ? <p role="alert" className="text-sm text-destructive">{fileError}</p> : !document ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Cargando archivo…</p> : document.content === null ? <p className="text-sm text-muted-foreground">{document.note}</p> : isMarkdown && !raw ? <article className="prose prose-sm max-w-none break-words dark:prose-invert prose-headings:scroll-mt-4 prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre prose-pre:bg-muted prose-pre:text-foreground prose-code:break-words" dangerouslySetInnerHTML={{__html: html}} /> : <pre className="overflow-x-auto font-mono text-xs leading-relaxed whitespace-pre">{document.content ? <code dangerouslySetInnerHTML={{__html: colour(document.content, raw ? '' : selected.split('.').pop() ?? '')}} /> : 'Archivo vacío.'}</pre>}
             </div>
           </div>
         </div>

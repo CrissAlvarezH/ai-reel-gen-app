@@ -18,8 +18,8 @@ import {RequirementsCard} from './Requirements';
 import {ProjectAvatar, useProjects} from './ProjectPicker';
 import {SkillsSection} from './Skills';
 
-// Ajustes (#/ajustes/<section>): Proyecto, Cuenta, Modo, Agente, Skills, Voz, Extracción de datos
-// and Requisitos. Skills reads the workspace's instructions and supporting files. Each service key is
+// Ajustes (#/ajustes/<section>): Proyecto, Cuenta, Modo, Agente, Voz, Extracción de datos,
+// Requisitos and Skills. Skills reads the workspace's instructions and supporting files. Each service key is
 // asked for where it's used.
 
 // What each key is used for, in the UI's words.
@@ -805,10 +805,10 @@ const SECTIONS: {id: string; label: string; icon: LucideIcon; description: strin
   {id: 'cuenta', label: 'Cuenta', icon: User, description: 'Tu carpeta de trabajo y quién hace los videos.'},
   {id: 'modo', label: 'Modo', icon: Monitor, description: 'Dónde viven las claves de los servicios externos.'},
   {id: 'agente', label: 'Agente', icon: Bot, description: 'La herramienta que trabaja en cada video: la que va por defecto.'},
-  {id: 'skills', label: 'Skills', icon: Puzzle, description: 'Las instrucciones que usan los agentes para crear tus videos. Ábrelas para consultar su contenido y sus archivos.'},
   {id: 'voz', label: 'Voz', icon: Mic, description: 'La narración de los videos.'},
   {id: 'datos', label: 'Extracción de datos', icon: Database, description: 'De dónde salen las imágenes y los reels de Inspiración.'},
   {id: 'requisitos', label: 'Requisitos', icon: ListChecks, description: 'Lo que necesita este equipo.'},
+  {id: 'skills', label: 'Skills', icon: Puzzle, description: 'Las instrucciones que usan los agentes para crear tus videos. Ábrelas para consultar su contenido y sus archivos.'},
 ];
 
 export function Settings({section: wanted}: {section?: string | null}) {

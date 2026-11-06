@@ -182,3 +182,18 @@
   --primary: var(--vertical);
   --primary-foreground: oklch(0.145 0 0);
 }
+
+/* Code colours in Ajustes → Skills (CodeMirror's classHighlighter). */
+.tok-keyword, .tok-operatorKeyword, .tok-modifier { color: oklch(0.5 0.2 300); }
+.tok-string, .tok-string2 { color: oklch(0.5 0.13 150); }
+.tok-number, .tok-bool, .tok-atom { color: oklch(0.55 0.15 50); }
+.tok-comment { color: var(--muted-foreground); font-style: italic; }
+.tok-propertyName, .tok-attributeName { color: oklch(0.5 0.15 250); }
+.tok-typeName, .tok-className, .tok-tagName { color: oklch(0.52 0.14 200); }
+.tok-variableName.tok-definition, .tok-meta { color: oklch(0.55 0.17 20); }
+.dark .tok-keyword, .dark .tok-operatorKeyword, .dark .tok-modifier { color: oklch(0.75 0.15 300); }
+.dark .tok-string, .dark .tok-string2 { color: oklch(0.78 0.13 150); }
+.dark .tok-number, .dark .tok-bool, .dark .tok-atom { color: oklch(0.8 0.13 60); }
+.dark .tok-propertyName, .dark .tok-attributeName { color: oklch(0.76 0.12 250); }
+.dark .tok-typeName, .dark .tok-className, .dark .tok-tagName { color: oklch(0.78 0.11 200); }
+.dark .tok-variableName.tok-definition, .dark .tok-meta { color: oklch(0.75 0.14 20); }
