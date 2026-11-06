@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {marked} from 'marked';
-import {ArrowUp, Check, History, ImagePlus, Lightbulb, Loader2, PanelRightClose, PanelRightOpen, Plus, Square, Wrench, X} from 'lucide-react';
+import {ArrowUp, Check, History, ImagePlus, Lightbulb, Loader2, PanelRightClose, PanelRightOpen, Plus, Square, Target, Wrench, X} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
@@ -188,6 +188,8 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
   const comments = slug ? (studio.comments[slug] ?? []) : [];
   const refs = slug ? [] : studio.refs;
   const ideaRefs = slug ? [] : studio.ideaRefs;
+  // The reel's audience check, attached with "Agregar al chat" (its conversation only).
+  const audit = !!slug && studio.audits.includes(slug);
   const [st, setSt] = useState<ChatState | null>(null);
   // Only asked for while they'd show: writing them spends a little of his plan.
   const [examples, setExamples] = useState<string[]>([]);
@@ -338,18 +340,20 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
   };
 
   const send = async (msg: string) => {
-    if (!comments.length && !refs.length && !ideaRefs.length && !images.length && studioCommand(msg)) return;
-    if ((!msg.trim() && !comments.length && !refs.length && !ideaRefs.length && !ready.length) || st?.running || uploading) return;
+    if (!comments.length && !refs.length && !ideaRefs.length && !images.length && !audit && studioCommand(msg)) return;
+    if ((!msg.trim() && !comments.length && !refs.length && !ideaRefs.length && !ready.length && !audit) || st?.running || uploading) return;
     setSending(true);
     setErr('');
     stick.current = true;
     try {
-      await chatApi.send(chatKey, chatId, msg, comments, {...studio.uiRef.current}, refs.length ? refs : undefined, ready.length ? ready : undefined, ideaRefs.length ? ideaRefs : undefined);
+      await chatApi.send(chatKey, chatId, audit && !msg.trim() ? 'Aplica este análisis de audiencia al guion.' : msg, comments, {...studio.uiRef.current}, refs.length ? refs : undefined, ready.length ? ready : undefined, ideaRefs.length ? ideaRefs : undefined, audit || undefined);
       setText('');
       for (const i of images) URL.revokeObjectURL(i.url);
       setImages([]);
-      if (slug) studio.clearComments(slug);
-      else {
+      if (slug) {
+        studio.clearComments(slug);
+        studio.removeAudit(slug);
+      } else {
         studio.clearRefs();
         studio.clearIdeaRefs();
       }
@@ -460,6 +464,14 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
             ))}
           </ul>
         )}
+        {audit && (
+          <div className="flex items-center gap-2 self-start rounded-md bg-muted py-0.5 pr-0.5 pl-2 text-xs">
+            <Target className="size-3.5 text-muted-foreground" /> Análisis de audiencia del guion
+            <Button variant="ghost" size="icon-xs" onClick={() => studio.removeAudit(slug!)} title="Quitar">
+              <X />
+            </Button>
+          </div>
+        )}
         {ideaRefs.length > 0 && (
           <ul className="flex flex-wrap gap-1.5">
             {ideaRefs.map((i) => (
@@ -542,7 +554,7 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
                 send(text);
               }
             }}
-            placeholder={comments.length ? 'Añade algo a los comentarios (opcional)…' : ideaRefs.length ? `¿Qué quieres hacer con ${ideaRefs.length > 1 ? 'estas ideas' : 'esta idea'}? (opcional)` : refs.length ? (refs.every((r) => r.own) ? `¿Qué quieres saber de ${refs.length > 1 ? 'estos reels' : 'este reel'}?` : '¿Qué quieres sacar de esta referencia? (opcional)') : `Escribe a ${agent}… (/ para comandos)`}
+            placeholder={comments.length ? 'Añade algo a los comentarios (opcional)…' : audit ? 'Qué hacer con el análisis (opcional: si no, lo aplica al guion)…' : ideaRefs.length ? `¿Qué quieres hacer con ${ideaRefs.length > 1 ? 'estas ideas' : 'esta idea'}? (opcional)` : refs.length ? (refs.every((r) => r.own) ? `¿Qué quieres saber de ${refs.length > 1 ? 'estos reels' : 'este reel'}?` : '¿Qué quieres sacar de esta referencia? (opcional)') : `Escribe a ${agent}… (/ para comandos)`}
             rows={2}
             className="field-sizing-content max-h-48 min-h-14 w-full resize-none bg-transparent px-3.5 pt-3 text-sm outline-none placeholder:text-muted-foreground"
           />
@@ -591,7 +603,7 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
                 size="icon-sm"
                 className="flex-none rounded-full"
                 onClick={() => send(text)}
-                disabled={sending || uploading || (!text.trim() && !comments.length && !refs.length && !ideaRefs.length && !ready.length)}
+                disabled={sending || uploading || (!text.trim() && !comments.length && !refs.length && !ideaRefs.length && !ready.length && !audit)}
                 title={uploading ? 'Subiendo las imágenes…' : comments.length ? `Enviar ${comments.length} comentario${comments.length > 1 ? 's' : ''}` : 'Enviar'}
               >
                 {sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}

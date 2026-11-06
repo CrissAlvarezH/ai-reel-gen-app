@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {Audience, AudienceLevels, AudienceWant, PillarSet, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
+import type {Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -18,6 +18,8 @@ export const api = {
   // choice: the model and effort picked for it, if he changed them; brief: instructions for the agent only, not shown.
   create: (text: string, context?: unknown, style?: string, videoFormat?: string, clips?: string[], choice?: {model: string; effort: string}, brief?: string) =>
     fetch('/api/reels', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text, brief, context, style, videoFormat, clips, ...choice})}).then((r) => json<{slug: string; title: string}>(r)),
+  audienceCheck: (slug: string) => fetch(`/api/reels/${slug}/audience-check`).then((r) => json<ScriptCheckState>(r)),
+  runAudienceCheck: (slug: string, force = false) => post(`/api/reels/${slug}/audience-check`, {force}) as Promise<ScriptCheckState>,
   // Deletes the video and everything of it, for good.
   remove: (slug: string) => fetch(`/api/reels/${slug}`, {method: 'DELETE'}).then((r) => json(r)),
   // The video's visual style (style.txt).
@@ -116,8 +118,9 @@ export const chatApi = {
   // refs: reels from Inspiración attached to a message of the general conversation.
   // images: names of images already uploaded with uploadImage.
   // ideas: ideas from Ideas de contenido attached to a message of the general conversation.
-  send: (key: string, chat: string, text: string, comments: Comment[], context?: unknown, refs?: InspirationRef[], images?: string[], ideas?: IdeaRef[]) =>
-    post(`/api/chat/${key}/${chat}`, {text, comments, context, refs, images, ideas}),
+  // audit: the reel's Alineación con tu audiencia goes with it (its conversation).
+  send: (key: string, chat: string, text: string, comments: Comment[], context?: unknown, refs?: InspirationRef[], images?: string[], ideas?: IdeaRef[], audit?: boolean) =>
+    post(`/api/chat/${key}/${chat}`, {text, comments, context, refs, images, ideas, audit}),
   // An image pasted or dropped into the message box, saved in the project; its name goes with the message.
   uploadImage: (file: Blob) => fetch('/api/chat-images', {method: 'POST', headers: {'Content-Type': file.type}, body: file}).then((r) => json<{name: string}>(r)),
   imageUrl: (name: string) => `/chat-images/${encodeURIComponent(name)}`,

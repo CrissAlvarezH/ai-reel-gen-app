@@ -33,6 +33,10 @@ type Studio = {
   addIdeaRef: (r: IdeaRef) => void;
   removeIdeaRef: (id: string) => void;
   clearIdeaRefs: () => void;
+  // Reels whose Alineación con tu audiencia goes with the next message of their conversation.
+  audits: string[];
+  addAudit: (slug: string) => void;
+  removeAudit: (slug: string) => void;
   // Name of the open reel, shown in the header (title.txt, or its slug).
   reelTitle: string | null;
   setReelTitle: (t: string | null) => void;
@@ -73,6 +77,7 @@ export function StudioProvider({children}: {children: React.ReactNode}) {
   const [reelTitle, setReelTitle] = useState<string | null>(null);
   const [refs, setRefs] = useState<InspirationRef[]>([]);
   const [ideaRefs, setIdeaRefs] = useState<IdeaRef[]>([]);
+  const [audits, setAudits] = useState<string[]>([]);
   const [sideOpen, setSideOpenState] = useState(() => read('studio.sidebar.open', '1') === '1');
   const setSideOpen = useCallback((o: boolean) => {
     setSideOpenState(o);
@@ -148,10 +153,17 @@ export function StudioProvider({children}: {children: React.ReactNode}) {
       },
       removeIdeaRef: (id) => setIdeaRefs((all) => all.filter((x) => x.id !== id)),
       clearIdeaRefs: () => setIdeaRefs([]),
+      // "Agregar al chat" on the reel page: the same, for its audience check.
+      audits,
+      addAudit: (slug) => {
+        setAudits((all) => (all.includes(slug) ? all : [...all, slug]));
+        setOpen(true);
+      },
+      removeAudit: (slug) => setAudits((all) => all.filter((x) => x !== slug)),
       reelTitle,
       setReelTitle,
     }),
-    [open, setOpen, sideOpen, setSideOpen, chatWidth, setChatWidth, comments, refs, ideaRefs, reelTitle],
+    [open, setOpen, sideOpen, setSideOpen, chatWidth, setChatWidth, comments, refs, ideaRefs, audits, reelTitle],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

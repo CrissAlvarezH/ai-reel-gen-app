@@ -151,6 +151,21 @@ export type Audience = {
   levels: AudienceLevels[]; // one row per top problem
   onboarded: boolean;
 };
+// Reel page → Alineación con tu audiencia: the script judged against the Perfil de audiencia (videos/<slug>/audience-check.json).
+export type ScriptCheckLevel = 'unaware' | 'problemAware' | 'solutionAware' | 'productAware' | '';
+export type ScriptCheckCriterion = {key: string; label: string; score: number; max: number; note: string};
+export type ScriptCheck = {
+  score: number; // 0–100, the sum of the criteria
+  verdict: string;
+  problem: string; // the profile's problem or want it speaks to, '' if none
+  level: ScriptCheckLevel; // the awareness level it talks to
+  criteria: ScriptCheckCriterion[];
+  good: string[];
+  fixes: {line: string; why: string; try: string}[];
+  script: string; // hash of the script it judged
+  at: number;
+};
+export type ScriptCheckState = {audience: boolean; script: boolean; running: boolean; stale: boolean; check: ScriptCheck | null; error: string};
 export type WantOption = {so1: string; so2: string};
 export type Pillar = {name: string; icon: IdeaIcon; wants: string[]; posts: string[]; narrow: string};
 export type PillarSet = {name: string; pillars: Pillar[]; leftovers: string[]};

@@ -15,6 +15,7 @@ import {Label} from '@/components/ui/label';
 import {cn} from '@/lib/utils';
 import {api, chatApi, fmtAgo, fmtSize, fmtTime, useLive, voiceApi, type Act, type Comment, type ReelDetail, type Voice, type Word} from './api';
 import {VoiceDialog} from './ProfileVoice';
+import {AudienceFit} from './AudienceFit';
 import {ConflictNote, SaveBar, saveOnCmdS, useEditable} from './Editable';
 import {ScriptEditor, StructureBar, parts, taggedScript, type ScriptValue} from './ScriptEditor';
 import {LivePreview, type PreviewControls} from './Preview';
@@ -283,6 +284,7 @@ export function ReelView({slug}: {slug: string}) {
   // The video's name lives in the top header; the page starts with the video and its script.
   return (
     <main className="flex flex-col gap-4 p-6">
+      <AudienceFit slug={reel.slug} script={reel.script} />
       {/* Side by side, the player sets the row's height and the script fills it (scrolling inside). */}
       <div className="grid gap-4 xl:grid-cols-[minmax(300px,400px)_minmax(0,1fr)]">
         <Player reel={reel} comments={comments} onComment={(c) => studio.addComment(slug, c)} seekRef={studio.seekRef} />

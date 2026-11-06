@@ -15,6 +15,7 @@ import {agentNote as inspirationNote, refsText, validRefs} from './inspiration.t
 import {agentNote as accountNote, ownRefsText, validOwnRefs} from './account.ts';
 import {agentNote as ideasNote, ideaRefsText, validIdeaRefs} from './ideas.ts';
 import {audienceText} from './audience.ts';
+import * as scriptCheck from './script-check.ts';
 import * as uploads from './uploads.ts';
 import {newVideoStyle} from './styles.ts';
 import {listFormats} from './formats.ts';
@@ -589,7 +590,7 @@ const SYSTEM = (key: string) =>
     : [
         `${authorName()} te escribe desde Reel Studio, la app local que trabaja sobre esta carpeta. Trabajas en el video ${V()}/${key}/.`,
         projectLine(),
-        'Ve en la UI el reproductor con todas las versiones de out/, el timeline de actos, el guion (audio/vo.txt), los recortes, boards, créditos, caption.md y automatizacion.json (lo que se pega en ManyChat o InstantDM; lo puedes escribir tú, con las claves keyword, reply, dm y link, solo texto, sin notas dentro, vacío lo que falte y sin inventar enlaces); la UI se refresca sola cuando cambias archivos, así que no hace falta pegarle rutas de imágenes: dile qué mirar (p. ej. "mira el board cb9" o "la versión v5").',
+        'Ve en la UI, arriba, «Alineación con tu audiencia»: la revisión de su guion contra su Perfil de audiencia, con puntaje, criterios y qué cambiar (audience-check.json en la carpeta del video; la hace el estudio solo cada vez que cambia audio/vo.txt, no la escribas tú). Si te pide aplicarla, léela. También ve el reproductor con todas las versiones de out/, el timeline de actos, el guion (audio/vo.txt), los recortes, boards, créditos, caption.md y automatizacion.json (lo que se pega en ManyChat o InstantDM; lo puedes escribir tú, con las claves keyword, reply, dm y link, solo texto, sin notas dentro, vacío lo que falte y sin inventar enlaces); la UI se refresca sola cuando cambias archivos, así que no hace falta pegarle rutas de imágenes: dile qué mirar (p. ej. "mira el board cb9" o "la versión v5").',
         'Sigue la skill reel-studio para el proceso (guion, imágenes, voz, board, sonido, test sin sonido y render), la skill del estilo del video y LESSONS.md.',
         `El estilo visual lo elige en la UI y te llega en la línea [UI: …] (estilo: …). Está en ${V()}/${key}/style.txt: el id de una carpeta de styles/ (sin archivo, el predeterminado). ${styleLine(key)} Si cambia de estilo con escenas ya hechas, pregúntale antes de rehacerlas.`,
         videoFormatLine(key),
@@ -666,7 +667,7 @@ export function requestMove(key: string, chat: string, slug: unknown) {
   return {slug, when: 'al terminar este turno'};
 }
 
-export type SendInput = {text?: string; comments?: Comment[]; refs?: unknown; ideas?: unknown; images?: unknown; context?: UiContext; note?: string};
+export type SendInput = {text?: string; comments?: Comment[]; refs?: unknown; ideas?: unknown; images?: unknown; context?: UiContext; note?: string; audit?: unknown};
 // A turn nobody is watching (server/automations.ts); separate from SendInput, which comes straight from the request.
 // system: added to its system prompt. onDone: when it ends; text is the last thing it said.
 export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boolean; text: string}) => void};
@@ -675,7 +676,7 @@ export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boo
 // chat: which conversation; by default the open one.
 // unattended: never asks for permission and can't use his browser, whatever the project's settings say: with his
 // signed-in sessions, what a page says could steer a turn nobody is watching.
-export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdeas, images: rawImages, context, note}: SendInput, chat = load(key).active, unattended?: Unattended) {
+export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdeas, images: rawImages, context, note, audit}: SendInput, chat = load(key).active, unattended?: Unattended) {
   const rk = runKey(key, chat);
   if (runs.has(rk)) throw httpError(409, 'El agente ya está trabajando en esta conversación');
   // Reels from Inspiración, attached with "Usar como referencia" (general conversation only).
@@ -684,7 +685,9 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   const ideaRefs = key === GENERAL ? validIdeaRefs(rawIdeas) : [];
   // Images pasted or dropped into the message (server/uploads.ts).
   const images = uploads.valid(rawImages);
-  if (!text?.trim() && !comments?.length && !refs.length && !ideaRefs.length && !images.length) throw httpError(400, 'mensaje vacío');
+  // The reel's audience check, attached with "Agregar al chat" (server/script-check.ts).
+  const audited = key !== GENERAL && audit === true ? scriptCheck.agentText(key) : '';
+  if (!text?.trim() && !comments?.length && !refs.length && !ideaRefs.length && !images.length && !audited) throw httpError(400, 'mensaje vacío');
   // The reel's progress, so the agent always knows what's left without asking.
   const progress =
     key === GENERAL
@@ -711,7 +714,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   const told = key === GENERAL && resume && !prev.moveTold ? `[Reel Studio: ${MOVE_LINE}]` : '';
   const prompt = slash
     ? text!.trim()
-    : [handover, brief, told, [fmtCtx(context, progress, style, voice, kind), CURRENT].filter(Boolean).join('\n'), note, commentsText(key, comments), refsText(refs.filter((r) => !r.own)), ownRefsText(refs.filter((r) => r.own)), ideaRefsText(ideaRefs), uploads.agentText(images), text?.trim()].filter(Boolean).join('\n\n');
+    : [handover, brief, told, [fmtCtx(context, progress, style, voice, kind), CURRENT].filter(Boolean).join('\n'), note, commentsText(key, comments), refsText(refs.filter((r) => !r.own)), ownRefsText(refs.filter((r) => r.own)), ideaRefsText(ideaRefs), audited, uploads.agentText(images), text?.trim()].filter(Boolean).join('\n\n');
   const {model, effort} = choiceOf(prev, cli);
 
   // The turn keeps writing to the workspace it started in, even if the studio switches to another one

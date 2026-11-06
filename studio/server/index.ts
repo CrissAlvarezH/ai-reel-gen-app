@@ -28,6 +28,7 @@ import * as inspiration from './inspiration.ts';
 import * as account from './account.ts';
 import * as ideas from './ideas.ts';
 import * as audience from './audience.ts';
+import * as scriptCheck from './script-check.ts';
 import * as automations from './automations.ts';
 import * as db from './db.ts';
 import * as uploads from './uploads.ts';
@@ -126,6 +127,9 @@ const reel = (req: Req, res: Response, next: NextFunction) => {
 
 app.get('/api/reels', handle(() => listSlugs().map(summary).sort((a, b) => b.updated - a.updated)));
 app.get('/api/reels/:slug', reel, handle((req) => detail(req.params.slug)));
+// Alineación con tu audiencia (server/script-check.ts): GET only reads; POST judges the script if it changed (force: again).
+app.get('/api/reels/:slug/audience-check', reel, handle((req) => scriptCheck.state(req.params.slug)));
+app.post('/api/reels/:slug/audience-check', reel, handle((req) => scriptCheck.run(req.params.slug, req.body?.force === true)));
 
 app.put('/api/reels/:slug/file', reel, handle((req) => {
   const {path: rel, content} = req.body ?? {};

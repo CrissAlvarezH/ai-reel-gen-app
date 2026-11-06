@@ -29,7 +29,7 @@ const STEPS: {id: Step; title: string; icon: LucideIcon; lead: string}[] = [
   {id: 'problems', title: 'Con lo que lidia', icon: Flame, lead: 'Los problemas que hacen que alguien se detenga y piense «ese soy yo».'},
   {id: 'levels', title: 'Lo que piensa', icon: Brain, lead: 'Qué se dice alguien con cada problema, según cuánto sabe de él.'},
 ];
-const LEVELS: {key: keyof Omit<AudienceLevels, 'problem'>; label: string; hint: string; dot: string; top: string}[] = [
+export const LEVELS: {key: keyof Omit<AudienceLevels, 'problem'>; label: string; hint: string; dot: string; top: string}[] = [
   {key: 'unaware', label: 'No lo sabe', hint: 'Tiene el problema pero no le ha puesto nombre: cree que es normal o culpa a otra cosa.', dot: 'bg-zinc-400', top: 'border-t-zinc-400/70'},
   {key: 'problemAware', label: 'Sabe del problema', hint: 'Lo nombra con sus palabras, pero no sabe por qué pasa ni cómo arreglarlo.', dot: 'bg-amber-400', top: 'border-t-amber-400/70'},
   {key: 'solutionAware', label: 'Busca solución', hint: 'Busca cómo arreglarlo: «¿cómo hago para…?».', dot: 'bg-sky-400', top: 'border-t-sky-400/70'},

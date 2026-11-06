@@ -41,6 +41,8 @@ function read(raw: unknown, who: string): Audience {
 }
 
 export const get = (): Audience => read(readJson(FILE()), getProfile().audience);
+// Filled in enough to judge a script against: the onboarding done, with something in it.
+export const configured = (a: Audience) => a.onboarded && !!(a.result || a.wants.length || a.problems.length || a.levels.length);
 
 // Saves what's given; the rest stays. The "who" goes to the profile.
 export function save(input: unknown): Audience {
@@ -60,7 +62,7 @@ export function reset(): Audience {
 
 /* ───── Suggestions ───── */
 
-function context(a: Audience) {
+export function context(a: Audience) {
   const p = getProfile();
   return [
     `The creator makes short explainer videos for ${p.platform}. Write every suggestion in ${p.language}, the way the audience talks (if it's Spanish, the everyday Spanish of that audience).`,
@@ -68,7 +70,7 @@ function context(a: Audience) {
     a.product.what ? `Product: ${a.product.what}${a.product.price ? ` (${a.product.price})` : ''}. Problems it solves: ${a.product.problems || '(not said)'}.` : 'Product: none yet.',
   ].join('\n');
 }
-const table = (a: Audience) => a.wants.map((w, i) => `${i + 1}. ${w.want} | So I can: ${w.so1 || '(empty)'} | So I can: ${w.so2 || '(empty)'}`).join('\n');
+export const table = (a: Audience) => a.wants.map((w, i) => `${i + 1}. ${w.want} | So I can: ${w.so1 || '(empty)'} | So I can: ${w.so2 || '(empty)'}`).join('\n');
 
 // The JSON in an answer (models sometimes wrap it in prose or a fence).
 export function parseJson(answer: string): unknown {
@@ -84,7 +86,7 @@ export function parseJson(answer: string): unknown {
 const need = (ok: boolean, msg: string) => {
   if (!ok) throw Object.assign(new Error(msg), {status: 400});
 };
-const ask = async (prompt: string) => parseJson(await agentCli.ask(prompt, 'You answer only with the JSON asked for, nothing else.', {model: 'smart', timeout: 4 * 60_000}));
+export const ask = async (prompt: string) => parseJson(await agentCli.ask(prompt, 'You answer only with the JSON asked for, nothing else.', {model: 'smart', timeout: 4 * 60_000}));
 
 // 3 options for each want in `only` (the page's table as it is, saved or not): {want: options}. Its rows are asked
 // as empty, so asking again gives other options.

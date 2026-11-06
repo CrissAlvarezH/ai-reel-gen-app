@@ -41,7 +41,24 @@ const url = (slug: string, rel: string) => `/files/${encodeURIComponent(slug)}/$
 
 // A video still saying its template's placeholder script has no script of its own yet. Its template is its
 // style's (create.ts copies it), or the default one for videos made before styles had their own.
-function isPlaceholder(slug: string, script: string) {
+// Until the agent writes its own scenes, src/ is still the template's playable example (plus its format's overlay):
+// nothing to preview yet. Data files the tools rewrite (timings, the format, the cut) don't count.
+const SRC_DATA = new Set(['words.json', 'vo_env.json', 'format.json', 'footage.json']);
+export function hasOwnScenes(slug: string) {
+  const src = path.join(VIDEOS, slug, 'src');
+  const template = path.join(ROOT, styleOf(slug)?.template || 'template', 'src');
+  const overlay = readJson<{overlay?: unknown}>(path.join(ROOT, 'formats', read(path.join(VIDEOS, slug, 'format.txt'))?.trim() || '-', 'format.json'))?.overlay;
+  const over = typeof overlay === 'string' ? path.join(ROOT, overlay, 'src') : null;
+  const files = (fs.readdirSync(src, {recursive: true, withFileTypes: true}) as fs.Dirent[]).filter((d) => d.isFile() && !SRC_DATA.has(d.name));
+  return files.some((d) => {
+    const rel = path.relative(src, path.join(d.parentPath, d.name));
+    const mine = read(path.join(src, rel));
+    const theirs = (over && read(path.join(over, rel))) ?? read(path.join(template, rel));
+    return theirs === null || mine !== theirs;
+  });
+}
+
+export function isPlaceholder(slug: string, script: string) {
   const templates = new Set([styleOf(slug)?.template, 'template'].filter((t): t is string => !!t));
   return [...templates].some((t) => read(path.join(ROOT, t, 'audio/vo.txt'))?.trim() === script);
 }
@@ -294,9 +311,9 @@ export function detail(slug: string): ReelDetail {
     credits: read(path.join(dir, 'CREDITS.md')) ?? '',
     caption: read(path.join(dir, 'caption.md')) ?? '',
     automation: read(path.join(dir, 'automatizacion.json')) ?? '',
-    // New reels copy a playable example from the template. Wait for their own script before
+    // New reels copy a playable example from the template. Wait for their own script and scenes before
     // offering that code as a preview, so the example doesn't look like an already-made video.
-    previewEntry: script.trim() && !isPlaceholder(slug, script.trim()) && stat(path.join(dir, 'src/Root.tsx')) ? fsUrl(path.join(dir, 'src/Root.tsx')) : null,
+    previewEntry: script.trim() && !isPlaceholder(slug, script.trim()) && stat(path.join(dir, 'src/Root.tsx')) && hasOwnScenes(slug) ? fsUrl(path.join(dir, 'src/Root.tsx')) : null,
     format: formatOf(slug),
     footage: footage.list(slug),
   };

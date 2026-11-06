@@ -240,7 +240,21 @@ function AgentUsageView({id, checks}: {id: string; checks: number}) {
   return (
     <div className="flex flex-col gap-3 border-t pt-3">
       <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Uso del plan</span>
-      {!usage && !err && <p className="text-sm text-muted-foreground">Consultando…</p>}
+      {/* Two windows (session and week), as most plans have, so the card doesn't jump when they arrive. */}
+      {!usage &&
+        !err &&
+        [0, 1].map((i) => (
+          <div key={i} className="flex flex-col gap-1.5" aria-hidden>
+            <div className="flex h-5 items-center justify-between gap-3">
+              <Skeleton className="h-3.5 w-36" />
+              <Skeleton className="h-3.5 w-20" />
+            </div>
+            <Skeleton className="h-1.5 w-full rounded-full" />
+            <div className="flex h-4 items-center">
+              <Skeleton className="h-3 w-44" />
+            </div>
+          </div>
+        ))}
       {err && <p className="text-sm text-destructive">No pude leer el uso: {err}</p>}
       {usage && !usage.windows.length && !err && <p className="text-sm text-muted-foreground">{usage.note}</p>}
       {usage?.windows.map((w) => (
