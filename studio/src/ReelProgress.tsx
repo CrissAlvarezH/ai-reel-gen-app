@@ -57,3 +57,34 @@ export function ReelProgressMini({steps}: {steps: ProgressStep[]}) {
     </div>
   );
 }
+
+// The same as a ring, for the sidebar: one arc per step, in order; a check when it's all done.
+export function ReelProgressRing({steps, className}: {steps: ProgressStep[]; className?: string}) {
+  const done = steps.filter((s) => s.done).length;
+  const next = nextOf(steps);
+  const r = 7;
+  const c = 2 * Math.PI * r;
+  const gap = steps.length > 1 ? 1.6 : 0;
+  const seg = c / Math.max(steps.length, 1);
+  const label = done === steps.length ? 'Video listo' : `${done} de ${steps.length}: ${steps.map((s) => `${s.label} ${s.done ? '✓' : '·'}`).join(', ')}`;
+  return (
+    <span className={cn('relative grid size-4 place-items-center', className)} role="img" aria-label={label} title={label}>
+      <svg viewBox="0 0 18 18" className="absolute inset-0 size-full -rotate-90" aria-hidden>
+        {steps.map((s, i) => (
+          <circle
+            key={s.key}
+            cx="9"
+            cy="9"
+            r={r}
+            fill="none"
+            strokeWidth="2.2"
+            strokeDasharray={`${seg - gap} ${c - seg + gap}`}
+            strokeDashoffset={-i * seg}
+            className={s.done ? 'stroke-emerald-500' : s.key === next ? 'stroke-muted-foreground/60' : 'stroke-muted-foreground/20'}
+          />
+        ))}
+      </svg>
+      {done === steps.length && <Check className="size-2.5 text-emerald-500" strokeWidth={3} />}
+    </span>
+  );
+}

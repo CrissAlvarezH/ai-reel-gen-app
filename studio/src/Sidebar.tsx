@@ -1,7 +1,8 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {AlertCircle, CalendarClock, Circle, CircleDot, FolderOpen, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Palette, Plus, Settings as SettingsIcon, Sparkles, Target, UserRound} from 'lucide-react';
 import {cn} from '@/lib/utils';
-import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState} from './api';
+import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState, type ProgressStep} from './api';
+import {ReelProgressRing} from './ReelProgress';
 import {AgentLogo} from './AgentLogo';
 import {useStudio, type UiContext} from './studio';
 import {ProjectPicker} from './ProjectPicker';
@@ -78,7 +79,12 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   const compact = !sideOpen;
   const inUse = useAgentId();
   const [agents, setAgents] = useState<Agent[]>([]);
-  const load = useCallback(() => agentsApi.list().then(setAgents, () => {}), []);
+  // Each video's progress (Guion → Voz → … → Render), from its files.
+  const [progress, setProgress] = useState<Record<string, ProgressStep[]>>({});
+  const load = useCallback(() => {
+    agentsApi.list().then(setAgents, () => {});
+    api.reels().then((list) => setProgress(Object.fromEntries(list.map((r) => [r.slug, r.progress]))), () => {});
+  }, []);
   useEffect(() => void load(), [load]);
 
   // Refresh on any agent/file event (debounced; streaming deltas don't change the state).
@@ -171,13 +177,16 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
                   </span>
                   {subtitle(a, st) && <span className="line-clamp-2 pl-6 text-xs text-muted-foreground">{subtitle(a, st)}</span>}
                 </button>
-                <button
-                  onClick={() => api.reveal(a.slug!)}
-                  title={`Abrir la carpeta del video (${a.slug})`}
-                  className="mr-1 flex-none rounded-md p-1.5 text-muted-foreground hover:bg-background/60 hover:text-foreground"
-                >
-                  <FolderOpen className="size-4" />
-                </button>
+                <div className="mr-1 flex flex-none flex-col items-center gap-0.5">
+                  {progress[a.slug!]?.length ? <ReelProgressRing steps={progress[a.slug!]} className="m-1.5" /> : null}
+                  <button
+                    onClick={() => api.reveal(a.slug!)}
+                    title={`Abrir la carpeta del video (${a.slug})`}
+                    className="flex-none rounded-md p-1.5 text-muted-foreground hover:bg-background/60 hover:text-foreground"
+                  >
+                    <FolderOpen className="size-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
