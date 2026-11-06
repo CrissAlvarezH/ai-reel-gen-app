@@ -194,6 +194,13 @@ export const settingsApi = {
   agentUsage: (id: string, refresh = false) => fetch(`/api/settings/agents/${encodeURIComponent(id)}/usage${refresh ? '?refresh=1' : ''}`).then((r) => json<AgentUsage>(r)),
 };
 
+export const skillsApi = {
+  list: () => fetch('/api/skills').then((r) => json<import('../shared/types').SkillSummary[]>(r)),
+  detail: (id: string) => fetch(`/api/skills/${encodeURIComponent(id)}`).then((r) => json<import('../shared/types').SkillDetail>(r)),
+  file: (id: string, path: string) => fetch(`/api/skills/${encodeURIComponent(id)}/file?path=${encodeURIComponent(path)}`).then((r) => json<import('../shared/types').SkillDocument>(r)),
+  reveal: (id: string) => post(`/api/skills/${encodeURIComponent(id)}/reveal`),
+};
+
 // The short name of the agent in use ("Claude", "Codex"), for the chat and buttons. Asked once per page
 // load; Ajustes → Agente passes on every new choice (noteAgent) so open pages follow it.
 let agentName = 'Claude';

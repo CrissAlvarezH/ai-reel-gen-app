@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {Bot, CheckCircle2, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, RefreshCw, Trash2, User, XCircle, type LucideIcon} from 'lucide-react';
+import {Bot, CheckCircle2, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, Puzzle, RefreshCw, Trash2, User, XCircle, type LucideIcon} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
@@ -16,10 +16,11 @@ import {useStudio} from './studio';
 import {ProfileCard, ProjectRulesCard, VoiceCard, VoiceCardSkeleton} from './ProfileVoice';
 import {RequirementsCard} from './Requirements';
 import {ProjectAvatar, useProjects} from './ProjectPicker';
+import {SkillsSection} from './Skills';
 
-// Ajustes, in sections (#/ajustes/<section>): Proyecto (the open one's name, picture, audience and rules), Cuenta (folder and profile), Modo, Agente, Voz (on/off, the
-// ElevenLabs key, then the voice), Extracción de datos (image sources and the social-media scraper, Apify or
-// ScrapeCreators, each with its own key) and Requisitos. Each key is asked for where it's used.
+// Ajustes (#/ajustes/<section>): Proyecto, Cuenta, Modo, Agente, Skills, Voz, Extracción de datos
+// and Requisitos. Skills reads the workspace's instructions and supporting files. Each service key is
+// asked for where it's used.
 
 // What each key is used for, in the UI's words.
 const USES: Record<string, string> = {
@@ -804,6 +805,7 @@ const SECTIONS: {id: string; label: string; icon: LucideIcon; description: strin
   {id: 'cuenta', label: 'Cuenta', icon: User, description: 'Tu carpeta de trabajo y quién hace los videos.'},
   {id: 'modo', label: 'Modo', icon: Monitor, description: 'Dónde viven las claves de los servicios externos.'},
   {id: 'agente', label: 'Agente', icon: Bot, description: 'La herramienta que trabaja en cada video: la que va por defecto.'},
+  {id: 'skills', label: 'Skills', icon: Puzzle, description: 'Las instrucciones que usan los agentes para crear tus videos. Ábrelas para consultar su contenido y sus archivos.'},
   {id: 'voz', label: 'Voz', icon: Mic, description: 'La narración de los videos.'},
   {id: 'datos', label: 'Extracción de datos', icon: Database, description: 'De dónde salen las imágenes y los reels de Inspiración.'},
   {id: 'requisitos', label: 'Requisitos', icon: ListChecks, description: 'Lo que necesita este equipo.'},
@@ -855,6 +857,7 @@ export function Settings({section: wanted}: {section?: string | null}) {
         )}
         {section.id === 'modo' && <ModeCard />}
         {section.id === 'agente' && <AgentCard chrome />}
+        {section.id === 'skills' && <SkillsSection />}
         {section.id === 'voz' && <VoiceSection keys={keys} keysErr={err} onKeys={setKeys} />}
         {section.id === 'datos' && (
           <>

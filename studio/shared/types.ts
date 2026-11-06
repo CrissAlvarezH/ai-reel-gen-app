@@ -55,6 +55,12 @@ export type ReelDetail = Omit<ReelSummary, 'words'> & {
   format: Format | null; // src/format.json; null in videos made before it existed (1080×1920 at 30 fps in their Root.tsx)
   footage: FootageClip[]; // footage/: his own recording, for formats with footage
 };
+
+export type SkillCategory = 'general' | 'style' | 'format';
+export type SkillSummary = {id: string; name: string; description: string; category: SkillCategory; path: string; fileCount: number};
+export type SkillFile = {path: string; size: number};
+export type SkillDetail = SkillSummary & {entry: string; files: SkillFile[]};
+export type SkillDocument = {path: string; content: string | null; note?: string};
 export type FootageClip = {name: string; url: string; size: number; mtime: number};
 
 /* ───── Visual styles (styles/<id>/style.json at the repo root) ───── */

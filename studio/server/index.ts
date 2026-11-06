@@ -12,6 +12,7 @@ import {createServer as createVite} from 'vite';
 import {ROOT, VIDEOS, listSlugs, summary, detail, writeFile, validSlug, title, httpError, setStyle} from './reels.ts';
 import * as chat from './chat.ts';
 import * as settings from './settings.ts';
+import * as skills from './skills.ts';
 import * as config from './config.ts';
 import * as voice from './voice.ts';
 import {create, installing} from './create.ts';
@@ -263,6 +264,10 @@ app.post('/api/reels/:slug/frames', reel, express.raw({type: 'image/png', limit:
 
 // Settings: API keys in local mode (server/settings.ts; written, never read back) and the agent CLI.
 app.get('/api/settings', handle(() => settings.status()));
+app.get('/api/skills', handle(() => skills.listSkills()));
+app.get('/api/skills/:id', handle((req) => skills.skillDetail(req.params.id)));
+app.get('/api/skills/:id/file', handle((req) => skills.skillDocument(req.params.id, req.query.path)));
+app.post('/api/skills/:id/reveal', handle((req) => skills.revealSkill(req.params.id)));
 app.put('/api/settings/keys/:name', handle((req) => settings.setKey(req.params.name, req.body?.value)));
 app.post('/api/settings/keys/:name/verify', handle((req) => settings.verify(req.params.name)));
 // Profile and voice (server/config.ts → config/*.json): what the agent's prompts and tools/tts.py follow.
