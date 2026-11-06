@@ -236,7 +236,7 @@ export function audienceText(rel: string): string {
     a.result && `- Promesa del canal: ayuda a ${a.who || '(público sin definir)'} a conseguir ${a.result}`,
     a.product.what ? `- Producto: ${a.product.what}${a.product.price ? ` (${a.product.price})` : ''}${a.product.problems ? `; resuelve: ${a.product.problems}` : ''}` : a.result && '- Producto: no vende nada todavía',
     a.problems.length && `- Problemas con nombre de su audiencia, los más importantes primero (abrir un video nombrando uno es lo que más alcance da; úsalos con estas palabras): ${a.problems.join('; ')}`,
-    (a.wants.length || a.levels.length) && `- Lo que quiere su audiencia (con sus «para poder…») y lo que piensa en cada nivel de conciencia de esos problemas: ${rel}/audience.json (Perfil de audiencia). Léelo para ideas, ganchos y guiones.`,
+    (a.wants.length || a.levels.length) && `- Lo que quiere su audiencia (con sus «para poder…») y lo que piensa en cada nivel de conciencia de esos problemas: ${rel}/audience.json (Perfil de audiencia, lo llenó él). Léelo antes de proponer ideas o escribir un guion y priorízalo: manda sobre lo que supongas del público (skills content-ideas y video-script).`,
   ].filter(Boolean);
   return lines.join('\n');
 }

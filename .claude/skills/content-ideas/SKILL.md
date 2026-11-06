@@ -18,6 +18,7 @@ Viewers stay for two reasons in tension. **Curiosity** stops the scroll; a **pay
 This skill is shared by every project and says nothing about any channel's subject. Each time, read from the open project only (`projects/<id>/`, or `WHERE project = '<id>'` in the index; the prompt names it):
 
 - **Who it's for:** language, platform, audience and length, from the profile in your prompt.
+- **The audience profile,** if the creator filled it in (Reel Studio → Perfil de audiencia, `config/audience.json`; the prompt carries its offer, product and problems): `result` (the outcome, with the profile's audience as the who), `product` (empty `what`: nothing sold yet), `wants` (what the audience wants, each with two "so I can" steps: what it lets them do, then what changes in their life), `problems` (named problems in their own words, most important first) and `levels` (for the top problems, what someone thinks at each level of awareness: `unaware`, `problemAware`, `solutionAware`, `productAware`). The creator chose these, so they win over your guesses about the audience.
 - **The board:** `show` with the ideas tool named in your prompt: the verticals and their descriptions, and the cards already there. An idea already on the board gets edited, not added twice.
 - **Videos already made:** `videos`. Don't repeat a topic; a second part or a series is fine.
 - **The account:** `own_accounts` (bio, median) and `own_reels`: what beats its median and what falls short, with `hook_text`, `topic` and `own_beats` where analysed.
@@ -28,15 +29,15 @@ Say what's missing rather than filling it in. Never invent a number.
 
 ## Position before generating
 
-Write one line: **"helps [who] get [the outcome they want]"**, from the audience, the bio and the verticals. It's the test every idea answers to, and an account whose line is vague makes vague ideas.
+Write one line: **"helps [who] get [the outcome they want]"**, from the audience, the bio and the verticals. When the audience profile has its offer, that is the line: use it as written. It's the test every idea answers to, and an account whose line is vague makes vague ideas.
 
 If you can't write it, or the sources disagree (say the audience names one group and the verticals speak to another), stop and ask which is right, with your recommendation, even when asked to add ideas straight away. Don't bridge the two yourself and don't add cards until you have the answer: ideas for the wrong audience are wasted work, and a missing audience or bio on its own isn't a disagreement.
 
 ## Build an idea
 
-1. **Collect subjects, wide.** What the creator built, learned or lived recently (ask; otherwise their latest videos), questions viewers ask, the account's winners and losers, Inspiración, news in the field from primary sources with dates, verticals with few ideas. Candidates should differ in kind, not be variations of one. They come out wider if a separate agent brainstorms from the material alone, with judging afterwards; do this when asked for many ideas.
-2. **Restate it as the outcome.** Ask what the subject gets this audience, then why they want that, until you reach something they'd say themselves about their own problem. Use their words, not the expert's. The subject stays the same; only the framing changes. People don't want a technique, a tool or a concept: they want what it gets them.
-3. **Open a question.** Add what they didn't expect: it's easier than they think, it costs something they haven't noticed, the usual advice is wrong, a specific result. The reaction to aim for is "wait, what?", followed by one question they could put into words. The framed topic plus this is the hook, and it says as little as possible about the answer.
+1. **Collect subjects, wide.** The audience profile's problems and wants, the ones with few ideas on the board first; what the creator built, learned or lived recently (ask; otherwise their latest videos), questions viewers ask, the account's winners and losers, Inspiración, news in the field from primary sources with dates, verticals with few ideas. Candidates should differ in kind, not be variations of one. They come out wider if a separate agent brainstorms from the material alone, with judging afterwards; do this when asked for many ideas.
+2. **Restate it as the outcome.** Ask what the subject gets this audience, then why they want that, until you reach something they'd say themselves about their own problem. Use their words, not the expert's: the profile's wants and their "so I can" steps are those words, and the last step is usually the outcome to frame by. The subject stays the same; only the framing changes. People don't want a technique, a tool or a concept: they want what it gets them.
+3. **Open a question.** Add what they didn't expect: it's easier than they think, it costs something they haven't noticed, the usual advice is wrong, a specific result. The reaction to aim for is "wait, what?", followed by one question they could put into words. The framed topic plus this is the hook, and it says as little as possible about the answer. For reach, name one of the profile's problems with its own words: a problem a lot of the audience would say "I have" makes the right person stop. Its `levels` say what that person is thinking: `unaware` and `problemAware` thoughts open to the widest audience, `solutionAware` suits a how-to, and `productAware` is for the rare video about the creator or the product.
 4. **Plan how the answer is held.** Name the moment that closes the question. It is often a term the viewer already recognises: once they hear it they think they know the rest, and they leave. Note what can come before it (what most people get wrong, what it costs them, why the obvious alternatives fail) and what new question opens once it's said (something about it they haven't heard).
 
 | Plainly stated | Framed, with a question open | Held back |
@@ -55,7 +56,7 @@ These show the move, not a template: write in the project's voice and for its au
 
 Keep an idea only if you can answer yes to each:
 
-- **Stake:** would this audience stop for the framed topic alone?
+- **Stake:** would this audience stop for the framed topic alone? With an audience profile, it names one of its problems or wants; an idea that touches none is for someone else, or a sign the profile is missing something (say which).
 - **Question:** can you state the one question it opens? One the viewer can guess the answer to doesn't count.
 - **Room:** is there enough before the answer to hold it? A single fact closes as soon as it's said, so it's a short video or part of another idea.
 - **Proof:** can the viewer be shown it, with something the creator has or can capture?
@@ -74,7 +75,7 @@ Vary the format across ideas, not just the topic: the project's `formats/` and w
 When asked to create or add ideas, put them on the board with the ideas tool named in your prompt, never by editing `ideas.json`. When only asked to propose or think, answer in the chat and offer to add them. Unless told a number, give 5 to 8.
 
 - **Title:** the framed topic, short. Not the plain subject, and not the answer.
-- **Vertical:** the one whose description fits, or none, and say so. Don't create a vertical unless asked; suggest one when several ideas keep landing outside the existing ones.
+- **Vertical:** the one whose description fits, or none, and say so. Verticals made from the audience profile list the wants they group in their description. Don't create a vertical unless asked; suggest one when several ideas keep landing outside the existing ones.
 - **List:** the board's draft list (Borrador by default). Moving a card to another list or deleting it is the creator's call, unless asked.
 - **Notes,** with this structure. Write all of the card in the project's language, these labels included:
 
@@ -84,6 +85,7 @@ Question: the one it opens
 Held back: what closes it, what comes before that, what it opens next
 Proof: what the viewer sees
 Why: the reel or account it rests on and its numbers, or "hypothesis"
+Audience: the profile's problem or want it names, and the level of awareness it speaks to (leave out without a profile)
 Format: format and length
 ```
 

@@ -17,6 +17,8 @@ What the viewer watches for is the answer to a question. Curiosity keeps them an
 
 `SKILL_DIR` means this skill's folder. Read `~/.video-script/profile.md` if it exists: it names the creator's video library, findings file, platform notes, voice and pace. Before proposing anything, read the findings file (including tests still running) and the library index, and cite the past videos an idea resembles. Where the findings conflict with a default below, the findings win: they were measured on this audience.
 
+In a Reel Studio project, also read its audience profile if the creator filled it in (Perfil de audiencia, `config/audience.json`; [content-ideas](../content-ideas/SKILL.md) → Read the project first says what each field is). Its problems, wants and levels are the audience's own words, chosen by the creator: they win over your guesses about who watches and why.
+
 With no profile, ask once for the platform, the audience, and a past video that did well and one that didn't, with their numbers. Then offer to create the profile and a library in the [library format](references/library.md).
 
 **Goal** means what a video is built for: reach (views from non-followers), follows, saves or shares. When the request names none, assume reach and say so.
@@ -31,12 +33,12 @@ Coming up with ideas and saving them is [content-ideas](../content-ideas/SKILL.m
 
 State the idea in one sentence, with its goal. An idea that needs two sentences is two videos; ask which to make first.
 
-Find the payoff and the strongest proof before the hook, then write the hook in two parts: the topic stated as the outcome this audience wants, in their words about their problem, then the most surprising true claim or proof you have, which opens a question the viewer could put into words. Don't name the subject when naming it would answer that question. Draft at the creator's pace (from the profile; default 3 spoken words a second). Three moments are tied to the clock, and the stretch between them follows one rule; the rest takes the story's own shape:
+Find the payoff and the strongest proof before the hook, then write the hook in two parts: the topic stated as the outcome this audience wants, in their words about their problem (with an audience profile, the problem from its list that the video is about, worded as it is there), then the most surprising true claim or proof you have, which opens a question the viewer could put into words. Don't name the subject when naming it would answer that question. Draft at the creator's pace (from the profile; default 3 spoken words a second). Three moments are tied to the clock, and the stretch between them follows one rule; the rest takes the story's own shape:
 
 - **0–3 s, the hook**: about the viewer's stake or what's on screen. Credentials come later, as the reason to believe; a result the viewer wants counts as a stake when it opens the question.
-- **3–10 s, the second sentence**: raises the hook's stakes or sharpens its question, without answering it. Most avoidable losses happen here, so background waits. Background is anything the viewer needs only to follow a later detail (history, who someone is, how something works); the test: if moving a line past 15 s loses nothing in the first 15, it's background.
+- **3–10 s, the second sentence**: raises the hook's stakes or sharpens its question, without answering it. A want's "so I can" steps in the audience profile are stakes in the audience's words: what the answer would let them do, and what changes for them. Most avoidable losses happen here, so background waits. Background is anything the viewer needs only to follow a later detail (history, who someone is, how something works); the test: if moving a line past 15 s loses nothing in the first 15, it's background.
 - **In between, the answer is held**: the payoff isn't one moment. Name the line that closes the hook's question, often a term the viewer recognises: once they hear it they think they know the rest. Before it goes what leads there and is worth hearing by itself: what most people get wrong, what it costs them, why the obvious alternatives fail. When it's finally said, the same breath opens a new question, something about it they haven't heard. Holding back means giving them something else meanwhile; a line that only teases or says "stay until the end" isn't holding, it's filler.
-- **The end**: the final payoff, the hook's promise shown on screen, then at most one short call to action. Anything after the payoff plays to a leaving audience.
+- **The end**: the final payoff, the hook's promise shown on screen, then at most one short call to action. If the profile has a product, the problem's `productAware` thought is the doubt a call to action about it must answer; never claim more for the product than the profile says. Anything after the payoff plays to a leaving audience.
 
 For an **explainer** (how something works), read [explainers](references/explainers.md) before drafting.
 
@@ -51,6 +53,7 @@ When the creator rewrites some lines, carry the stylistic differences to the lin
 Hold the script against these, the findings file and the platform notes before delivering it:
 
 - One idea. A list earns its place only when every item proves that idea.
+- With an audience profile: the hook names one of its problems or wants in its words, and speaks to one level of awareness (its thought in `levels` sounds like something this viewer would think).
 - The stake is framed by who it affects and what they want, in words a non-expert knows. Tool names and jargon come once the viewer has a reason to care.
 - Read as the viewer: at each line, ask whether you'd now feel you know the answer and leave. If so before the planned point, move the line or open the next question there. Say what closes the hook's question and when.
 - Every claim is shown. Voice, caption and screen give the same number.
