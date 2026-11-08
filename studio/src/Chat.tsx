@@ -14,7 +14,9 @@ import {CommandMenu, ContextRing, ModePicker, ModelPicker, matchCommands, refres
 // Claude's markdown, with raw HTML shown as text rather than rendered.
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]!);
 marked.use({renderer: {html: ({text}) => esc(text)}, gfm: true, breaks: true});
-export const md = (s: string) => marked.parse(s, {async: false}) as string;
+// A wide table scrolls sideways on its own instead of the whole chat (raw HTML is escaped, so every <table> is marked's).
+export const md = (s: string) =>
+  (marked.parse(s, {async: false}) as string).replace(/<table>/g, '<div class="max-w-full overflow-x-auto"><table>').replace(/<\/table>/g, '</table></div>');
 
 const GENERAL = '_general';
 
