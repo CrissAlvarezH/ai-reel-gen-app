@@ -4,6 +4,8 @@ import {Button} from '@/components/ui/button';
 import {Badge} from '@/components/ui/badge';
 import {Dialog, DialogContent, DialogTitle} from '@/components/ui/dialog';
 import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs';
+import CardGridSkeleton from '@/components/common/CardGridSkeleton';
+import EmptyState from '@/components/common/EmptyState';
 import {api, profileApi, useSocket, type Style} from './api';
 import {useStudio} from './studio';
 
@@ -79,7 +81,7 @@ export function Styles() {
   return (
     <main className="mx-auto max-w-7xl p-6">
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {!styles && !error && <Loader2 className="size-5 animate-spin text-muted-foreground" />}
+      {!styles && !error && <CardGridSkeleton count={6} className="grid-cols-1 sm:grid-cols-2 xl:grid-cols-3" mediaClassName="aspect-auto h-64" progress={false} />}
       {styles && (id ? open ? <StyleDetail style={open} styles={styles} setDefault={setDefault} /> : <NotFound /> : <StyleGrid styles={styles} />)}
     </main>
   );
@@ -113,14 +115,11 @@ function StyleGrid({styles}: {styles: Style[]}) {
         </Button>
       </div>
       {styles.length === 0 ? (
-        <div className="grid place-items-center gap-2 rounded-xl border border-dashed p-16 text-center text-muted-foreground">
-          <Palette className="size-6" />
-          <p className="text-sm">Todavía no hay estilos.</p>
-        </div>
+        <EmptyState icon={Palette} title="Todavía no hay estilos." />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {styles.map((s) => (
-            <a key={s.id} href={`#/estilos/${s.id}`} className="group flex flex-col overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/30">
+          {styles.map((s, i) => (
+            <a key={s.id} href={`#/estilos/${s.id}`} className="group hover-lift animate-fade-in flex flex-col overflow-hidden rounded-xl border bg-card transition-colors hover:border-primary/40" style={{animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: 'both'}}>
               <div className="flex h-64 justify-center gap-2 overflow-hidden border-b bg-muted/30 p-3">
                 {s.examples.length ? (
                   s.examples.slice(0, 3).map((u) => <img key={u} src={u} alt="" loading="lazy" className="h-full min-w-0 flex-1 rounded-sm object-cover object-top" />)
@@ -137,7 +136,7 @@ function StyleGrid({styles}: {styles: Style[]}) {
                 <p className="line-clamp-3 text-sm text-muted-foreground">{s.summary}</p>
                 <div className="mt-auto flex gap-1 pt-2">
                   {s.palette.map((c) => (
-                    <span key={c.hex} title={`${c.name} ${c.hex}`} className="h-3 flex-1 rounded-sm border border-white/10" style={{background: c.hex}} />
+                    <span key={c.hex} title={`${c.name} ${c.hex}`} className="h-3 flex-1 rounded-sm border border-foreground/10" style={{background: c.hex}} />
                   ))}
                 </div>
               </div>
@@ -283,7 +282,7 @@ function StyleDetail({style: s, styles, setDefault}: {style: Style; styles: Styl
             <ul className="flex flex-col gap-2">
               {s.palette.map((c) => (
                 <li key={c.hex} className="flex items-center gap-3">
-                  <span className="size-9 flex-none rounded-md border border-white/10" style={{background: c.hex}} />
+                  <span className="size-9 flex-none rounded-md border border-foreground/10" style={{background: c.hex}} />
                   <span className="min-w-0 text-sm">
                     <span className="font-medium">{c.name}</span> <code className="text-xs text-muted-foreground">{c.hex}</code>
                     <span className="block text-xs text-muted-foreground">{c.meaning}</span>

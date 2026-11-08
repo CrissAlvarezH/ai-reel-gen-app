@@ -1,8 +1,10 @@
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
+import ResizeHandle from '@/components/common/ResizeHandle';
 import {marked} from 'marked';
-import {ArrowUp, Check, History, ImagePlus, Lightbulb, Loader2, PanelRightClose, PanelRightOpen, Plus, Square, Target, Wrench, X} from 'lucide-react';
+import {ArrowUp, Check, History, ImagePlus, Lightbulb, Loader2, PanelRightClose, Plus, Square, Target, Wrench, X} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
+import ListSkeleton from '@/components/common/ListSkeleton';
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {accountApi, chatApi, fmtAgo, fmtTime, inspirationApi, useAgentId, useAgentName, useSocket, type ChatItem, type ChatList, type ChatMeta, type ChatState, type IdeaRef, type InspirationRef} from './api';
 import {AgentLogo} from './AgentLogo';
@@ -392,7 +394,7 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
         </div>
       )}
       <div ref={scroller} onScroll={onScroll} className="flex flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-4">
-        {!st && <p className="text-sm text-muted-foreground">Cargando…</p>}
+        {!st && <ListSkeleton count={3} />}
         {st && st.items.length === 0 && (
           <div className="flex flex-col gap-3 text-sm">
             <p className="font-medium">{slug ? 'Pídeme lo que quieras sobre este video.' : 'Conversación general: ideas, guiones o un video nuevo.'}</p>
@@ -681,14 +683,13 @@ export function AgentPanel({slug}: {slug: string | null}) {
       )}
     >
       {!open && (
-        <button onClick={() => setOpen(true)} title={`Abrir ${agent} (⌘J)`} className="flex h-full w-full flex-col items-center gap-3 py-3 text-muted-foreground hover:bg-muted hover:text-foreground">
-          <PanelRightOpen className="size-4" />
+        <button onClick={() => setOpen(true)} title={`Abrir ${agent} (⌘J)`} className="animate-fade-in flex h-full w-full flex-col items-center gap-3 py-3 text-muted-foreground hover:bg-muted hover:text-foreground">
           <span className="rotate-180 text-xs font-medium [writing-mode:vertical-rl]">{agent}</span>
           {running ? <Loader2 className="size-4 animate-spin text-foreground" /> : unread ? <Unread /> : null}
         </button>
       )}
-      {open && <ResizeEdge />}
-      <div className={cn('flex min-h-0 flex-1 flex-col', !open && 'hidden')}>
+      <ResizeEdge />
+      <div className={cn('animate-fade-in flex min-h-0 flex-1 flex-col', !open && 'hidden')}>
         <div className="flex h-12 flex-none items-center gap-1 border-b pr-1.5 pl-2">
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
             {tabs.map((c) => {
@@ -746,7 +747,7 @@ export function AgentPanel({slug}: {slug: string | null}) {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon-sm" onClick={() => setOpen(false)} title="Recoger (⌘J)">
+          <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={() => setOpen(false)} title="Recoger (⌘J)">
             <PanelRightClose />
           </Button>
         </div>
@@ -756,45 +757,26 @@ export function AgentPanel({slug}: {slug: string | null}) {
   );
 }
 
-// The panel's left edge (md+, where it's a column): drag it to make the panel wider or narrower; a double
-// click goes back to the default width. The width is kept in this browser (studio.tsx).
+// The panel's left edge (md+, where it's a column): drag it to make the panel wider or narrower, in past the halfway
+// point to contract it to its rail, and out from the rail to open it again; a double click goes back to the default width. The width is kept in this browser (store/useStudioStore.ts).
 const MIN_WIDTH = 320;
 function ResizeEdge() {
-  const {chatWidth, setChatWidth} = useStudio();
-  const drag = useRef<{last: number} | null>(null);
-  const widthAt = (x: number) => Math.round(Math.max(MIN_WIDTH, Math.min(window.innerWidth * 0.6, window.innerWidth - x)));
-  const end = () => {
-    if (!drag.current) return;
-    setChatWidth(drag.current.last);
-    drag.current = null;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  };
+  const {chatWidth, setChatWidth, open, setOpen} = useStudio();
   return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Cambiar el ancho del panel"
-      title="Arrastra para cambiar el ancho · doble clic: el ancho por defecto"
-      className="group absolute inset-y-0 -left-1.5 z-10 hidden w-3 cursor-col-resize md:block"
-      onPointerDown={(e) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = {last: chatWidth ?? e.currentTarget.parentElement!.getBoundingClientRect().width};
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
+    <ResizeHandle
+      edge="left"
+      width={chatWidth}
+      min={MIN_WIDTH}
+      max={() => window.innerWidth * 0.6}
+      onResize={setChatWidth}
+      onReset={() => {
+        setChatWidth(null);
+        setOpen(true);
       }}
-      onPointerMove={(e) => {
-        if (!drag.current) return;
-        drag.current.last = widthAt(e.clientX);
-        setChatWidth(drag.current.last, false);
-      }}
-      onPointerUp={end}
-      onPointerCancel={end}
-      onDoubleClick={() => setChatWidth(null)}
-    >
-      <div className="mx-auto h-full w-px bg-transparent transition-colors group-hover:bg-foreground/30 group-active:bg-foreground/50" />
-    </div>
+      collapsed={!open}
+      collapsedWidth={44}
+      onCollapse={(c) => setOpen(!c)}
+      label="Cambiar el ancho del panel"
+    />
   );
 }

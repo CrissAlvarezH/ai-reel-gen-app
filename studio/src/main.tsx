@@ -1,7 +1,9 @@
 import {StrictMode, useEffect, useState} from 'react';
+import ResizeHandle from '@/components/common/ResizeHandle';
 import {createRoot} from 'react-dom/client';
-import {Clapperboard, PanelLeftClose, PanelLeftOpen} from 'lucide-react';
+import {ChevronRight, Clapperboard} from 'lucide-react';
 import {TooltipProvider} from '@/components/ui/tooltip';
+import ThemeToggle from '@/components/common/ThemeToggle';
 import {cn} from '@/lib/utils';
 import {Library} from './Library';
 import {Ideas} from './Ideas';
@@ -21,6 +23,7 @@ import {StudioProvider, loadOpenProject, useStudio} from './studio';
 import {Welcome} from './Welcome';
 import {useSocket, workspaceApi, type WorkspaceStatus} from './api';
 import {ConfirmProvider} from './confirm';
+import './store/useThemeStore'; // follows the system theme while the preference is "system"
 import './index.css';
 
 function useHash() {
@@ -43,39 +46,36 @@ function useRoute() {
   return {page: page as 'account' | 'library' | 'ideas' | 'audience' | 'automations' | 'sources' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new', slug: null};
 }
 
+const PAGE_TITLES: Record<string, string> = {account: 'Mi cuenta', ideas: 'Ideas de contenido', audience: 'Perfil de audiencia', automations: 'Automatizaciones', sources: 'Fuentes de información', inspiration: 'Inspiración', styles: 'Estilos y formatos', formats: 'Estilos y formatos', settings: 'Ajustes', new: 'Nuevo reel'};
+
 function App() {
   const {page, slug} = useRoute();
   const settingsSection = useHash().match(/^#\/ajustes\/([a-z]+)/)?.[1] ?? null;
-  const {open: panelOpen, reelTitle, chatWidth, sideOpen, setSideOpen} = useStudio();
+  const {open: panelOpen, reelTitle, chatWidth, sideOpen, setSideOpen, sideWidth, setSideWidth} = useStudio();
   // On #/nuevo the page itself is the chat: no side panel until the reel exists.
   const panel = page !== 'new';
   const open = panel && panelOpen;
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur">
-        <button
-          onClick={() => setSideOpen(!sideOpen)}
-          title={sideOpen ? 'Contraer el panel lateral (⌘B)' : 'Expandir el panel lateral (⌘B)'}
-          aria-label={sideOpen ? 'Contraer el panel lateral' : 'Expandir el panel lateral'}
-          className="-ml-1.5 hidden rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground lg:block"
-        >
-          {sideOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
-        </button>
-        <a href="#/" className="flex items-center gap-2 font-semibold">
+      <header className="app-titlebar sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur">
+        <a href="#/" className="flex items-center gap-2 rounded-md font-semibold transition-opacity hover:opacity-80">
           <Clapperboard className="size-5" />
           Reel Studio
         </a>
         {page !== 'library' && (
-          <>
-            <span className="text-muted-foreground">/</span>
-            <span className="text-muted-foreground">{slug ? (reelTitle ?? slug) : ({account: 'Mi cuenta', ideas: 'Ideas de contenido', audience: 'Perfil de audiencia', automations: 'Automatizaciones', sources: 'Fuentes de información', inspiration: 'Inspiración', styles: 'Estilos y formatos', formats: 'Estilos y formatos', settings: 'Ajustes', new: 'Nuevo reel'} as Record<string, string>)[page]}</span>
-          </>
+          <nav aria-label="Ruta" className="flex min-w-0 items-center gap-1.5 text-sm">
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="truncate font-medium text-foreground" aria-current="page">{slug ? (reelTitle ?? slug) : PAGE_TITLES[page]}</span>
+          </nav>
         )}
+        <div className="ml-auto flex items-center gap-1">
+          <ThemeToggle />
+        </div>
       </header>
       {/* agents sidebar (lg+) · page · Claude panel */}
       <div
         className={cn(
-          'grid items-start',
+          'app-grid grid items-start',
           !panel
             ? 'lg:grid-cols-[var(--side-lg)_minmax(0,1fr)] 2xl:grid-cols-[var(--side-2xl)_minmax(0,1fr)]'
             : open
@@ -86,15 +86,39 @@ function App() {
         // (Chat.tsx), never more than 60 % of the window, even if it shrinks.
         style={
           {
-            '--side-lg': sideOpen ? '240px' : '56px',
-            '--side-2xl': sideOpen ? '260px' : '56px',
+            '--side-lg': sideOpen ? `${sideWidth ?? 240}px` : '56px',
+            '--side-2xl': sideOpen ? `${sideWidth ?? 260}px` : '56px',
             ...(open && chatWidth ? {'--chat-w': `min(${chatWidth}px, 60vw)`} : {}),
           } as React.CSSProperties
         }
       >
-        <Sidebar slug={slug} page={page} />
+        {/* The sidebar, with its right edge draggable (its width is kept, store/useStudioStore.ts). */}
+        <div className="relative hidden lg:block">
+          <Sidebar slug={slug} page={page} />
+          {/* Drag in past the halfway point and it contracts to its icons; drag out and it opens again. */}
+          <ResizeHandle
+            edge="right"
+            width={sideWidth}
+            min={200}
+            max={() => Math.min(420, window.innerWidth * 0.3)}
+            onResize={setSideWidth}
+            onReset={() => {
+              setSideWidth(null);
+              setSideOpen(true);
+            }}
+            collapsed={!sideOpen}
+            collapsedWidth={56}
+            onCollapse={(c) => setSideOpen(!c)}
+            label="Cambiar el ancho del panel lateral"
+          />
+        </div>
         {/* each column scrolls on its own (md+), so scrolling the chat never moves the page */}
-        <div className="min-w-0 md:h-[calc(100vh-3.5rem)] md:overflow-y-auto md:overscroll-contain">{slug ? <ReelView key={slug} slug={slug} /> : page === 'account' ? <Account /> : page === 'ideas' ? <Ideas /> : page === 'audience' ? <AudiencePage /> : page === 'automations' ? <Automations /> : page === 'sources' ? <Sources /> : page === 'inspiration' ? <Inspiration /> : page === 'styles' ? <Styles /> : page === 'formats' ? <Formats /> : page === 'settings' ? <Settings section={settingsSection} /> : page === 'new' ? <NewReel /> : <Library />}</div>
+        <div className="min-w-0 md:h-[calc(100vh-3.5rem)] md:overflow-y-auto md:overscroll-contain">
+          {/* a new key on every route replays the entrance animation (animate-page-in, index.css) */}
+          <div key={`${page}/${slug ?? ''}/${settingsSection ?? ''}`} className="animate-page-in">
+            {slug ? <ReelView key={slug} slug={slug} /> : page === 'account' ? <Account /> : page === 'ideas' ? <Ideas /> : page === 'audience' ? <AudiencePage /> : page === 'automations' ? <Automations /> : page === 'sources' ? <Sources /> : page === 'inspiration' ? <Inspiration /> : page === 'styles' ? <Styles /> : page === 'formats' ? <Formats /> : page === 'settings' ? <Settings section={settingsSection} /> : page === 'new' ? <NewReel /> : <Library />}
+          </div>
+        </div>
         {panel && <AgentPanel slug={slug} />}
       </div>
     </>
@@ -131,7 +155,15 @@ function Root() {
     },
     () => void load(),
   );
-  if (!ws) return <p className="p-6 text-sm text-muted-foreground">{err || 'Cargando…'}</p>;
+  if (!ws)
+    return (
+      <div className="grid min-h-screen place-items-center p-6">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <Clapperboard className={err ? 'size-10 text-muted-foreground' : 'size-10 animate-pulse text-muted-foreground'} />
+          {err ? <p className="max-w-sm text-sm text-destructive">{err}</p> : <p className="text-xs text-muted-foreground">Cargando…</p>}
+        </div>
+      </div>
+    );
   if (welcome)
     return (
       <Welcome

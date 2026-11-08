@@ -15,15 +15,16 @@ import {fmtTime} from './api';
 // module's fields (tags stop working until a reload). Reload the page instead.
 if (import.meta.hot) import.meta.hot.accept(() => location.reload());
 
+// Colours are CSS variables (index.css, --beat-*): lighter on the dark theme, deeper on the light one.
 export const BEATS: Record<BeatTag, {label: string; color: string; hint: string}> = {
-  hook: {label: 'Hook', color: '#fb7185', hint: '0–3 s: lo que está en juego'},
-  contexto: {label: 'Contexto', color: '#38bdf8', hint: 'Responde al hook o sube lo que está en juego'},
-  rehook: {label: 'Re-hook', color: '#fbbf24', hint: 'Un giro que reengancha'},
-  desarrollo: {label: 'Desarrollo', color: '#a78bfa', hint: 'La explicación'},
-  ejemplo: {label: 'Ejemplo', color: '#2dd4bf', hint: 'Un caso, analogía o demo'},
-  payoff: {label: 'Payoff', color: '#34d399', hint: 'Cumple la promesa del hook'},
-  cta: {label: 'CTA', color: '#fb923c', hint: 'Seguir, guardar, comentar'},
-  cierre: {label: 'Cierre', color: '#a1a1aa', hint: 'El remate final'},
+  hook: {label: 'Hook', color: 'var(--beat-hook)', hint: '0–3 s: lo que está en juego'},
+  contexto: {label: 'Contexto', color: 'var(--beat-contexto)', hint: 'Responde al hook o sube lo que está en juego'},
+  rehook: {label: 'Re-hook', color: 'var(--beat-rehook)', hint: 'Un giro que reengancha'},
+  desarrollo: {label: 'Desarrollo', color: 'var(--beat-desarrollo)', hint: 'La explicación'},
+  ejemplo: {label: 'Ejemplo', color: 'var(--beat-ejemplo)', hint: 'Un caso, analogía o demo'},
+  payoff: {label: 'Payoff', color: 'var(--beat-payoff)', hint: 'Cumple la promesa del hook'},
+  cta: {label: 'CTA', color: 'var(--beat-cta)', hint: 'Seguir, guardar, comentar'},
+  cierre: {label: 'Cierre', color: 'var(--beat-cierre)', hint: 'El remate final'},
 };
 
 export type ScriptValue = {text: string; beats: Beat[]};

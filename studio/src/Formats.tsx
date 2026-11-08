@@ -1,8 +1,10 @@
 import {useEffect, useState} from 'react';
-import {ChevronLeft, Film, Loader2, Mic, Video} from 'lucide-react';
+import {ChevronLeft, Film, Mic, Video} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Dialog, DialogContent, DialogTitle} from '@/components/ui/dialog';
 import {cn} from '@/lib/utils';
+import CardGridSkeleton from '@/components/common/CardGridSkeleton';
+import EmptyState from '@/components/common/EmptyState';
 import {api, useSocket, type ReelFormat} from './api';
 import {useStudio} from './studio';
 import {StylesFormatsTabs} from './Styles';
@@ -42,7 +44,7 @@ export function Formats() {
   const open = id ? formats?.find((f) => f.id === id) : undefined;
   return (
     <main className="mx-auto max-w-7xl p-6">
-      {!formats && <Loader2 className="size-5 animate-spin text-muted-foreground" />}
+      {!formats && <CardGridSkeleton count={6} className="grid-cols-1 sm:grid-cols-2 xl:grid-cols-3" mediaClassName="aspect-auto h-64" progress={false} />}
       {formats && (id ? open ? <FormatDetail format={open} /> : <NotFound /> : <FormatGrid formats={formats} />)}
     </main>
   );
@@ -76,14 +78,11 @@ function FormatGrid({formats}: {formats: ReelFormat[]}) {
         <StylesFormatsTabs value="formats" />
       </div>
       {formats.length === 0 ? (
-        <div className="grid place-items-center gap-2 rounded-xl border border-dashed p-16 text-center text-muted-foreground">
-          <Film className="size-6" />
-          <p className="text-sm">Todavía no hay formatos.</p>
-        </div>
+        <EmptyState icon={Film} title="Todavía no hay formatos." />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {formats.map((f) => (
-            <a key={f.id} href={`#/formatos/${f.id}`} className="group flex flex-col overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/30">
+          {formats.map((f, i) => (
+            <a key={f.id} href={`#/formatos/${f.id}`} className="group hover-lift animate-fade-in flex flex-col overflow-hidden rounded-xl border bg-card transition-colors hover:border-primary/40" style={{animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: 'both'}}>
               <div className="flex h-64 justify-center gap-2 overflow-hidden border-b bg-muted/30 p-3">
                 {f.examples.length ? (
                   f.examples.slice(0, 3).map((u) => <img key={u} src={u} alt="" loading="lazy" className="h-full min-w-0 flex-1 rounded-sm object-cover object-top" />)

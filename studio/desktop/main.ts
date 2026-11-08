@@ -6,12 +6,14 @@
 // then the files a new workspace starts with come inside the app (Resources/workspace, see server/workspace.ts).
 import path from 'node:path';
 import {spawn, type ChildProcess} from 'node:child_process';
-import {app, BrowserWindow, dialog, ipcMain, shell} from 'electron';
+import {app, BrowserWindow, dialog, ipcMain, nativeTheme, shell} from 'electron';
 
 const STUDIO = path.resolve(import.meta.dirname, '..');
 const PORT = Number(process.env.PORT ?? 4000);
 const URL = `http://localhost:${PORT}`;
-const BG = '#0a0a0a'; // the UI's dark background, so the window doesn't flash white
+// The UI's background for the system theme (src/index.css: oklch(0.16 0.025 290) dark, white light), so the window doesn't flash.
+const bg = () => (nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff');
+const fg = () => (nativeTheme.shouldUseDarkColors ? '#a1a1a1' : '#737373');
 
 let server: ChildProcess | null = null; // only set when this app started it
 let log = '';
@@ -58,7 +60,7 @@ async function ensureServer(): Promise<void> {
 
 const page = (body: string) =>
   `data:text/html;charset=utf-8,${encodeURIComponent(
-    `<!doctype html><html><body style="margin:0;height:100vh;display:grid;place-items:center;background:${BG};color:#a1a1a1;font:14px -apple-system,system-ui,'Segoe UI',sans-serif;-webkit-app-region:drag">${body}</body></html>`,
+    `<!doctype html><html><body style="margin:0;height:100vh;display:grid;place-items:center;background:${bg()};color:${fg()};font:14px -apple-system,system-ui,'Segoe UI',sans-serif;-webkit-app-region:drag">${body}</body></html>`,
   )}`;
 const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'})[c]!);
 
@@ -69,7 +71,7 @@ async function open() {
     minWidth: 900,
     minHeight: 600,
     title: 'Reel Studio',
-    backgroundColor: BG,
+    backgroundColor: bg(),
     webPreferences: {preload: path.join(import.meta.dirname, 'preload.cjs')},
     // Native Mac look: no title bar, traffic lights inside the app's header (src/index.css .desktop).
     // Windows and Linux keep the system's frame and buttons.

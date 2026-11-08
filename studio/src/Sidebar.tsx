@@ -55,20 +55,20 @@ function subtitle(a: Agent, st: AgentState) {
 }
 
 // A page of the sidebar: its icon and name, or only the icon (named on hover) when contracted.
-function NavLink({href, icon: I, label, active, compact, first, children}: {href: string; icon: typeof UserRound; label: string; active: boolean; compact: boolean; first?: boolean; children?: React.ReactNode}) {
+function NavLink({href, icon: I, label, active, compact, children}: {href: string; icon: typeof UserRound; label: string; active: boolean; compact: boolean; children?: React.ReactNode}) {
   return (
     <a
       href={href}
       title={compact ? label : undefined}
+      aria-current={active ? 'page' : undefined}
       className={cn(
-        'mx-2 flex items-center gap-2 rounded-md py-1.5 text-sm hover:bg-muted',
-        first ? 'mt-3' : 'mt-0.5',
+        'mx-2 mt-0.5 flex items-center gap-2 rounded-md py-1.5 text-sm transition-colors duration-150',
         compact ? 'relative justify-center px-0' : 'px-2',
-        active && 'bg-muted font-medium',
+        active ? 'bg-primary/10 font-medium text-primary' : 'text-foreground/80 hover:bg-muted hover:text-foreground',
       )}
     >
       <I className="size-4 flex-none" />
-      {!compact && <span className="flex-1">{label}</span>}
+      {!compact && <span className="animate-fade-in flex-1 truncate">{label}</span>}
       {children && (compact ? <span className="absolute -top-0.5 -right-0.5 scale-75">{children}</span> : children)}
     </a>
   );
@@ -89,6 +89,31 @@ function Posted({p}: {p: NonNullable<ReelSummary['instagram']>}) {
     </a>
   );
 }
+
+// The pages, in groups (their names are hidden when contracted).
+const GROUPS: {label: string; pages: {href: string; icon: typeof UserRound; label: string; is: Page[]}[]}[] = [
+  {
+    label: 'Crear',
+    pages: [
+      {href: '#/', icon: LayoutGrid, label: 'Biblioteca', is: ['library']},
+      {href: '#/ideas', icon: Lightbulb, label: 'Ideas de contenido', is: ['ideas']},
+      {href: '#/estilos', icon: Palette, label: 'Estilos y formatos', is: ['styles', 'formats']},
+    ],
+  },
+  {
+    label: 'Analizar',
+    pages: [
+      {href: '#/cuenta', icon: UserRound, label: 'Mi cuenta', is: ['account']},
+      {href: '#/audiencia', icon: Target, label: 'Perfil de audiencia', is: ['audience']},
+      {href: '#/inspiracion', icon: Sparkles, label: 'Inspiración', is: ['inspiration']},
+      {href: '#/fuentes', icon: Newspaper, label: 'Fuentes de información', is: ['sources']},
+    ],
+  },
+  {
+    label: 'Automatizar',
+    pages: [{href: '#/automatizaciones', icon: CalendarClock, label: 'Automatizaciones', is: ['automations']}],
+  },
+];
 
 export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   const {setOpen, sideOpen} = useStudio();
@@ -146,16 +171,30 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   return (
     <nav className="sticky top-14 hidden h-[calc(100vh-3.5rem)] flex-col overflow-hidden border-r bg-card/40 lg:flex">
       <ProjectPicker compact={compact} />
-      <NavLink href="#/cuenta" icon={UserRound} label="Mi cuenta" active={page === 'account'} compact={compact} first />
-      <NavLink href="#/" icon={LayoutGrid} label="Biblioteca" active={page === 'library'} compact={compact}>
-        {generalState}
-      </NavLink>
-      <NavLink href="#/audiencia" icon={Target} label="Perfil de audiencia" active={page === 'audience'} compact={compact} />
-      <NavLink href="#/ideas" icon={Lightbulb} label="Ideas de contenido" active={page === 'ideas'} compact={compact} />
-      <NavLink href="#/automatizaciones" icon={CalendarClock} label="Automatizaciones" active={page === 'automations'} compact={compact} />
-      <NavLink href="#/fuentes" icon={Newspaper} label="Fuentes de información" active={page === 'sources'} compact={compact} />
-      <NavLink href="#/inspiracion" icon={Sparkles} label="Inspiración" active={page === 'inspiration'} compact={compact} />
-      <NavLink href="#/estilos" icon={Palette} label="Estilos y formatos" active={page === 'styles' || page === 'formats'} compact={compact} />
+      {/* The main action, always at hand. */}
+      <a
+        href="#/nuevo"
+        title={compact ? 'Nuevo video' : undefined}
+        aria-label={compact ? 'Nuevo video' : undefined}
+        aria-current={page === 'new' ? 'page' : undefined}
+        className={cn(
+          'mx-2 mt-2 flex flex-none items-center justify-center gap-2 rounded-md bg-primary text-sm font-medium text-primary-foreground shadow-sm transition-all duration-150 hover:bg-primary/90 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-[0.98]',
+          compact ? 'h-8' : 'h-9 px-3',
+        )}
+      >
+        <Plus className="size-4 flex-none" />
+        {!compact && <span className="animate-fade-in truncate">Nuevo video</span>}
+      </a>
+      {GROUPS.map((g) => (
+        <div key={g.label} className={cn('flex flex-none flex-col', compact ? 'mx-2 mt-2 border-t pt-1.5 [&>a]:mx-0' : 'mt-3')}>
+          {!compact && <p className="animate-fade-in px-4 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{g.label}</p>}
+          {g.pages.map((p) => (
+            <NavLink key={p.href} href={p.href} icon={p.icon} label={p.label} active={p.is.includes(page)} compact={compact}>
+              {p.href === '#/' ? generalState : undefined}
+            </NavLink>
+          ))}
+        </div>
+      ))}
       {rows.length > 0 &&
         (compact ? (
           <div className="mx-2 mt-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain border-t pt-3">
@@ -164,7 +203,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
                 key={a.key}
                 onClick={() => go(a)}
                 title={`${a.title ?? a.slug} · ${STATE_LABEL[st]}`}
-                className={cn('relative flex justify-center rounded-md py-2 hover:bg-muted', a.slug === slug && 'bg-muted')}
+                className={cn('relative flex justify-center rounded-md py-2 transition-colors duration-150 hover:bg-muted', a.slug === slug && 'bg-primary/10 hover:bg-primary/10')}
               >
                 <StateGlyph state={st} />
                 <AgentLogo agent={a.agent ?? inUse} className="absolute right-1.5 bottom-1 size-2.5" />
@@ -181,7 +220,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
                 href="#/nuevo"
                 title="Nuevo video"
                 aria-label="Nuevo video"
-                className="-my-1.5 flex-none rounded-md p-1.5 text-muted-foreground opacity-0 group-hover/videos:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100"
+                className="-my-1.5 flex-none rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity group-hover/videos:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100"
               >
                 <Plus className="size-4" />
               </a>
@@ -189,7 +228,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
             {/* Only the video list scrolls; the pages above and Ajustes below stay put. */}
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {rows.map(({a, st}) => (
-                <div key={a.key} className={cn('group mx-2 flex items-center rounded-md hover:bg-muted', a.slug === slug && 'bg-muted')}>
+                <div key={a.key} className={cn('group mx-2 flex items-center rounded-md transition-colors duration-150 hover:bg-muted', a.slug === slug && 'bg-primary/10 hover:bg-primary/10')}>
                   <button onClick={() => go(a)} className="flex min-w-0 flex-1 flex-col gap-1 py-2 pl-2 text-left">
                     <span className="flex items-center gap-2 text-sm">
                       <StateIcon state={st} />

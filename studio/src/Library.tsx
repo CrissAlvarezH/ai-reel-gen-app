@@ -5,6 +5,9 @@ import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {Input} from '@/components/ui/input';
+import PageSkeleton from '@/components/common/PageSkeleton';
+import CardGridSkeleton from '@/components/common/CardGridSkeleton';
+import EmptyState from '@/components/common/EmptyState';
 import {api, fmtAgo, fmtTime, useLive, type ReelSummary} from './api';
 import {ReelProgressMini} from './ReelProgress';
 import {useStudio} from './studio';
@@ -92,7 +95,12 @@ export function Library() {
   useLive(load);
 
   if (err) return <p className="p-6 text-destructive">{err}</p>;
-  if (!reels) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (!reels)
+    return (
+      <PageSkeleton>
+        <CardGridSkeleton announce={false} />
+      </PageSkeleton>
+    );
   return (
     <main className="mx-auto max-w-7xl p-6">
       <div className="mb-6 flex items-center justify-between gap-4">
@@ -111,30 +119,25 @@ export function Library() {
       </div>
       {reels.length === 0 ? (
         /* No videos yet: an invitation, not a bare count. Same door as the button above (#/nuevo). */
-        <div className="grid place-items-center rounded-lg border border-dashed py-20">
-          <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-            <div className="grid size-12 place-items-center rounded-full bg-muted">
-              <Film className="size-6 text-muted-foreground" />
-            </div>
-            <div>
-              <h2 className="font-semibold">Aún no hay videos en este proyecto</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Abre una conversación con el agente: le cuentas la idea, la analiza contigo y luego crea el video.
-              </p>
-            </div>
+        <EmptyState
+          icon={Film}
+          className="rounded-lg py-20"
+          title="Aún no hay videos en este proyecto"
+          description="Abre una conversación con el agente: le cuentas la idea, la analiza contigo y luego crea el video."
+          action={
             <Button asChild>
               <a href="#/nuevo">
                 <Plus /> Crear el primer video
               </a>
             </Button>
-          </div>
-        </div>
+          }
+        />
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
-          {reels.map((r) => (
-            <div key={r.slug} className="group relative">
+          {reels.map((r, i) => (
+            <div key={r.slug} className="group hover-lift animate-fade-in relative rounded-xl" style={{animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: 'both'}}>
               <a href={`#/reel/${r.slug}`} className="block h-full">
-                <Card className="h-full gap-0 overflow-hidden py-0 transition-colors group-hover:border-foreground/30">
+                <Card className="h-full gap-0 overflow-hidden py-0 transition-colors group-hover:border-primary/40">
                   <div className="relative grid aspect-[3/4] place-items-center overflow-hidden bg-muted">
                     {r.instagram && <PostedBadge p={r.instagram} />}
                     {r.thumb ? (

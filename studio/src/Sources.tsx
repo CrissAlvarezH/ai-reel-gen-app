@@ -13,6 +13,8 @@ import {Switch} from '@/components/ui/switch';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
+import PageSkeleton from '@/components/common/PageSkeleton';
+import ListSkeleton from '@/components/common/ListSkeleton';
 import {fmtAgo, sourcesApi, useSocket, type Source, type SourceInput, type SourceItemDetail, type SourceItemList, type SourceItemState, type SourcesView} from './api';
 import {useConfirm} from './confirm';
 import {useStudio} from './studio';
@@ -110,7 +112,14 @@ export function Sources() {
   };
   const toggle = (s: Source, enabled: boolean) => sourcesApi.edit(s.id, {enabled}).then(setView, (e: Error) => setErr(e.message));
 
-  if (!view) return <p className="p-6 text-sm text-muted-foreground">{err || 'Cargando…'}</p>;
+  if (err && !view) return <p className="p-6 text-sm text-destructive">{err}</p>;
+  if (!view)
+    return (
+      <PageSkeleton>
+        <ListSkeleton count={3} announce={false} />
+        <ListSkeleton variant="table" count={6} announce={false} />
+      </PageSkeleton>
+    );
   const active = view.sources.filter((s) => s.enabled);
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-6 p-6">
@@ -460,7 +469,7 @@ function Results({view, sourceFilter, setSourceFilter}: {view: SourcesView; sour
         <div className="ml-auto">{cols.picker}</div>
       </div>
       {err && <p className="text-sm text-destructive">{err}</p>}
-      {!data && !err && <p className="text-sm text-muted-foreground">Cargando…</p>}
+      {!data && !err && <ListSkeleton variant="table" count={8} />}
       {data && total === 0 && <p className="text-sm text-muted-foreground">{active ? 'Ningún resultado cumple esos filtros.' : 'Todavía no hay resultados: pulsa Extraer en una fuente.'}</p>}
       {data && total > 0 && (
         <div className="overflow-x-auto rounded-lg border">
@@ -604,7 +613,7 @@ function ItemDialog({id, sources, onClose}: {id: string | null; sources: Source[
         {!it || it.id !== id ? (
           <>
             <DialogTitle className="sr-only">Resultado</DialogTitle>
-            <p className="text-sm text-muted-foreground">{err || 'Cargando…'}</p>
+            {err ? <p className="text-sm text-destructive">{err}</p> : <ListSkeleton variant="lines" count={10} />}
           </>
         ) : (
           <>

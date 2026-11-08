@@ -12,6 +12,7 @@ import {Slider} from '@/components/ui/slider';
 import {Switch} from '@/components/ui/switch';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
+import ListSkeleton from '@/components/common/ListSkeleton';
 import {FPS_OPTIONS, PLATFORM_FORMATS, platformFormat, type Format} from '../shared/types';
 import {profileApi, voiceApi, type Profile, type Voice, type VoiceModel, type VoiceOption, type VoiceSample} from './api';
 import {useStyles} from './StylePicker';
@@ -102,7 +103,7 @@ export function ProfileCard() {
         <CardDescription>Quién hace los videos y cómo. El agente lo recibe en cada mensaje y manda sobre lo que digan las skills.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {!p && !f.err && <p className="text-sm text-muted-foreground">Cargando…</p>}
+        {!p && !f.err && <ListSkeleton variant="lines" count={6} />}
         {p && (
           <>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -154,7 +155,7 @@ export function ProjectRulesCard() {
         <CardDescription>Para quién es este canal y qué debe seguir el agente en él. Lo recibe en cada mensaje y manda sobre lo que digan las skills.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {!p && !f.err && <p className="text-sm text-muted-foreground">Cargando…</p>}
+        {!p && !f.err && <ListSkeleton variant="lines" count={6} />}
         {p && (
           <>
             <Field label="Público">
@@ -203,7 +204,7 @@ function StyleField({value, onChange}: {value: string | null; onChange: (id: str
               <span className="flex items-center gap-2">
                 <span className="flex gap-0.5">
                   {s.palette.slice(0, 4).map((c) => (
-                    <span key={c.hex} className="size-2.5 rounded-full border border-white/15" style={{background: c.hex}} />
+                    <span key={c.hex} className="size-2.5 rounded-full border border-foreground/15" style={{background: c.hex}} />
                   ))}
                 </span>
                 {s.name}

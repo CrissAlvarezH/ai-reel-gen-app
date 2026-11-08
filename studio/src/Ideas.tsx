@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {BookOpen, Bot, Brain, Briefcase, Camera, ChevronDown, Clapperboard, Code, Cpu, Dumbbell, Flame, FlaskConical, Gamepad2, Globe, GraduationCap, Heart, HeartPulse, House, Landmark, Leaf, Lightbulb, Loader2, Megaphone, MessageCircle, MessageSquarePlus, Mic, MoreHorizontal, Music, Newspaper, Palette, PenTool, Pencil, PiggyBank, Plane, Plus, Rocket, Scale, Settings2, Shield, Sparkles, Star, Target, Trash2, TrendingUp, Trophy, Users, Utensils, Wallet, type LucideIcon} from 'lucide-react';
+import {BookOpen, Bot, Brain, Briefcase, Camera, ChevronDown, Clapperboard, Code, Cpu, Dumbbell, Flame, FlaskConical, Gamepad2, Globe, GraduationCap, Heart, HeartPulse, House, Landmark, Leaf, Lightbulb, Megaphone, MessageCircle, MessageSquarePlus, Mic, MoreHorizontal, Music, Newspaper, Palette, PenTool, Pencil, PiggyBank, Plane, Plus, Rocket, Scale, Settings2, Shield, Sparkles, Star, Target, Trash2, TrendingUp, Trophy, Users, Utensils, Wallet, type LucideIcon} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@/components/ui/collapsible';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@/components/ui/dialog';
@@ -9,6 +9,7 @@ import {Label} from '@/components/ui/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
+import BoardSkeleton from '@/components/common/BoardSkeleton';
 import {IDEA_COLORS, IDEA_ICONS} from '../shared/types';
 import {ideasApi, useSocket, type Idea, type IdeaVertical, type IdeaColor, type IdeaIcon, type IdeaList, type IdeasBoard} from './api';
 import {useConfirm} from './confirm';
@@ -185,7 +186,7 @@ export function Ideas() {
     if (board && filter && !board.verticals.some((c) => c.id === filter)) setFilter(null);
   }, [board, filter]);
 
-  if (!board) return <main className="p-6">{err ? <p className="text-destructive">{err}</p> : <Loader2 className="size-5 animate-spin text-muted-foreground" />}</main>;
+  if (!board) return err ? <main className="p-6"><p className="text-destructive">{err}</p></main> : <BoardSkeleton />;
 
   // The vertical being filtered: the page around the lists takes its colour (.vertical-page and .vertical-theme in index.css).
   const active = board.verticals.find((v) => v.id === filter);

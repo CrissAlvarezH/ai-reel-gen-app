@@ -16,6 +16,9 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/c
 import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {cn} from '@/lib/utils';
+import PageSkeleton from '@/components/common/PageSkeleton';
+import ListSkeleton from '@/components/common/ListSkeleton';
+import CardGridSkeleton from '@/components/common/CardGridSkeleton';
 import {fmtAgo, fmtTime, inspirationApi, useSocket, type InspirationAccount, type InspirationJob, type InspirationList, type InspirationReel, type InspirationStatus} from './api';
 import type {InspirationRow} from '../shared/types';
 import {BEAT_TAGS, MAX_ACCOUNT_REELS, MAX_ANALYSIS_SECONDS} from '../shared/types';
@@ -81,7 +84,12 @@ export function Inspiration() {
   uiRef.current = {page: 'inspiration', ...(!highlights && current && current !== LOOSE && current !== ALL ? {inspiration: `@${current}${code ? `/${code}` : ''}`} : {})};
 
   if (err) return <p className="p-6 text-destructive">{err}</p>;
-  if (!st) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (!st)
+    return (
+      <PageSkeleton>
+        <ListSkeleton variant="table" count={8} announce={false} />
+      </PageSkeleton>
+    );
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-6 p-6">
       <div className="flex flex-wrap items-start gap-4">
@@ -347,14 +355,14 @@ function HighlightCard({account: a, rows, open, onOpenChange, transcriber}: {acc
             {a.error && !job && <p className="text-sm text-destructive">{a.error}</p>}
             {err && <p className="text-sm text-destructive">{err}</p>}
             {!rows ? (
-              <p className="text-sm text-muted-foreground">Cargando…</p>
+              <CardGridSkeleton count={5} className="grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" mediaClassName="aspect-[9/16]" progress={false} />
             ) : !rows.length ? (
               <p className="text-sm text-muted-foreground">{a.median == null ? 'Aún no hay mediana: faltan reels para comparar.' : 'Ningún reel supera su mediana todavía.'}</p>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                {rows.map((r) => (
-                  <button key={r.code} type="button" onClick={() => go(HIGHLIGHTS, r.code)} className="group/reel flex min-w-0 flex-col gap-1.5 text-left">
-                    <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-muted ring-foreground/40 group-hover/reel:ring-2">
+                {rows.map((r, i) => (
+                  <button key={r.code} type="button" onClick={() => go(HIGHLIGHTS, r.code)} className="group/reel animate-fade-in flex min-w-0 flex-col gap-1.5 text-left" style={{animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: 'both'}}>
+                    <div className="hover-lift relative aspect-[9/16] overflow-hidden rounded-lg bg-muted ring-primary/40 group-hover/reel:ring-2">
                       {r.thumb && <img src={inspirationApi.file(r, 'thumb.jpg')} alt="" loading="lazy" className="size-full object-cover" />}
                       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/85 to-transparent px-2 pt-8 pb-2">
                         <span className="text-lg font-semibold text-emerald-400 tabular-nums">{r.ratio != null ? `${r.ratio.toFixed(1)}×` : '—'}</span>
@@ -945,7 +953,7 @@ function ReelsView({
         <div className="ml-auto">{cols.picker}</div>
       </div>
 
-      {!rows && !err && <p className="text-sm text-muted-foreground">Cargando…</p>}
+      {!rows && !err && <ListSkeleton variant="table" count={8} />}
       {rows && total === 0 && !job && <p className="text-sm text-muted-foreground">{active ? 'Ningún reel cumple esos filtros.' : 'Todavía no hay reels.'}</p>}
       {rows && total > 0 && (
         <div className="overflow-x-auto rounded-lg border">

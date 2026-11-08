@@ -49,6 +49,7 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* shadcn's neutral palette, now used in both themes (the light one existed but <html> was always .dark). */
 :root {
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -118,12 +119,64 @@
     --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* The app was dark-only, and its pages use the palette's light shades (text-amber-400, bg-zinc-400...) that vanish on
+   white. In light mode, those shades take darker ones' values (Tailwind v4's own, written out: a variable can't be
+   defined from itself), so the same classes stay readable. Utilities read var(--color-…), so this is enough. */
+:root:not(.dark) {
+    --color-amber-300: oklch(55.5% 0.163 48.998);
+    --color-amber-400: oklch(55.5% 0.163 48.998);
+    --color-amber-500: oklch(66.6% 0.179 58.318);
+    --color-yellow-300: oklch(55.4% 0.135 66.442);
+    --color-yellow-400: oklch(55.4% 0.135 66.442);
+    --color-orange-300: oklch(55.3% 0.195 38.402);
+    --color-orange-400: oklch(55.3% 0.195 38.402);
+    --color-lime-300: oklch(53.2% 0.157 131.589);
+    --color-lime-400: oklch(53.2% 0.157 131.589);
+    --color-green-300: oklch(52.7% 0.154 150.069);
+    --color-green-400: oklch(52.7% 0.154 150.069);
+    --color-green-500: oklch(62.7% 0.194 149.214);
+    --color-emerald-300: oklch(50.8% 0.118 165.612);
+    --color-emerald-400: oklch(50.8% 0.118 165.612);
+    --color-emerald-500: oklch(59.6% 0.145 163.225);
+    --color-teal-300: oklch(51.1% 0.096 186.391);
+    --color-teal-400: oklch(51.1% 0.096 186.391);
+    --color-cyan-300: oklch(52% 0.105 223.128);
+    --color-cyan-400: oklch(52% 0.105 223.128);
+    --color-sky-300: oklch(50% 0.134 242.749);
+    --color-sky-400: oklch(50% 0.134 242.749);
+    --color-blue-300: oklch(48.8% 0.243 264.376);
+    --color-blue-400: oklch(54.6% 0.245 262.881);
+    --color-indigo-300: oklch(45.7% 0.24 277.023);
+    --color-indigo-400: oklch(51.1% 0.262 276.966);
+    --color-violet-300: oklch(49.1% 0.27 292.581);
+    --color-violet-400: oklch(54.1% 0.281 293.009);
+    --color-purple-300: oklch(49.6% 0.265 301.924);
+    --color-purple-400: oklch(55.8% 0.288 302.321);
+    --color-fuchsia-300: oklch(51.8% 0.253 323.949);
+    --color-fuchsia-400: oklch(59.1% 0.293 322.896);
+    --color-pink-300: oklch(52.5% 0.223 3.958);
+    --color-pink-400: oklch(59.2% 0.249 0.584);
+    --color-rose-300: oklch(51.4% 0.222 16.935);
+    --color-rose-400: oklch(58.6% 0.253 17.585);
+    --color-red-300: oklch(50.5% 0.213 27.518);
+    --color-red-400: oklch(57.7% 0.245 27.325);
+    --color-zinc-300: oklch(37% 0.013 285.805);
+    --color-zinc-400: oklch(55.2% 0.016 285.938);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
     }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "kern", "liga", "calt";
+    }
+  h1, h2, h3 {
+    letter-spacing: -0.02em;
     }
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
@@ -131,15 +184,82 @@
   html {
     @apply font-sans;
     }
+  button, a, input, [role="button"] {
+    transition: background-color .15s, color .15s, border-color .15s, box-shadow .15s;
+    }
 }
-/* Desktop app (Electron, desktop/main.ts): the header doubles as the title bar, with the Mac window
+
+/* Motion: page entrance, fades, lift on hover and skeleton shimmer. */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -50% 0; }
+}
+.animate-page-in {
+  animation: page-in 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.animate-fade-in {
+  animation: fade-in 200ms ease-out both;
+}
+.hover-lift {
+  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color .15s, color .15s, border-color .15s;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -8px color-mix(in oklab, var(--primary) 35%, transparent),
+    0 2px 6px -2px color-mix(in oklab, var(--primary) 20%, transparent);
+}
+.shimmer {
+  background-color: var(--muted);
+  background-image: linear-gradient(90deg,
+    var(--muted) 0%,
+    color-mix(in oklab, var(--muted) 40%, var(--background)) 50%,
+    var(--muted) 100%);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  /* shadcn/tailwind.css has a text-shimmer utility of the same name: undo its text clipping. */
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: currentColor;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.dark .shimmer {
+  background-image: linear-gradient(90deg,
+    var(--muted) 0%,
+    color-mix(in oklab, var(--muted) 88%, var(--foreground)) 50%,
+    var(--muted) 100%);
+}
+/* useThemeStore adds this for an instant while switching, so everything changes colour at once. */
+.theme-switching *, .theme-switching *::before, .theme-switching *::after {
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .hover-lift:hover {
+    transform: none;
+  }
+}
+/* Desktop app (Electron, desktop/main.ts): the app's header (.app-titlebar, main.tsx; not any <header>) doubles as the title bar, with the Mac window
    buttons on its left. Drag the window from it; its links and buttons still click. */
-.desktop header {
+.desktop .app-titlebar {
   padding-left: 88px;
   -webkit-app-region: drag;
   user-select: none;
 }
-.desktop header :is(a, button, input) {
+.desktop .app-titlebar :is(a, button, input) {
   -webkit-app-region: no-drag;
 }
 /* A scrollbar that's always there, where what doesn't fit would otherwise just look cut: the Mac's own hide until
@@ -162,15 +282,31 @@
 }
 /* A page in the colour of --vertical, except its lists: they keep the design's colours, and an opaque background
    (Ideas.tsx), so the page doesn't show through them. .vertical-theme is the design's own colours mixed with it, for
-   everything inside to follow without knowing about it; over the dark theme's values, written out because a variable
-   can't be defined from itself. */
+   everything inside to follow without knowing about it; over each theme's values, written out because a variable
+   can't be defined from itself. In light mode --vertical is a 600/700 shade (see :root:not(.dark)), so white text
+   reads on it; in dark it's a 400 shade, so dark text does. */
 .vertical-page {
+  background-color: color-mix(in oklab, var(--vertical) 7%, oklch(1 0 0));
+}
+.dark .vertical-page {
   background-color: color-mix(in oklab, var(--vertical) 10%, oklch(0.145 0 0));
 }
 [data-list] {
   --vertical: initial;
 }
 .vertical-theme {
+  --background: color-mix(in oklab, var(--vertical) 7%, oklch(1 0 0));
+  --card: color-mix(in oklab, var(--vertical) 4%, oklch(1 0 0));
+  --muted: color-mix(in oklab, var(--vertical) 12%, oklch(0.97 0 0));
+  --accent: color-mix(in oklab, var(--vertical) 12%, oklch(0.97 0 0));
+  --muted-foreground: color-mix(in oklab, var(--vertical) 35%, oklch(0.45 0 0));
+  --border: color-mix(in oklab, var(--vertical) 25%, transparent);
+  --input: color-mix(in oklab, var(--vertical) 30%, transparent);
+  --ring: var(--vertical);
+  --primary: var(--vertical);
+  --primary-foreground: oklch(1 0 0);
+}
+.dark .vertical-theme {
   --background: color-mix(in oklab, var(--vertical) 10%, oklch(0.145 0 0));
   --card: color-mix(in oklab, var(--vertical) 14%, oklch(0.205 0 0));
   --muted: color-mix(in oklab, var(--vertical) 20%, oklch(0.269 0 0));
@@ -178,22 +314,88 @@
   --muted-foreground: color-mix(in oklab, var(--vertical) 35%, oklch(0.708 0 0));
   --border: color-mix(in oklab, var(--vertical) 30%, transparent);
   --input: color-mix(in oklab, var(--vertical) 35%, transparent);
-  --ring: var(--vertical);
-  --primary: var(--vertical);
   --primary-foreground: oklch(0.145 0 0);
 }
 
 /* Code colours in Ajustes → Skills (CodeMirror's classHighlighter). */
 .tok-keyword, .tok-operatorKeyword, .tok-modifier { color: oklch(0.5 0.2 300); }
 .tok-string, .tok-string2 { color: oklch(0.5 0.13 150); }
-.tok-number, .tok-bool, .tok-atom { color: oklch(0.55 0.15 50); }
+.tok-number, .tok-bool, .tok-atom { color: oklch(0.5 0.14 50); }
 .tok-comment { color: var(--muted-foreground); font-style: italic; }
 .tok-propertyName, .tok-attributeName { color: oklch(0.5 0.15 250); }
-.tok-typeName, .tok-className, .tok-tagName { color: oklch(0.52 0.14 200); }
-.tok-variableName.tok-definition, .tok-meta { color: oklch(0.55 0.17 20); }
+.tok-typeName, .tok-className, .tok-tagName { color: oklch(0.5 0.12 200); }
+.tok-variableName.tok-definition, .tok-meta { color: oklch(0.5 0.17 20); }
 .dark .tok-keyword, .dark .tok-operatorKeyword, .dark .tok-modifier { color: oklch(0.75 0.15 300); }
 .dark .tok-string, .dark .tok-string2 { color: oklch(0.78 0.13 150); }
 .dark .tok-number, .dark .tok-bool, .dark .tok-atom { color: oklch(0.8 0.13 60); }
 .dark .tok-propertyName, .dark .tok-attributeName { color: oklch(0.76 0.12 250); }
 .dark .tok-typeName, .dark .tok-className, .dark .tok-tagName { color: oklch(0.78 0.11 200); }
 .dark .tok-variableName.tok-definition, .dark .tok-meta { color: oklch(0.75 0.14 20); }
+
+/* Script beats (ScriptEditor.tsx BEATS): the tag colours, readable on each theme. */
+:root {
+  --beat-hook: #e11d48;
+  --beat-contexto: #0284c7;
+  --beat-rehook: #d97706;
+  --beat-desarrollo: #7c3aed;
+  --beat-ejemplo: #0d9488;
+  --beat-payoff: #059669;
+  --beat-cta: #ea580c;
+  --beat-cierre: #71717a;
+}
+.dark {
+  --beat-hook: #fb7185;
+  --beat-contexto: #38bdf8;
+  --beat-rehook: #fbbf24;
+  --beat-desarrollo: #a78bfa;
+  --beat-ejemplo: #2dd4bf;
+  --beat-payoff: #34d399;
+  --beat-cta: #fb923c;
+  --beat-cierre: #a1a1aa;
+}
+
+/* ───── Redesign polish ───── */
+
+/* Scrollbars in the app's colours, everywhere (Chromium/Electron draw these instead of the system's). */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border: 2.5px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--vertical, var(--primary)) 28%, transparent) padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--vertical, var(--primary)) 55%, transparent) padding-box;
+}
+::-webkit-scrollbar-thumb:active {
+  background: color-mix(in oklab, var(--vertical, var(--primary)) 70%, transparent) padding-box;
+}
+
+/* The app's columns (main.tsx): the sidebar and the Claude panel slide open and closed. Not while dragging an edge,
+   where the column must follow the pointer exactly (ResizeHandle adds .resizing to <html>). */
+.app-grid {
+  transition: grid-template-columns 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.resizing:not(.snapping) .app-grid {
+  transition: none;
+}
+.resizing, .resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* Switching theme (useThemeStore): a circle of the new theme grows from where you clicked (View Transitions). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}

@@ -13,6 +13,7 @@ import {Textarea} from '@/components/ui/textarea';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {cn} from '@/lib/utils';
+import DetailSkeleton from '@/components/common/DetailSkeleton';
 import {api, chatApi, fmtAgo, fmtSize, fmtTime, useLive, voiceApi, type Act, type Comment, type ReelDetail, type Voice, type Word} from './api';
 import {VoiceDialog} from './ProfileVoice';
 import {AudienceFit} from './AudienceFit';
@@ -79,7 +80,7 @@ function ReelStyle({reel, onChanged}: {reel: ReelDetail; onChanged: () => void})
           <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span className="flex gap-1">
               {s.palette.map((c) => (
-                <span key={c.hex} title={`${c.name}: ${c.meaning}`} className="size-3.5 rounded-full border border-white/15" style={{background: c.hex}} />
+                <span key={c.hex} title={`${c.name}: ${c.meaning}`} className="size-3.5 rounded-full border border-foreground/15" style={{background: c.hex}} />
               ))}
             </span>
             <span>{ready ? 'El agente lo hace con su skill y su plantilla.' : 'Sin plantilla propia: el agente lo hace a partir de su descripción.'}</span>
@@ -281,7 +282,7 @@ export function ReelView({slug}: {slug: string}) {
   }, [name, setReelTitle]);
 
   if (err) return <p className="p-6 text-destructive">{err}</p>;
-  if (!reel) return <p className="p-6 text-muted-foreground">Cargando…</p>;
+  if (!reel) return <DetailSkeleton />;
   // The video's name lives in the top header; the page starts with the video and its script.
   return (
     <main className="flex flex-col gap-4 p-6">
