@@ -1,13 +1,15 @@
 // Reel page, next to Alineación con tu audiencia: how strong the script's opening is (server/hook-check.ts). Like that
 // one, it judges itself when the saved script changes, a few seconds after the last change, and on Revisar; opening a
-// video never spends a check. Its agent reads it on its own (…/hook-check?format=text), so there's no "Agregar al chat".
+// video never spends a check. Its agent can read it on its own (…/hook-check?format=text); "Agregar al chat" sends it
+// with the next message, as Alineación's does.
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {ArrowRight, Check, ChevronDown, Lightbulb, RefreshCw} from 'lucide-react';
+import {ArrowRight, Check, ChevronDown, Lightbulb, MessageSquarePlus, RefreshCw} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@/components/ui/collapsible';
 import {cn} from '@/lib/utils';
 import {api, fmtAgo, useLive, type HookCheck, type HookCheckState} from './api';
 import {ModelBadge, Ring, SETTLE, bar, tone} from './AudienceFit';
+import {useStudio} from './studio';
 
 const word = (score: number) => (score >= 75 ? 'Gancho fuerte' : score >= 50 ? 'Mejorable' : 'Débil');
 
@@ -16,6 +18,8 @@ export function HookStrength({slug, script}: {slug: string; script: string}) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [open, setOpen] = useState(false);
+  const {audits, addAudit} = useStudio();
+  const attached = audits.includes(`hook/${slug}`);
   const load = useCallback(() => api.hookCheck(slug).then(setS, (e: Error) => setErr(e.message)), [slug]);
   useEffect(() => void load(), [load]);
   useLive((x) => x === slug && load());
@@ -80,9 +84,16 @@ export function HookStrength({slug, script}: {slug: string; script: string}) {
               </Button>
             </CollapsibleTrigger>
           )}
-          <Button variant="outline" size="sm" disabled={running || !s.script} onClick={() => void judge(!stale)} title={c ? `Revisado ${fmtAgo(c.at)}` : undefined}>
-            <RefreshCw className={cn(running && 'animate-spin')} /> {c ? 'Revisar de nuevo' : 'Revisar'}
-          </Button>
+          <div className="flex flex-col items-stretch gap-1.5">
+            <Button variant="outline" size="sm" disabled={running || !s.script} onClick={() => void judge(!stale)} title={c ? `Revisado ${fmtAgo(c.at)}` : undefined}>
+              <RefreshCw className={cn(running && 'animate-spin')} /> {c ? 'Revisar de nuevo' : 'Revisar'}
+            </Button>
+            {c && (
+              <Button variant="ghost" size="sm" disabled={running || attached} onClick={() => addAudit(slug, 'hook')} title="Va con tu próximo mensaje al agente de este video">
+                {attached ? <Check /> : <MessageSquarePlus />} {attached ? 'En el chat' : 'Agregar al chat'}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
       {c && (

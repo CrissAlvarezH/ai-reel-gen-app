@@ -188,8 +188,9 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
   const comments = slug ? (studio.comments[slug] ?? []) : [];
   const refs = slug ? [] : studio.refs;
   const ideaRefs = slug ? [] : studio.ideaRefs;
-  // The reel's audience check, attached with "Agregar al chat" (its conversation only).
-  const audit = !!slug && studio.audits.includes(slug);
+  // The reel's script reviews attached with "Agregar al chat" (its conversation only): audience and/or hook.
+  const auditKinds = slug ? (['audience', 'hook'] as const).filter((k) => studio.audits.includes(`${k}/${slug}`)) : [];
+  const audit = auditKinds.length > 0;
   const [st, setSt] = useState<ChatState | null>(null);
   // Only asked for while they'd show: writing them spends a little of his plan.
   const [examples, setExamples] = useState<string[]>([]);
@@ -346,7 +347,7 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
     setErr('');
     stick.current = true;
     try {
-      await chatApi.send(chatKey, chatId, audit && !msg.trim() ? 'Aplica este análisis de audiencia al guion.' : msg, comments, {...studio.uiRef.current}, refs.length ? refs : undefined, ready.length ? ready : undefined, ideaRefs.length ? ideaRefs : undefined, audit || undefined);
+      await chatApi.send(chatKey, chatId, audit && !msg.trim() ? (auditKinds.length > 1 ? 'Aplica estos análisis al guion.' : auditKinds[0] === 'hook' ? 'Aplica este análisis del gancho al guion.' : 'Aplica este análisis de audiencia al guion.') : msg, comments, {...studio.uiRef.current}, refs.length ? refs : undefined, ready.length ? ready : undefined, ideaRefs.length ? ideaRefs : undefined, audit ? [...auditKinds] : undefined);
       setText('');
       for (const i of images) URL.revokeObjectURL(i.url);
       setImages([]);
@@ -464,14 +465,14 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
             ))}
           </ul>
         )}
-        {audit && (
-          <div className="flex items-center gap-2 self-start rounded-md bg-muted py-0.5 pr-0.5 pl-2 text-xs">
-            <Target className="size-3.5 text-muted-foreground" /> Análisis de audiencia del guion
-            <Button variant="ghost" size="icon-xs" onClick={() => studio.removeAudit(slug!)} title="Quitar">
+        {auditKinds.map((k) => (
+          <div key={k} className="flex items-center gap-2 self-start rounded-md bg-muted py-0.5 pr-0.5 pl-2 text-xs">
+            <Target className="size-3.5 text-muted-foreground" /> {k === 'hook' ? 'Análisis del gancho' : 'Análisis de audiencia del guion'}
+            <Button variant="ghost" size="icon-xs" onClick={() => studio.removeAudit(slug!, k)} title="Quitar">
               <X />
             </Button>
           </div>
-        )}
+        ))}
         {ideaRefs.length > 0 && (
           <ul className="flex flex-wrap gap-1.5">
             {ideaRefs.map((i) => (

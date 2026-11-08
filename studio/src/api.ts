@@ -125,7 +125,7 @@ export const chatApi = {
   // images: names of images already uploaded with uploadImage.
   // ideas: ideas from Ideas de contenido attached to a message of the general conversation.
   // audit: the reel's Alineación con tu audiencia goes with it (its conversation).
-  send: (key: string, chat: string, text: string, comments: Comment[], context?: unknown, refs?: InspirationRef[], images?: string[], ideas?: IdeaRef[], audit?: boolean) =>
+  send: (key: string, chat: string, text: string, comments: Comment[], context?: unknown, refs?: InspirationRef[], images?: string[], ideas?: IdeaRef[], audit?: ('audience' | 'hook')[]) =>
     post(`/api/chat/${key}/${chat}`, {text, comments, context, refs, images, ideas, audit}),
   // An image pasted or dropped into the message box, saved in the project; its name goes with the message.
   uploadImage: (file: Blob) => fetch('/api/chat-images', {method: 'POST', headers: {'Content-Type': file.type}, body: file}).then((r) => json<{name: string}>(r)),

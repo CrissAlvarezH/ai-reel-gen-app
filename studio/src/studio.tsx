@@ -1,6 +1,8 @@
 import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react';
 import {projectsApi, type Comment, type IdeaRef, type InspirationRef, type UiContext} from './api';
 
+export type AuditKind = 'audience' | 'hook';
+
 export type {UiContext};
 
 // App-wide state shared by the pages and the always-present Claude panel: whether the panel is open,
@@ -33,10 +35,11 @@ type Studio = {
   addIdeaRef: (r: IdeaRef) => void;
   removeIdeaRef: (id: string) => void;
   clearIdeaRefs: () => void;
-  // Reels whose Alineación con tu audiencia goes with the next message of their conversation.
+  // Script reviews that go with the next message of their reel's conversation, as "<kind>/<slug>": Alineación con tu
+  // audiencia (audience) and Fuerza del gancho (hook).
   audits: string[];
-  addAudit: (slug: string) => void;
-  removeAudit: (slug: string) => void;
+  addAudit: (slug: string, kind: AuditKind) => void;
+  removeAudit: (slug: string, kind?: AuditKind) => void; // no kind: both
   // Name of the open reel, shown in the header (title.txt, or its slug).
   reelTitle: string | null;
   setReelTitle: (t: string | null) => void;
@@ -155,11 +158,11 @@ export function StudioProvider({children}: {children: React.ReactNode}) {
       clearIdeaRefs: () => setIdeaRefs([]),
       // "Agregar al chat" on the reel page: the same, for its audience check.
       audits,
-      addAudit: (slug) => {
-        setAudits((all) => (all.includes(slug) ? all : [...all, slug]));
+      addAudit: (slug, kind) => {
+        setAudits((all) => (all.includes(`${kind}/${slug}`) ? all : [...all, `${kind}/${slug}`]));
         setOpen(true);
       },
-      removeAudit: (slug) => setAudits((all) => all.filter((x) => x !== slug)),
+      removeAudit: (slug, kind) => setAudits((all) => all.filter((x) => (kind ? x !== `${kind}/${slug}` : !x.endsWith(`/${slug}`)))),
       reelTitle,
       setReelTitle,
     }),

@@ -104,7 +104,7 @@ export function AudienceFit({slug, script}: {slug: string; script: string}) {
   const [err, setErr] = useState('');
   const [open, setOpen] = useState(false);
   const {audits, addAudit} = useStudio();
-  const attached = audits.includes(slug);
+  const attached = audits.includes(`audience/${slug}`);
   const load = useCallback(() => api.audienceCheck(slug).then(setS, (e: Error) => setErr(e.message)), [slug]);
   useEffect(() => void load(), [load]);
   useLive((x) => x === slug && load());
@@ -202,7 +202,7 @@ export function AudienceFit({slug, script}: {slug: string; script: string}) {
               <RefreshCw className={cn(running && 'animate-spin')} /> {c ? 'Revisar de nuevo' : 'Revisar'}
             </Button>
             {c && (
-              <Button variant="ghost" size="sm" disabled={running || attached} onClick={() => addAudit(slug)} title="Va con tu próximo mensaje al agente de este video">
+              <Button variant="ghost" size="sm" disabled={running || attached} onClick={() => addAudit(slug, 'audience')} title="Va con tu próximo mensaje al agente de este video">
                 {attached ? <Check /> : <MessageSquarePlus />} {attached ? 'En el chat' : 'Agregar al chat'}
               </Button>
             )}

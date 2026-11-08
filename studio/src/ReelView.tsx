@@ -285,8 +285,8 @@ export function ReelView({slug}: {slug: string}) {
   // The video's name lives in the top header; the page starts with the video and its script.
   return (
     <main className="flex flex-col gap-4 p-6">
-      {/* The two script reviews side by side once there's room; each opens its own detail. */}
-      <div className="grid items-start gap-4 2xl:grid-cols-2">
+      {/* The two script reviews, always one above the other; each opens its own detail. */}
+      <div className="flex flex-col gap-4">
         <AudienceFit slug={reel.slug} script={reel.script} />
         <HookStrength slug={reel.slug} script={reel.script} />
       </div>

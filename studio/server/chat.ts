@@ -17,6 +17,7 @@ import {agentNote as ideasNote, ideaRefsText, validIdeaRefs} from './ideas.ts';
 import {agentNote as sourcesNote} from './sources.ts';
 import {audienceText} from './audience.ts';
 import * as scriptCheck from './script-check.ts';
+import * as hookCheck from './hook-check.ts';
 import * as uploads from './uploads.ts';
 import {newVideoStyle} from './styles.ts';
 import {listFormats} from './formats.ts';
@@ -729,7 +730,12 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   // Images pasted or dropped into the message (server/uploads.ts).
   const images = uploads.valid(rawImages);
   // The reel's audience check, attached with "Agregar al chat" (server/script-check.ts).
-  const audited = key !== GENERAL && audit === true ? scriptCheck.agentText(key) : '';
+  // The reel's reviews sent with "Agregar al chat": true (older pages) is the audience one; else the kinds.
+  const kinds = audit === true ? ['audience'] : Array.isArray(audit) ? audit : [];
+  const audited =
+    key === GENERAL
+      ? ''
+      : [kinds.includes('audience') && scriptCheck.agentText(key), kinds.includes('hook') && hookCheck.state(key).check && hookCheck.agentText(key)].filter(Boolean).join('\n\n');
   if (!text?.trim() && !comments?.length && !refs.length && !ideaRefs.length && !images.length && !audited) throw httpError(400, 'mensaje vacío');
   // The reel's progress, so the agent always knows what's left without asking.
   const progress =
