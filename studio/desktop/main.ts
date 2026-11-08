@@ -12,8 +12,8 @@ const STUDIO = path.resolve(import.meta.dirname, '..');
 const PORT = Number(process.env.PORT ?? 4000);
 const URL = `http://localhost:${PORT}`;
 // The UI's background for the system theme (src/index.css: oklch(0.16 0.025 290) dark, white light), so the window doesn't flash.
-const bg = () => (nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff');
-const fg = () => (nativeTheme.shouldUseDarkColors ? '#a1a1a1' : '#737373');
+const bg = () => (nativeTheme.shouldUseDarkColors ? '#0d0b17' : '#ffffff');
+const fg = () => (nativeTheme.shouldUseDarkColors ? '#a4a2b7' : '#636174');
 
 let server: ChildProcess | null = null; // only set when this app started it
 let log = '';

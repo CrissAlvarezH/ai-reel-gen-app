@@ -1,8 +1,9 @@
 import {StrictMode, useEffect, useState} from 'react';
 import ResizeHandle from '@/components/common/ResizeHandle';
 import {createRoot} from 'react-dom/client';
-import {ChevronRight, Clapperboard} from 'lucide-react';
+import {ChevronRight} from 'lucide-react';
 import {TooltipProvider} from '@/components/ui/tooltip';
+import Logo from '@/components/common/Logo';
 import ThemeToggle from '@/components/common/ThemeToggle';
 import {cn} from '@/lib/utils';
 import {Library} from './Library';
@@ -58,9 +59,8 @@ function App() {
   return (
     <>
       <header className="app-titlebar sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur">
-        <a href="#/" className="flex items-center gap-2 rounded-md font-semibold transition-opacity hover:opacity-80">
-          <Clapperboard className="size-5" />
-          Reel Studio
+        <a href="#/" aria-label="Reel Studio: inicio" className="rounded-md transition-opacity hover:opacity-80">
+          <Logo variant="full" size={26} />
         </a>
         {page !== 'library' && (
           <nav aria-label="Ruta" className="flex min-w-0 items-center gap-1.5 text-sm">
@@ -159,7 +159,7 @@ function Root() {
     return (
       <div className="grid min-h-screen place-items-center p-6">
         <div className="flex flex-col items-center gap-4 text-center">
-          <Clapperboard className={err ? 'size-10 text-muted-foreground' : 'size-10 animate-pulse text-muted-foreground'} />
+          <Logo variant="mark" size={72} className={err ? undefined : 'animate-pulse'} />
           {err ? <p className="max-w-sm text-sm text-destructive">{err}</p> : <p className="text-xs text-muted-foreground">Cargando…</p>}
         </div>
       </div>

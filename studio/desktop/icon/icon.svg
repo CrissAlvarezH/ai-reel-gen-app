@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="100" y1="100" x2="924" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6D28D9"/>
+      <stop offset="0.55" stop-color="#9333EA"/>
+      <stop offset="1" stop-color="#D946EF"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+    <filter id="glyph" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#3B0764" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  </g>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#gloss)"/>
+  <rect x="101" y="101" width="822" height="822" rx="184" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="2"/>
+  <g filter="url(#glyph)" fill="#FFFFFF">
+    <g transform="translate(215.9 244.6) scale(11.5)">
+      <path fill-rule="evenodd" d="M12 6h10a6 6 0 0 1 6 6v27a6 6 0 0 1-6 6h-10a6 6 0 0 1-6-6v-27a6 6 0 0 1 6-6z M13 20.2v10.6a1.2 1.2 0 0 0 1.8 1.04l8.6-5.3a1.2 1.2 0 0 0 0-2.08l-8.6-5.3a1.2 1.2 0 0 0-1.8 1.04z"/>
+      <path d="M38 1.5Q39.4 7.6 45.5 9Q39.4 10.4 38 16.5Q36.6 10.4 30.5 9Q36.6 7.6 38 1.5Z"/>
+    </g>
+  </g>
+</svg>

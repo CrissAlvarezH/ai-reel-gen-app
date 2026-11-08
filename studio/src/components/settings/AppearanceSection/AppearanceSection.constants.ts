@@ -8,7 +8,7 @@ const LIGHT: PreviewPalette = {
   side: 'border-zinc-200 bg-zinc-100',
   line: 'bg-zinc-200',
   strong: 'bg-zinc-700',
-  accent: 'bg-zinc-900',
+  accent: 'bg-violet-600',
 };
 
 const DARK: PreviewPalette = {
