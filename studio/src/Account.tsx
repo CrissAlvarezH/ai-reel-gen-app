@@ -11,6 +11,7 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  Bookmark,
   Film,
   Heart,
   Lightbulb,
@@ -20,6 +21,7 @@ import {
   MoreHorizontal,
   RefreshCw,
   Search,
+  Send,
   Sparkles,
   Square,
   MessageSquarePlus,
@@ -64,7 +66,7 @@ const FIRST = 10; // the first download, and how many more "Cargar más" brings
 const PAGE = 10; // rows per page of the table
 
 // The table's order and filters, like Inspiración's (the server applies them, on the studio's index); 'any' is no filter.
-type SortKey = 'posted' | 'views' | 'ratio' | 'likes' | 'comments' | 'engagement' | 'duration' | 'wps';
+type SortKey = 'posted' | 'views' | 'ratio' | 'likes' | 'comments' | 'saves' | 'shares' | 'reach' | 'engagement' | 'retention' | 'skipRate' | 'duration' | 'wps';
 type Filters = {minRatio: string; sinceDays: string; dur: string; state: string};
 const NO_FILTERS: Filters = {minRatio: 'any', sinceDays: 'any', dur: 'any', state: 'any'};
 const FILTERS: {
@@ -147,6 +149,24 @@ function save(v: Saved) {
   }
 }
 
+// Where Guardados, Compartidos… come from: Instagram, read with each download (or why not).
+function InsightsNote({st}: {st: AccountStatus}) {
+  const i = st.insights;
+  if (!i?.account)
+    return (
+      <a href="#/ajustes/instagram" className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+        Conecta Instagram para ver guardados y retención
+      </a>
+    );
+  if (i.error)
+    return (
+      <span className="max-w-80 truncate text-xs text-amber-400" title={i.error}>
+        Números de Instagram: {i.error}
+      </span>
+    );
+  return <span className="text-xs text-muted-foreground">{i.at ? `Números de Instagram de @${i.account}: ${fmtAgo(i.at)}` : `Llegan con la próxima actualización (@${i.account})`}</span>;
+}
+
 const num = (v: number | null | undefined) => (v == null ? '—' : v >= 1e6 ? `${(v / 1e6).toFixed(1).replace('.0', '')} M` : v >= 1e4 ? `${Math.round(v / 1e3)} k` : v.toLocaleString('es'));
 const pct = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(1).replace('.0', '')} %`);
 // "26 oct", with the year only when it isn't this one.
@@ -178,8 +198,28 @@ export function Account() {
   const [sort, setSort] = useState(saved.sort);
   const [filters, setFilters] = useState(saved.filters);
   const [q, setQ] = useState(saved.q);
-  // Pal/s is off until he turns it on.
-  const cols = useColumns('account', [{key: 'ratio', label: 'Multiplicador'}, {key: 'views', label: 'Vistas'}, {key: 'likes', label: 'Likes'}, {key: 'comments', label: 'Comentarios'}, {key: 'engagement', label: 'Interacción'}, {key: 'duration', label: 'Duración'}, {key: 'wps', label: 'Palabras por segundo'}, {key: 'posted', label: 'Fecha'}], ['wps']);
+  // Pal/s, alcance and salto are off until he turns them on. Guardados to salto come from Instagram itself
+  // (Ajustes → Instagram).
+  const cols = useColumns(
+    'account',
+    [
+      {key: 'ratio', label: 'Multiplicador'},
+      {key: 'views', label: 'Vistas'},
+      {key: 'likes', label: 'Likes'},
+      {key: 'comments', label: 'Comentarios'},
+      {key: 'saves', label: 'Guardados'},
+      {key: 'shares', label: 'Compartidos'},
+      {key: 'reach', label: 'Alcance'},
+      {key: 'engagement', label: 'Interacción'},
+      {key: 'retention', label: 'Retención'},
+      {key: 'skipRate', label: 'Tasa de salto'},
+      {key: 'duration', label: 'Duración'},
+      {key: 'wps', label: 'Palabras por segundo'},
+      {key: 'posted', label: 'Fecha'},
+    ],
+    ['wps', 'reach', 'skipRate'],
+  );
+  const fromIg = st?.insights?.account ? `De Instagram (@${st.insights.account})` : 'De Instagram: conecta la cuenta en Ajustes → Instagram';
   const [search, setSearch] = useState(saved.q.trim()); // q, once he stops typing
   useEffect(() => {
     const t = setTimeout(() => setSearch(q.trim()), 300);
@@ -498,7 +538,10 @@ export function Account() {
                   <X /> Limpiar
                 </Button>
               )}
-              <div className="ml-auto">{cols.picker}</div>
+              <div className="ml-auto flex items-center gap-3">
+                <InsightsNote st={st} />
+                {cols.picker}
+              </div>
             </div>
             {!list ? null : rows.length === 0 ? (
               <p className="text-sm text-muted-foreground">Ningún reel cumple esos filtros.</p>
@@ -529,9 +572,34 @@ export function Account() {
                           Coment.
                         </SortHead>
                       )}
+                      {cols.shown('saves') && (
+                        <SortHead k="saves" sort={sort} setSort={setSort} title={fromIg}>
+                          Guard.
+                        </SortHead>
+                      )}
+                      {cols.shown('shares') && (
+                        <SortHead k="shares" sort={sort} setSort={setSort} title={fromIg}>
+                          Compart.
+                        </SortHead>
+                      )}
+                      {cols.shown('reach') && (
+                        <SortHead k="reach" sort={sort} setSort={setSort} title={`${fromIg}: cuentas que lo vieron (estimado de Meta)`}>
+                          Alcance
+                        </SortHead>
+                      )}
                       {cols.shown('engagement') && (
                         <SortHead k="engagement" sort={sort} setSort={setSort} title="(likes + comentarios) ÷ vistas">
                           Interacción
+                        </SortHead>
+                      )}
+                      {cols.shown('retention') && (
+                        <SortHead k="retention" sort={sort} setSort={setSort} title={`${fromIg}: tiempo promedio de reproducción ÷ duración`}>
+                          Retención
+                        </SortHead>
+                      )}
+                      {cols.shown('skipRate') && (
+                        <SortHead k="skipRate" sort={sort} setSort={setSort} title={`${fromIg}: % de reproducciones que lo pasan en los primeros segundos`}>
+                          Salto
                         </SortHead>
                       )}
                       {cols.shown('duration') && (
@@ -598,7 +666,24 @@ export function Account() {
                             <Value icon={MessageCircle}>{num(r.comments)}</Value>
                           </TableCell>
                         )}
+                        {cols.shown('saves') && (
+                          <TableCell className="tabular-nums">
+                            <Value icon={Bookmark}>{num(r.saves)}</Value>
+                          </TableCell>
+                        )}
+                        {cols.shown('shares') && (
+                          <TableCell className="text-muted-foreground tabular-nums">
+                            <Value icon={Send}>{num(r.shares)}</Value>
+                          </TableCell>
+                        )}
+                        {cols.shown('reach') && <TableCell className="text-muted-foreground tabular-nums">{num(r.reach)}</TableCell>}
                         {cols.shown('engagement') && <TableCell className="text-muted-foreground tabular-nums">{pct(r.engagement)}</TableCell>}
+                        {cols.shown('retention') && (
+                          <TableCell className="text-muted-foreground tabular-nums" title={r.avgWatch != null ? `${r.avgWatch.toFixed(1)} s de promedio` : undefined}>
+                            {pct(r.retention)}
+                          </TableCell>
+                        )}
+                        {cols.shown('skipRate') && <TableCell className="text-muted-foreground tabular-nums">{r.skipRate != null ? `${r.skipRate.toFixed(0)} %` : '—'}</TableCell>}
                         {cols.shown('duration') && (
                           <TableCell className="text-muted-foreground tabular-nums">
                             <Value icon={Clock}>{r.duration != null ? fmtTime(r.duration) : '—'}</Value>

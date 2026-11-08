@@ -5,7 +5,9 @@
 //   account/<user>/account.json   {username, fullName, profile, fetched, error}, and avatar.jpg
 //   account/<user>/<code>/        reel.json (metrics as of metricsAt, Instagram's expiring links), meta.json (all
 //                                 the scraper returned), thumb.jpg; once analysed, like Inspiración's: hook.jpg,
-//                                 sheet_NN.jpg, transcript.json, analysis.json
+//                                 sheet_NN.jpg, transcript.json, analysis.json; insights.json: Instagram's own
+//                                 numbers (saves, shares, reach, watch time), when the project has an account in
+//                                 Ajustes → Instagram (server/cloud.ts), read with each download
 // Nothing is transcribed or analysed on its own: "Analizar" (a reel, or all those not analysed yet) does it
 // with Inspiración's tools (tools/inspiration.py, then the agent with the reel's numbers against the account's),
 // and "Analizar con el agente" opens a conversation about the whole account. The page's numbers and table come
@@ -23,6 +25,7 @@ import {authorName, getProfile} from './config.ts';
 import {transcriberReady} from './requirements.ts';
 import * as db from './db.ts';
 import * as index from './projects-index.ts';
+import * as cloud from './cloud.ts';
 import {MAX_ACCOUNT_REELS} from '../shared/types.ts';
 import type {AccountStatus, InspirationProfile, InspirationRef, OwnReel, OwnReelCard, OwnReelList, ReelAnalysis, ReelTranscript, ServerEvent} from '../shared/types.ts';
 
@@ -35,8 +38,18 @@ const accDir = (u: string) => path.join(PROJECT_DIR, 'account', u);
 const reelDir = (u: string, c: string) => path.join(accDir(u), c);
 const writeJson = (p: string, v: unknown) => writeJsonFile(p, v, 1);
 
-type AccountFile = {username: string; fullName: string | null; profile: InspirationProfile | null; fetched: number | null; error: string | null};
-type ReelFile = Omit<OwnReel, 'thumb' | 'ratio' | 'engagement' | 'video' | 'state' | 'error' | 'topic' | 'hook' | 'wps'> & {
+// insightsAt/insightsError: the last read of Instagram's own numbers (cloud.ts), from insightsAccount.
+type AccountFile = {
+  username: string;
+  fullName: string | null;
+  profile: InspirationProfile | null;
+  fetched: number | null;
+  error: string | null;
+  insightsAccount?: string | null;
+  insightsAt?: number | null;
+  insightsError?: string | null;
+};
+type ReelFile = Omit<OwnReel, 'thumb' | 'ratio' | 'engagement' | 'video' | 'state' | 'error' | 'topic' | 'hook' | 'wps' | 'saves' | 'shares' | 'reach' | 'avgWatch' | 'retention' | 'skipRate'> & {
   added: number;
   videoUrl?: string | null; // Instagram's links: they expire in a day or two
   displayUrl?: string | null;
@@ -92,7 +105,9 @@ export async function status(): Promise<AccountStatus> {
   const scraper = {id: src.id, label: src.label, ready: !!getKey(src.key)};
   const transcriber = await transcriberReady();
   const analysis = run && {done: run.done, total: run.total, started: run.started};
-  if (!u) return {username: null, fullName: null, profile: null, avatar: false, fetched: null, count: 0, top: [], median: null, engagement: null, job: null, error: null, scraper, states: {}, analysis: null, transcriber};
+  const linked = cloud.linkedAccount();
+  const none = {account: linked?.username ?? null, at: null, error: null};
+  if (!u) return {username: null, fullName: null, profile: null, avatar: false, fetched: null, count: 0, top: [], median: null, engagement: null, job: null, error: null, scraper, states: {}, analysis: null, transcriber, insights: none};
   const a = readJson<AccountFile>(path.join(accDir(u), 'account.json'));
   return {
     username: u,
@@ -106,6 +121,7 @@ export async function status(): Promise<AccountStatus> {
     scraper,
     analysis,
     transcriber,
+    insights: linked ? {account: linked.username, at: a?.insightsAt ?? null, error: a?.insightsError ?? null} : none,
   };
 }
 
@@ -132,6 +148,7 @@ async function download(u: string, limit: number, alive: () => boolean) {
   jobs.set(dir, {limit, started: Date.now()});
   changed();
   const scraper = insp.source().label;
+  const linked = cloud.linkedAccount();
   const old = (c: string) => readJson<ReelFile>(path.join(dir, c, 'reel.json'));
   const prev = readJson<AccountFile>(path.join(dir, 'account.json'));
   const save = (a: Partial<AccountFile>) => writeJson(path.join(dir, 'account.json'), {username: u, fullName: null, profile: null, fetched: null, error: null, ...prev, ...a});
@@ -170,8 +187,10 @@ async function download(u: string, limit: number, alive: () => boolean) {
     }
     if (prof?.picture) await insp.download(prof.picture, path.join(dir, 'avatar.jpg')).catch((e) => console.error(`foto de @${u}:`, e));
     if (!alive()) return null;
+    const ins = linked ? await insights(dir, linked, limit) : {};
+    if (!alive()) return null;
     if (!res.items.length) problem = problem ?? `${scraper} no devolvió reels de @${u} (¿la cuenta es privada o no existe?)`;
-    save({fullName: prof?.fullName ?? prev?.fullName ?? null, profile: prof?.profile ?? prev?.profile ?? null, fetched: Date.now(), error: problem});
+    save({fullName: prof?.fullName ?? prev?.fullName ?? null, profile: prof?.profile ?? prev?.profile ?? null, fetched: Date.now(), error: problem, ...ins});
     return {username: u, reels, problem, profile: !!prof};
   } catch (e) {
     if (alive()) save({error: (e as Error).message});
@@ -179,6 +198,23 @@ async function download(u: string, limit: number, alive: () => boolean) {
   } finally {
     jobs.delete(dir);
     if (alive()) changed();
+  }
+}
+
+// Instagram's own numbers for the newest reels, next to each reel already downloaded (a reel only Meta lists,
+// not the scraper yet, waits for the next download). Its failure doesn't fail the download: it's reported apart.
+async function insights(dir: string, linked: {accountId: number; username: string}, limit: number): Promise<Partial<AccountFile>> {
+  try {
+    const r = await cloud.reelInsights(linked.accountId, limit);
+    const at = Date.now();
+    for (const x of r.reels) {
+      if (!x.code || !CODE.test(x.code) || !fs.existsSync(path.join(dir, x.code, 'reel.json'))) continue;
+      writeJson(path.join(dir, x.code, 'insights.json'), {mediaId: x.mediaId, metrics: x.metrics, error: x.error, at});
+    }
+    return {insightsAccount: r.username, insightsAt: at, insightsError: null};
+  } catch (e) {
+    console.error('métricas de Instagram:', (e as Error).message);
+    return {insightsAccount: linked.username, insightsError: (e as Error).message};
   }
 }
 
@@ -557,7 +593,7 @@ export function agentNote() {
   const src = insp.source();
   return [
     u
-      ? `Mi cuenta (página de la app): su cuenta de Instagram es @${u}. Sus reels con sus números están en el índice (own_reels y own_accounts, project = '${PROJECT}'; own_reels.video es el video del proyecto del que salió cada uno; los que analizó en Mi cuenta, con state = 'ready', tienen la transcripción y el análisis del agente: topic, hook_*, cta, visuals, takeaways, y su estructura en own_beats). Lo descargado está en ${rel(accDir(u))}/: account.json (perfil) y una carpeta por reel con reel.json (vistas, likes, comentarios, duración, caption, a la fecha de metricsAt), meta.json (todo lo que devolvió el scraper: hashtags, comentarios recientes…), thumb.jpg (portada) y, si se analizó, transcript.json, analysis.json, hook.jpg (primeros 3 s) y sheet_NN.jpg (1 fotograma por segundo).`
+      ? `Mi cuenta (página de la app): su cuenta de Instagram es @${u}. Sus reels con sus números están en el índice (own_reels y own_accounts, project = '${PROJECT}'; own_reels.video es el video del proyecto del que salió cada uno; los que analizó en Mi cuenta, con state = 'ready', tienen la transcripción y el análisis del agente: topic, hook_*, cta, visuals, takeaways, y su estructura en own_beats; con su cuenta de Instagram conectada en Ajustes → Instagram, también los números que solo ve el dueño: saves, shares, reach, avg_watch, retention y skip_rate, nulos si Meta aún no los tiene). Su llamado a la acción es guardar: saves es la señal que más le importa. Lo descargado está en ${rel(accDir(u))}/: account.json (perfil) y una carpeta por reel con reel.json (vistas, likes, comentarios, duración, caption, a la fecha de metricsAt), meta.json (todo lo que devolvió el scraper: hashtags, comentarios recientes…), thumb.jpg (portada) y, si se analizó, transcript.json, analysis.json, hook.jpg (primeros 3 s) y sheet_NN.jpg (1 fotograma por segundo).`
       : 'Mi cuenta (página de la app): aún no ha configurado su cuenta de Instagram.',
     `Scraper de redes (${src.label}, el elegido en Ajustes → Extracción de datos; gasta saldo de su cuenta en cada llamada): ${PY} tools/social.py mine [n] (descarga sus n reels más recientes a ${rel(path.join(PROJECT_DIR, 'account'))}/ y los lista) · reels @cuenta [n] (los n más recientes de otra cuenta, sin guardarlos) · reel <url> · profile @cuenta · cost reels|reel|profile [n] (lo que costaría, sin gastar). Cada llamada imprime lo que costó como mucho.`,
     u

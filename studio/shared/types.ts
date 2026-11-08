@@ -513,6 +513,14 @@ export type OwnReel = {
   topic: string | null; // the agent's, once analysed
   hook: string | null; // what's said and read in the first 3 s (the agent's)
   wps: number | null; // words per second of the voice, once transcribed
+  // From Instagram itself, through his Reel Studio account (Ajustes → Instagram); null without it or while Meta
+  // has nothing yet (up to 48 h after posting).
+  saves: number | null;
+  shares: number | null;
+  reach: number | null; // accounts that saw it (Meta's estimate)
+  avgWatch: number | null; // seconds watched per play, on average
+  retention: number | null; // avgWatch ÷ duration
+  skipRate: number | null; // % of plays skipped in the first seconds
 };
 
 // A reel's card in Mi cuenta: the reel, its place by views (0: no views), its saved metadata (flattened like
@@ -548,7 +556,29 @@ export type AccountStatus = {
   analysis: {done: number; total: number; started: number} | null; // reels being analysed now (Analizar), in memory
   transcriber: boolean; // faster-whisper ready (Ajustes → Requisitos): analysing needs it
   scraper: {id: SocialSourceId; label: string; ready: boolean};
+  // Instagram's own numbers (saves, shares…), read with each download when the project has an account in
+  // Ajustes → Instagram: which one, when they were last read and what went wrong then.
+  insights: {account: string | null; at: number | null; error: string | null};
 };
+
+/* ───── Reel Studio's account (server/cloud.ts, the ai-reel-gen-cloud site) ───── */
+
+// insights: false → it was connected before the metrics permission: connect it again in the panel.
+export type CloudAccount = {id: number; username: string; name: string | null; pictureUrl: string | null; tokenExpiresAt: string; insights: boolean};
+// account: the one this project uses (picked, or the one with Mi cuenta's handle).
+export type CloudStatus = {
+  url: string;
+  email: string | null;
+  signedIn: boolean;
+  user: {email: string; name: string | null} | null;
+  metaApp: boolean;
+  accounts: CloudAccount[];
+  panelUrl: string;
+  account: CloudAccount | null;
+  error: string | null;
+};
+export type CloudReelMetrics = {views: number | null; reach: number | null; saves: number | null; shares: number | null; likes: number | null; comments: number | null; interactions: number | null; avgWatchMs: number | null; totalWatchMs: number | null; skipRate: number | null; reposts: number | null};
+export type CloudReelInsights = {code: string | null; mediaId: string; permalink: string | null; postedAt: string | null; metrics: CloudReelMetrics; error: string | null};
 
 /* ───── Projects: one per channel, in projects/<id>/ (server/workspace.ts) ───── */
 

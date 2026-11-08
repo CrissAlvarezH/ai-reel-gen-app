@@ -26,6 +26,7 @@ import * as requirements from './requirements.ts';
 import * as workspace from './workspace.ts';
 import * as inspiration from './inspiration.ts';
 import * as account from './account.ts';
+import * as cloud from './cloud.ts';
 import * as ideas from './ideas.ts';
 import * as audience from './audience.ts';
 import * as scriptCheck from './script-check.ts';
@@ -351,6 +352,14 @@ app.use('/api/account', (req: Req, res: Response, next: () => void) => {
   if (p && p !== workspace.PROJECT) return void res.status(409).json({error: `Mi cuenta está abierta en otro proyecto; abre «${p}» en Reel Studio para esto`});
   next();
 });
+// Reel Studio's account (server/cloud.ts): the session, and this project's Instagram account.
+app.get('/api/cloud', handle(() => cloud.status(account.username())));
+app.post('/api/cloud/code', handle((req) => cloud.sendCode(req.body?.email)));
+app.post('/api/cloud/verify', handle((req) => cloud.verify(req.body?.email, req.body?.code)));
+app.post('/api/cloud/logout', handle(() => cloud.logout()));
+app.put('/api/cloud/url', handle((req) => cloud.setUrl(req.body?.url)));
+app.put('/api/cloud/account', handle((req) => cloud.setAccount(req.body?.accountId ?? null, account.username())));
+
 app.get('/api/account', handle(() => account.status()));
 app.put('/api/account', handle((req) => account.setUsername(req.body?.username)));
 app.post('/api/account/estimate', handle((req) => account.estimate(req.body?.limit)));

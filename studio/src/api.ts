@@ -295,6 +295,17 @@ export const projectsApi = {
 };
 
 // Mi cuenta: the creator's own Instagram account (server/account.ts).
+// Reel Studio's account (server/cloud.ts): the session with the site, and this project's Instagram account.
+type CloudStatusT = import('../shared/types').CloudStatus;
+export const cloudApi = {
+  status: () => fetch('/api/cloud').then((r) => json<CloudStatusT>(r)),
+  sendCode: (email: string) => post('/api/cloud/code', {email}) as Promise<{ok: true}>,
+  verify: (email: string, code: string) => post('/api/cloud/verify', {email, code}) as Promise<CloudStatusT>,
+  logout: () => post('/api/cloud/logout', {}) as Promise<CloudStatusT>,
+  setUrl: (url: string) => put('/api/cloud/url', {url}) as Promise<CloudStatusT>,
+  setAccount: (accountId: number | null) => put('/api/cloud/account', {accountId}) as Promise<CloudStatusT>,
+};
+
 export const accountApi = {
   status: () => fetch('/api/account').then((r) => json<import('../shared/types').AccountStatus>(r)),
   setUsername: (username: string) =>

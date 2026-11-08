@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {Bot, CheckCircle2, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, Puzzle, RefreshCw, Trash2, User, XCircle, type LucideIcon} from 'lucide-react';
+import {AtSign, Bot, CheckCircle2, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, Puzzle, RefreshCw, Trash2, User, XCircle, type LucideIcon} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
@@ -17,8 +17,9 @@ import {ProfileCard, ProjectRulesCard, VoiceCard, VoiceCardSkeleton} from './Pro
 import {RequirementsCard} from './Requirements';
 import {ProjectAvatar, useProjects} from './ProjectPicker';
 import {SkillsSection} from './Skills';
+import {CloudSection} from './CloudSettings';
 
-// Ajustes (#/ajustes/<section>): Proyecto, Cuenta, Modo, Agente, Voz, Extracción de datos,
+// Ajustes (#/ajustes/<section>): Proyecto, Cuenta, Modo, Instagram, Agente, Voz, Extracción de datos,
 // Requisitos and Skills. Skills reads the workspace's instructions and supporting files. Each service key is
 // asked for where it's used.
 
@@ -818,6 +819,7 @@ const SECTIONS: {id: string; label: string; icon: LucideIcon; description: strin
   {id: 'proyecto', label: 'Proyecto', icon: FolderKanban, description: 'El canal abierto: su nombre, su imagen, su público y sus reglas. También se borra aquí.'},
   {id: 'cuenta', label: 'Cuenta', icon: User, description: 'Tu carpeta de trabajo y quién hace los videos.'},
   {id: 'modo', label: 'Modo', icon: Monitor, description: 'Dónde viven las claves de los servicios externos.'},
+  {id: 'instagram', label: 'Instagram', icon: AtSign, description: 'Tu cuenta de Reel Studio y la cuenta de Instagram de este proyecto: sus números privados y, pronto, publicar.'},
   {id: 'agente', label: 'Agente', icon: Bot, description: 'La herramienta que trabaja en cada video: la que va por defecto.'},
   {id: 'voz', label: 'Voz', icon: Mic, description: 'La narración de los videos.'},
   {id: 'datos', label: 'Extracción de datos', icon: Database, description: 'De dónde salen los reels de Inspiración y las imágenes.'},
@@ -863,6 +865,7 @@ export function Settings({section: wanted}: {section?: string | null}) {
             <DangerZone />
           </>
         )}
+        {section.id === 'instagram' && <CloudSection />}
         {section.id === 'cuenta' && (
           <>
             <WorkspaceCard />

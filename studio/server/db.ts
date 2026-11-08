@@ -18,7 +18,7 @@ import {ROOT} from './workspace.ts';
 
 export type {DB};
 
-const VERSION = 5; // bump when a part's schema changes: the index is rebuilt
+const VERSION = 6; // bump when a part's schema changes: the index is rebuilt
 export const INDEX_FILE = () => path.join(ROOT, '.reel-studio', 'index.sqlite');
 const OLD_FILE = () => path.join(ROOT, 'inspiration', '.index.sqlite'); // Inspiración's own index, before this one
 

@@ -10,7 +10,7 @@ import path from 'node:path';
 import {ROOT, listProjects} from './workspace.ts';
 import {readJson} from './platform.ts';
 import {register, read as readIndex, dirs, mtime, median, norm, strs, json, row, words, since, durationWhere, type DB, type DURATIONS} from './db.ts';
-import type {InspirationProfile, OwnReel, PostedReel, ReelAnalysis, ReelTranscript} from '../shared/types.ts';
+import type {CloudReelMetrics, InspirationProfile, OwnReel, PostedReel, ReelAnalysis, ReelTranscript} from '../shared/types.ts';
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,60}$/;
 const USER = /^[a-z0-9._]{1,30}$/;
@@ -108,6 +108,13 @@ CREATE TABLE own_reels (      -- Mi cuenta: its reels, with their numbers
   takeaways  TEXT,             -- JSON array: what to repeat and what to change
   analysed_at INTEGER,
   sheets     INTEGER NOT NULL, -- frame sheets (sheet_NN.jpg, 30 s each)
+  saves      INTEGER,          -- from here on, Instagram's own numbers (insights.json, through his Reel Studio account; null without it or while Meta has none): times saved
+  shares     INTEGER,
+  reach      INTEGER,          -- accounts that saw it (Meta's estimate)
+  avg_watch  REAL,             -- seconds watched per play, on average
+  retention  REAL,             -- avg_watch / duration
+  skip_rate  REAL,             -- % of plays skipped in the first seconds
+  insights_at INTEGER,         -- when they were read, ms
   search     TEXT NOT NULL,    -- internal: caption, hashtags, music, transcript and analysis, lowercase and without accents, for LIKE
   sig        TEXT NOT NULL,    -- internal
   PRIMARY KEY (project, account, code)
@@ -143,9 +150,10 @@ const ls = (p: string) => {
 
 type ReelFile = {code: string; url: string; caption: string; posted: string | null; views: number | null; likes: number | null; comments: number | null; duration: number | null; music: string | null; metricsAt: number; added: number; error?: string | null};
 type AccountFile = {username: string; fullName: string | null; profile: InspirationProfile | null; fetched: number | null; error: string | null};
+type InsightsFile = {metrics?: Partial<CloudReelMetrics>; at?: number};
 
 const VIDEO_FILES = ['title.txt', 'style.txt', 'audio/vo.txt', 'audio/beats.json', 'caption.md', 'audio/vo.mp3', 'src/words.json'];
-const REEL_FILES = ['reel.json', 'meta.json', 'thumb.jpg', 'transcript.json', 'hook.jpg', 'analysis.json'];
+const REEL_FILES = ['reel.json', 'meta.json', 'thumb.jpg', 'transcript.json', 'hook.jpg', 'analysis.json', 'insights.json'];
 
 // Each returns whether anything changed.
 function syncVideos(d: DB, ids: string[]) {
@@ -214,7 +222,8 @@ function syncAccounts(d: DB, ids: string[], configured: Map<string, string | nul
   const seen = new Set<string>();
   const upsert = d.prepare(
     `INSERT OR REPLACE INTO own_reels (project, account, code, url, caption, posted, views, likes, comments, duration, music, ratio, engagement, metrics_at, added, hashtags, thumb, video,
-      state, error, language, words, wps, no_audio, transcript, topic, hook_text, hook_visual, hook_why, cta, visuals, takeaways, analysed_at, sheets, search, sig) VALUES (${Array(36).fill('?').join(', ')})`,
+      state, error, language, words, wps, no_audio, transcript, topic, hook_text, hook_visual, hook_why, cta, visuals, takeaways, analysed_at, sheets,
+      saves, shares, reach, avg_watch, retention, skip_rate, insights_at, search, sig) VALUES (${Array(43).fill('?').join(', ')})`,
   );
   const delBeats = d.prepare('DELETE FROM own_beats WHERE project = ? AND account = ? AND code = ?');
   const addBeat = d.prepare('INSERT INTO own_beats (project, account, code, idx, tag, start, "end", summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
@@ -242,6 +251,9 @@ function syncAccounts(d: DB, ids: string[], configured: Map<string, string | nul
         const prev = (oldVideo.get(id, u, c) as {video: string | null} | undefined)?.video ?? null;
         const an = readJson<ReelAnalysis>(path.join(rd, 'analysis.json'));
         const t = readJson<ReelTranscript>(path.join(rd, 'transcript.json'));
+        const ins = readJson<InsightsFile>(path.join(rd, 'insights.json'));
+        const m = ins?.metrics;
+        const avgWatch = typeof m?.avgWatchMs === 'number' ? m.avgWatchMs / 1000 : null;
         const state = r.error ? 'error' : an ? 'ready' : t && mtime(path.join(rd, 'hook.jpg')) ? 'processed' : 'pending';
         const visuals = strs(an?.visuals);
         const takeaways = strs(an?.takeaways);
@@ -256,7 +268,8 @@ function syncAccounts(d: DB, ids: string[], configured: Map<string, string | nul
             id, u, c, r.url ?? `https://www.instagram.com/reel/${c}/`, r.caption ?? '', r.posted, r.views, r.likes, r.comments, r.duration, r.music, null,
             r.views ? ((r.likes ?? 0) + (r.comments ?? 0)) / r.views : null, r.metricsAt, r.added, json(hashtags), mtime(path.join(rd, 'thumb.jpg')) ? 1 : 0, prev,
             state, r.error ?? null, t?.language ?? null, t?.words ?? null, t?.wps ?? null, t?.noAudio ? 1 : 0, t?.text ?? null,
-            an?.topic ?? null, an?.hook?.text ?? null, an?.hook?.visual ?? null, an?.hook?.why ?? null, an?.cta ?? null, json(visuals), json(takeaways), an?.at ?? null, sheets, search, sig,
+            an?.topic ?? null, an?.hook?.text ?? null, an?.hook?.visual ?? null, an?.hook?.why ?? null, an?.cta ?? null, json(visuals), json(takeaways), an?.at ?? null, sheets,
+            m?.saves ?? null, m?.shares ?? null, m?.reach ?? null, avgWatch, avgWatch != null && r.duration ? avgWatch / r.duration : null, m?.skipRate ?? null, ins?.at ?? null, search, sig,
           ]),
         );
         delBeats.run(id, u, c);
@@ -403,8 +416,15 @@ type OwnRow = {
   topic: string | null;
   hook_text: string | null;
   wps: number | null;
+  saves: number | null;
+  shares: number | null;
+  reach: number | null;
+  avg_watch: number | null;
+  retention: number | null;
+  skip_rate: number | null;
 };
-const OWN_COLS = 'r.code, r.url, r.caption, r.posted, r.views, r.likes, r.comments, r.duration, r.music, r.ratio, r.engagement, r.metrics_at, r.thumb, r.video, v.title video_title, r.state, r.error, r.topic, r.hook_text, r.wps';
+const OWN_COLS =
+  'r.code, r.url, r.caption, r.posted, r.views, r.likes, r.comments, r.duration, r.music, r.ratio, r.engagement, r.metrics_at, r.thumb, r.video, v.title video_title, r.state, r.error, r.topic, r.hook_text, r.wps, r.saves, r.shares, r.reach, r.avg_watch, r.retention, r.skip_rate';
 const OWN_FROM = 'FROM own_reels r LEFT JOIN videos v ON v.project = r.project AND v.slug = r.video';
 const own = (r: OwnRow): OwnReel => ({
   code: r.code,
@@ -426,8 +446,28 @@ const own = (r: OwnRow): OwnReel => ({
   topic: r.topic,
   hook: r.hook_text,
   wps: r.wps,
+  saves: r.saves,
+  shares: r.shares,
+  reach: r.reach,
+  avgWatch: r.avg_watch,
+  retention: r.retention,
+  skipRate: r.skip_rate,
 });
-const OWN_SORTS: Record<string, string> = {posted: 'r.posted', views: 'r.views', ratio: 'r.ratio', likes: 'r.likes', comments: 'r.comments', engagement: 'r.engagement', duration: 'r.duration', wps: 'r.wps'};
+const OWN_SORTS: Record<string, string> = {
+  posted: 'r.posted',
+  views: 'r.views',
+  ratio: 'r.ratio',
+  likes: 'r.likes',
+  comments: 'r.comments',
+  engagement: 'r.engagement',
+  duration: 'r.duration',
+  wps: 'r.wps',
+  saves: 'r.saves',
+  shares: 'r.shares',
+  reach: 'r.reach',
+  retention: 'r.retention',
+  skipRate: 'r.skip_rate',
+};
 
 // One page of an account's reels, filtered and in order (missing values last, whichever the direction).
 export function ownList(project: string, account: string, q: OwnQuery) {
