@@ -4,24 +4,25 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type {ScriptCheck, ScriptCheckCriterion, ScriptCheckLevel, ScriptCheckState} from '../shared/types.ts';
+import type {CheckModels, ScriptCheck, ScriptCheckCriterion, ScriptCheckLevel, ScriptCheckState} from '../shared/types.ts';
 import {agentCli} from './agent.ts';
 import * as audience from './audience.ts';
+import {checkModel, setCheckModel} from './config.ts';
 import {readJson, writeJson} from './platform.ts';
 import {VIDEOS, isPlaceholder} from './reels.ts';
 
 const FILE = (slug: string) => path.join(VIDEOS, slug, 'audience-check.json');
-const scriptOf = (slug: string) => {
+export const scriptOf = (slug: string) => {
   try {
     return fs.readFileSync(path.join(VIDEOS, slug, 'audio/vo.txt'), 'utf8').trim();
   } catch {
     return '';
   }
 };
-const hash = (s: string) => crypto.createHash('sha1').update(s).digest('hex');
-const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
-const arr = (v: unknown) => (Array.isArray(v) ? v : []);
-const obj = (v: unknown) => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
+export const hash = (s: string) => crypto.createHash('sha1').update(s).digest('hex');
+export const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+export const arr = (v: unknown) => (Array.isArray(v) ? v : []);
+export const obj = (v: unknown) => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 
 // The rubric: what the profile says matters, with its weight. The score is their sum.
 export const CRITERIA: {key: string; label: string; max: number; ask: string}[] = [
@@ -64,6 +65,30 @@ export function clean(raw: unknown, script: string): ScriptCheck {
     script: hash(script),
     at: Date.now(),
   };
+}
+
+/* ───── The model each review runs on (its badge on the reel page) ───── */
+
+export const CHECKS = ['audience', 'hook'] as const;
+export type CheckKind = (typeof CHECKS)[number];
+// The agent's models a review can run on. '' is the review's default: for Claude the 'smart' tier (Sonnet), whose
+// "Predeterminado" in models() would mean the CLI's own default instead.
+export function modelOptions() {
+  const models = agentCli.models();
+  const sonnet = agentCli.id === 'claude' ? models.find((m) => m.id === 'sonnet') : undefined;
+  return models.map((m) => ({id: m.id, label: m.id === '' && sonnet ? `Predeterminado (${sonnet.label})` : m.label}));
+}
+// The chosen one, if the agent still offers it ('' otherwise: the default).
+export function modelFor(check: CheckKind) {
+  const id = checkModel(agentCli.id, check);
+  return id && agentCli.models().some((m) => m.id === id) ? id : '';
+}
+export const models = (): CheckModels => ({agent: agentCli.label, options: modelOptions(), chosen: Object.fromEntries(CHECKS.map((c) => [c, modelFor(c)])) as Record<CheckKind, string>});
+export function setModel(check: unknown, model: unknown): CheckModels {
+  if (!CHECKS.includes(check as CheckKind)) throw Object.assign(new Error('esa revisión no existe'), {status: 404});
+  if (typeof model !== 'string' || !modelOptions().some((m) => m.id === model)) throw Object.assign(new Error(`${agentCli.label} no tiene ese modelo`), {status: 400});
+  setCheckModel(agentCli.id, check as string, model);
+  return models();
 }
 
 const running = new Map<string, Promise<void>>();
@@ -125,7 +150,7 @@ async function judge(script: string): Promise<ScriptCheck> {
   const a = audience.get();
   let model = '';
   const ask = async (prompt: string) =>
-    audience.parseJson(await agentCli.ask(prompt, 'You answer only with the JSON asked for, nothing else.', {model: 'smart', timeout: 4 * 60_000, onModel: (m) => (model = m)}));
+    audience.parseJson(await agentCli.ask(prompt, 'You answer only with the JSON asked for, nothing else.', {model: 'smart', effort: 'medium', use: modelFor('audience'), timeout: 4 * 60_000, onModel: (m) => (model = m)}));
   const answer = await ask(`${audience.context(a)}
 
 My audience profile:

@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
+import type {AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -20,6 +20,12 @@ export const api = {
     fetch('/api/reels', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text, brief, context, style, videoFormat, clips, ...choice})}).then((r) => json<{slug: string; title: string}>(r)),
   audienceCheck: (slug: string) => fetch(`/api/reels/${slug}/audience-check`).then((r) => json<ScriptCheckState>(r)),
   runAudienceCheck: (slug: string, force = false) => post(`/api/reels/${slug}/audience-check`, {force}) as Promise<ScriptCheckState>,
+  // The model each review runs on (its badge): '' = the default.
+  checkModels: () => fetch('/api/checks/models').then((r) => json<CheckModels>(r)),
+  setCheckModel: (check: 'audience' | 'hook', model: string) =>
+    fetch(`/api/checks/${check}/model`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({model})}).then((r) => json<CheckModels>(r)),
+  hookCheck: (slug: string) => fetch(`/api/reels/${slug}/hook-check`).then((r) => json<HookCheckState>(r)),
+  runHookCheck: (slug: string, force = false) => post(`/api/reels/${slug}/hook-check`, {force}) as Promise<HookCheckState>,
   // Deletes the video and everything of it, for good.
   remove: (slug: string) => fetch(`/api/reels/${slug}`, {method: 'DELETE'}).then((r) => json(r)),
   // The video's visual style (style.txt).

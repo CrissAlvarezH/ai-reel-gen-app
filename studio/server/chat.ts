@@ -583,6 +583,11 @@ export const instructions = (key: string) => SYSTEM(key);
 const MOVE_LINE =
   'Moverte a un video: sí puedes. Esta conversación no tiene video y puede pasar a ser la de uno, una sola vez, con todo lo hablado (es la misma sesión). Al crear un video con scripts/new-video.sh, esta conversación queda asignada a él sola (lo dice su salida); si creas varios en el mismo turno, se queda aquí. Hazlo tú cuando él te pida moverte, asignarte o seguir en un video, o si creaste varios y debes seguir en uno (pregúntale a cuál si está delante): curl -s -X POST "$REEL_STUDIO_URL/api/chat/_general/$REEL_STUDIO_CHAT/move" -H "Content-Type: application/json" -d \'{"slug":"<slug>"}\'. Responde {"slug","when"}: se mueve al terminar este turno y la app abre el video, así que termina el turno ahí y dile que en su próximo mensaje ya sigues en el video. Si responde {"error"}, dile la razón tal cual. Una conversación de video no se mueve a otro.';
 
+// The two script reviews on a video's page (server/script-check.ts, server/hook-check.ts): what they are and how its agent
+// reads or runs them. slug: the video's, or <slug> for the general conversation.
+const checksLine = (slug: string) =>
+  `Revisiones del guion, arriba en la página del video: «Alineación con tu audiencia» (audience-check.json, contra su Perfil de audiencia) y «Fuerza del gancho» (hook-check.json: el gancho de 0–10 s con puntaje, criterios, qué cambiar y ganchos alternativos). Las hace el estudio solo unos segundos después de cada cambio de audio/vo.txt; no escribas esos archivos. Léelas con curl -s "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text" (o audience-check). Para lanzarlas tú y esperar el resultado (puede tardar unos minutos; si el guion no cambió, devuelve la última sin gastar): curl -s -X POST "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text" -H "Content-Type: application/json" -d '{}' (con {"force":true}, otra vez aunque no haya cambiado). Úsalas cuando escribas o cambies el gancho o el guion, y si te pide aplicarlas, léelas antes.`;
+
 const SYSTEM = (key: string) =>
   key === GENERAL
     ? [
@@ -594,6 +599,7 @@ const SYSTEM = (key: string) =>
         accountNote(),
         `Cuando apruebe una idea y te pida crearla, crea el video con scripts/new-video.sh <slug> [estilo] [formato] (lo crea en el proyecto abierto, ${V()}/<slug>/; estilo: el id de una carpeta de styles/; sin él, el predeterminado; queda en ${V()}/<slug>/style.txt; formato: igual con formats/, en format.txt; para saltarte el estilo pasa "") y escribe su guion en ${V()}/<slug>/audio/vo.txt: aparecerá solo en la biblioteca.`,
         MOVE_LINE,
+        checksLine('<slug>'),
         formatsText(),
         profileText(),
         voiceText(key),
@@ -602,7 +608,8 @@ const SYSTEM = (key: string) =>
     : [
         `${authorName()} te escribe desde Reel Studio, la app local que trabaja sobre esta carpeta. Trabajas en el video ${V()}/${key}/.`,
         projectLine(),
-        'Ve en la UI, arriba, «Alineación con tu audiencia»: la revisión de su guion contra su Perfil de audiencia, con puntaje, criterios y qué cambiar (audience-check.json en la carpeta del video; la hace el estudio solo cada vez que cambia audio/vo.txt, no la escribas tú). Si te pide aplicarla, léela. También ve el reproductor con todas las versiones de out/, el timeline de actos, el guion (audio/vo.txt), los recortes, boards, créditos, caption.md y automatizacion.json (lo que se pega en ManyChat o InstantDM; lo puedes escribir tú, con las claves keyword, reply, dm y link, solo texto, sin notas dentro, vacío lo que falte y sin inventar enlaces); la UI se refresca sola cuando cambias archivos, así que no hace falta pegarle rutas de imágenes: dile qué mirar (p. ej. "mira el board cb9" o "la versión v5").',
+        checksLine(key),
+        'Ve en la UI, arriba, esas dos revisiones del guion. También ve el reproductor con todas las versiones de out/, el timeline de actos, el guion (audio/vo.txt), los recortes, boards, créditos, caption.md y automatizacion.json (lo que se pega en ManyChat o InstantDM; lo puedes escribir tú, con las claves keyword, reply, dm y link, solo texto, sin notas dentro, vacío lo que falte y sin inventar enlaces); la UI se refresca sola cuando cambias archivos, así que no hace falta pegarle rutas de imágenes: dile qué mirar (p. ej. "mira el board cb9" o "la versión v5").',
         'Sigue la skill reel-studio para el proceso (guion, imágenes, voz, board, sonido, test sin sonido y render), la skill del estilo del video y LESSONS.md.',
         `El estilo visual lo elige en la UI y te llega en la línea [UI: …] (estilo: …). Está en ${V()}/${key}/style.txt: el id de una carpeta de styles/ (sin archivo, el predeterminado). ${styleLine(key)} Si cambia de estilo con escenas ya hechas, pregúntale antes de rehacerlas.`,
         videoFormatLine(key),

@@ -167,6 +167,23 @@ export type ScriptCheck = {
   model?: string; // who judged it: the agent and its model ("Claude Code · claude-sonnet-…"); older checks don't say
 };
 export type ScriptCheckState = {audience: boolean; script: boolean; running: boolean; stale: boolean; check: ScriptCheck | null; error: string};
+// Reel page → Fuerza del gancho: the script's opening judged on a fixed rubric (videos/<slug>/hook-check.json).
+export type HookCheck = {
+  score: number; // 0–100, the sum of the criteria
+  verdict: string;
+  hook: string; // the opening it judged as the hook, quoted from the script
+  question: string; // the question it leaves the viewer with, '' if none
+  criteria: ScriptCheckCriterion[];
+  good: string[];
+  fixes: {line: string; why: string; try: string}[];
+  alternatives: {hook: string; second: string}[]; // other openings, each with its second sentence
+  script: string; // hash of the script it judged
+  at: number;
+  model?: string;
+};
+// The model each script review runs on, per project and agent (its badge on the reel page). chosen: '' = the default.
+export type CheckModels = {agent: string; options: {id: string; label: string}[]; chosen: Record<'audience' | 'hook', string>};
+export type HookCheckState = {script: boolean; running: boolean; stale: boolean; check: HookCheck | null; error: string};
 export type WantOption = {so1: string; so2: string};
 export type Pillar = {name: string; icon: IdeaIcon; wants: string[]; posts: string[]; narrow: string};
 export type PillarSet = {name: string; pillars: Pillar[]; leftovers: string[]};

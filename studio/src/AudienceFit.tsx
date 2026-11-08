@@ -5,15 +5,16 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {Check, ChevronDown, ChevronRight, Lightbulb, MessageSquarePlus, RefreshCw, Sparkles, Target} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@/components/ui/collapsible';
+import {DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {cn} from '@/lib/utils';
-import {api, fmtAgo, useLive, type ScriptCheck, type ScriptCheckState} from './api';
+import {api, fmtAgo, useLive, type CheckModels, type ScriptCheck, type ScriptCheckState} from './api';
 import {LEVELS} from './Audience';
 import {useStudio} from './studio';
 
-const SETTLE = 10_000; // the agent writes vo.txt and then beats.json, sometimes several times in a row
+export const SETTLE = 10_000; // the agent writes vo.txt and then beats.json, sometimes several times in a row
 
-const tone = (score: number) => (score >= 75 ? 'text-emerald-500' : score >= 50 ? 'text-amber-400' : 'text-red-500');
-const bar = (pct: number) => (pct >= 0.75 ? 'bg-emerald-500' : pct >= 0.5 ? 'bg-amber-400' : 'bg-red-500');
+export const tone = (score: number) => (score >= 75 ? 'text-emerald-500' : score >= 50 ? 'text-amber-400' : 'text-red-500');
+export const bar = (pct: number) => (pct >= 0.75 ? 'bg-emerald-500' : pct >= 0.5 ? 'bg-amber-400' : 'bg-red-500');
 // "Claude Code · claude-sonnet-5-5-2026…" → "Sonnet 5.5"; another CLI's model as it names it.
 export function modelName(full: string) {
   const id = full.split(' · ').pop() ?? full;
@@ -21,10 +22,59 @@ export function modelName(full: string) {
   if (!m) return id;
   return [m[1][0].toUpperCase() + m[1].slice(1).toLowerCase(), m[2] && (m[3] ? `${m[2]}.${m[3]}` : m[2])].filter(Boolean).join(' ');
 }
+// The model badge: who judged the last check; a click picks the model this review runs on from now on (per project and
+// agent) and judges again with it. judged: the last check's model; none yet: the chosen one.
+export function ModelBadge({check, judged, disabled, onChange}: {check: 'audience' | 'hook'; judged?: string; disabled: boolean; onChange: () => void}) {
+  const [m, setM] = useState<CheckModels | null>(null);
+  const [err, setErr] = useState('');
+  useEffect(() => void api.checkModels().then(setM, () => {}), []);
+  const chosen = m?.chosen[check] ?? '';
+  const label = judged ? modelName(judged) : (m?.options.find((o) => o.id === chosen)?.label ?? 'Modelo');
+  const pick = (id: string) => {
+    if (id === chosen) return;
+    setErr('');
+    api.setCheckModel(check, id).then(
+      (next) => {
+        setM(next);
+        onChange();
+      },
+      (e: Error) => setErr(e.message),
+    );
+  };
+  return (
+    <DropdownMenu onOpenChange={(open) => open && void api.checkModels().then(setM, () => {})}>
+      <DropdownMenuTrigger asChild disabled={disabled}>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          title={judged ? `Analizado con ${judged}. Clic para cambiar el modelo` : 'Elegir el modelo de esta revisión'}
+          aria-label={`Modelo de la revisión: ${label}. Cambiar`}
+        >
+          <Sparkles className="size-3" /> {label} <ChevronDown className="size-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-56">
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          Modelo de esta revisión{m ? ` (${m.agent})` : ''}. Al cambiarlo, se revisa de nuevo.
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup value={chosen} onValueChange={pick}>
+          {m?.options.map((o) => (
+            <DropdownMenuRadioItem key={o.id || 'default'} value={o.id}>
+              {o.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        {err && <p className="px-2 py-1.5 text-xs text-destructive">{err}</p>}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 const word = (score: number) => (score >= 75 ? 'Bien alineado' : score >= 50 ? 'A medias' : 'Poco alineado');
 
 // The score as a ring; while judging, a turning arc.
-function Ring({score, busy, dim}: {score: number | null; busy: boolean; dim: boolean}) {
+export function Ring({score, busy, dim}: {score: number | null; busy: boolean; dim: boolean}) {
   const r = 21;
   const c = 2 * Math.PI * r;
   return (
@@ -134,11 +184,7 @@ export function AudienceFit({slug, script}: {slug: string; script: string}) {
                 <span className={cn('size-1.5 rounded-full', level.dot)} /> {level.label}
               </span>
             )}
-            {c?.model && (
-              <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground" title={`Analizado con ${c.model}`}>
-                <Sparkles className="size-3" /> {modelName(c.model)}
-              </span>
-            )}
+            <ModelBadge check="audience" judged={c?.model} disabled={running} onChange={() => s.script && void judge(true)} />
             {c?.problem && <span className="max-w-64 truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground" title={c.problem}>«{c.problem}»</span>}
           </div>
           <p className={cn('line-clamp-2 text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{error || status || c?.verdict}</p>

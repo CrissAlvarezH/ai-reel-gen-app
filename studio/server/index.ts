@@ -30,6 +30,7 @@ import * as cloud from './cloud.ts';
 import * as ideas from './ideas.ts';
 import * as audience from './audience.ts';
 import * as scriptCheck from './script-check.ts';
+import * as hookCheck from './hook-check.ts';
 import * as automations from './automations.ts';
 import * as db from './db.ts';
 import * as uploads from './uploads.ts';
@@ -128,9 +129,24 @@ const reel = (req: Req, res: Response, next: NextFunction) => {
 
 app.get('/api/reels', handle(() => listSlugs().map(summary).sort((a, b) => b.updated - a.updated)));
 app.get('/api/reels/:slug', reel, handle((req) => detail(req.params.slug)));
-// Alineación con tu audiencia (server/script-check.ts): GET only reads; POST judges the script if it changed (force: again).
-app.get('/api/reels/:slug/audience-check', reel, handle((req) => scriptCheck.state(req.params.slug)));
-app.post('/api/reels/:slug/audience-check', reel, handle((req) => scriptCheck.run(req.params.slug, req.body?.force === true)));
+// Alineación con tu audiencia (server/script-check.ts) and Fuerza del gancho (server/hook-check.ts): GET only reads;
+// POST judges the script if it changed (force: again) and answers once done. ?format=text: the agent's reading of it.
+const check = (agentText: (slug: string) => string, fn: (req: Req) => unknown) => async (req: Req, res: Response) => {
+  try {
+    const r = await fn(req);
+    if (req.query.format === 'text') res.type('text/plain').send(agentText(req.params.slug) || 'Este video aún no tiene revisión de audiencia.');
+    else res.json(r);
+  } catch (e) {
+    fail(res, e);
+  }
+};
+app.get('/api/reels/:slug/audience-check', reel, check(scriptCheck.agentText, (req) => scriptCheck.state(req.params.slug)));
+app.post('/api/reels/:slug/audience-check', reel, check(scriptCheck.agentText, (req) => scriptCheck.run(req.params.slug, req.body?.force === true)));
+// The model each review runs on (its badge): the open project's choice for the agent in Ajustes.
+app.get('/api/checks/models', handle(() => scriptCheck.models()));
+app.put('/api/checks/:check/model', handle((req) => scriptCheck.setModel(req.params.check, req.body?.model)));
+app.get('/api/reels/:slug/hook-check', reel, check(hookCheck.agentText, (req) => hookCheck.state(req.params.slug)));
+app.post('/api/reels/:slug/hook-check', reel, check(hookCheck.agentText, (req) => hookCheck.run(req.params.slug, req.body?.force === true)));
 
 app.put('/api/reels/:slug/file', reel, handle((req) => {
   const {path: rel, content} = req.body ?? {};

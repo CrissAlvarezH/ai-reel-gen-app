@@ -7,6 +7,7 @@
 //   config/images.json:  enabled image API integrations (web search is always available).
 //   config/social.json:  where Inspiración and Mi cuenta download reels from (Apify or ScrapeCreators).
 //   config/chat.json:    the model and effort last chosen in a conversation, per agent.
+//   config/checks.json:  the model each script review (Alineación con tu audiencia, Fuerza del gancho) runs on, per agent.
 //   config/chrome.json:  whether this project's agent may use Chrome. On unless it was turned off here.
 // A project without its own images.json or social.json follows the workspace's config/ (where they were before
 // they were per project) until it's changed there.
@@ -24,6 +25,7 @@ const VOICE = () => path.join(CONFIG, 'voice.json');
 const IMAGES = () => path.join(CONFIG, 'images.json');
 const SOCIAL = () => path.join(CONFIG, 'social.json');
 const CHAT = () => path.join(CONFIG, 'chat.json');
+const CHECKS = () => path.join(CONFIG, 'checks.json');
 const CHROME = () => path.join(CONFIG, 'chrome.json');
 const orWorkspace = (file: string) => (fs.existsSync(file) ? file : path.join(GLOBAL_CONFIG, path.basename(file)));
 const videoVoiceFile = (slug: string) => path.join(VIDEOS, slug, 'voice.json');
@@ -179,6 +181,15 @@ export function setImageSources(input: unknown): ImageSources {
 type ChatChoice = {model: string; effort: string};
 export const lastChatChoice = (agent: string): ChatChoice | undefined => readFields<Record<string, ChatChoice>>(CHAT())[agent] ?? appConfig().chat?.[agent];
 export const setLastChatChoice = (agent: string, choice: ChatChoice) => writeJson(CHAT(), {...readFields<Record<string, ChatChoice>>(CHAT()), [agent]: choice});
+// '' (or nothing saved): the review's default. Model ids belong to an agent, so each agent keeps its own.
+export const checkModel = (agent: string, check: string): string => {
+  const m = readFields<Record<string, Record<string, unknown>>>(CHECKS())[agent]?.[check];
+  return typeof m === 'string' ? m : '';
+};
+export function setCheckModel(agent: string, check: string, model: string) {
+  const all = readFields<Record<string, Record<string, string>>>(CHECKS());
+  writeJson(CHECKS(), {...all, [agent]: {...all[agent], [check]: model}});
+}
 
 /* ───── Chrome ───── */
 

@@ -26,7 +26,9 @@ export type AgentEvent =
   | {kind: 'result'; ok: boolean; text?: string};
 
 // onModel: told the model that answered (as its CLI names it), when it says.
-export type AskOptions = {model?: 'fast' | 'smart'; images?: string[]; timeout?: number; signal?: AbortSignal; onModel?: (model: string) => void};
+// use: one of the CLI's models() by id, in place of the tier's ('' or absent: the tier's). effort: its reasoning effort
+// (absent: Claude's own default, Codex's by tier; OpenCode has none).
+export type AskOptions = {model?: 'fast' | 'smart'; use?: string; effort?: string; images?: string[]; timeout?: number; signal?: AbortSignal; onModel?: (model: string) => void};
 
 // model / effort: '' or missing = the CLI's own default.
 // chrome: Ajustes → Agente's switch; only Claude Code has this.
@@ -335,14 +337,15 @@ export const claude: AgentCli = {
     return out;
   },
 
-  ask(prompt, system, {model = 'fast', images = [], timeout = 30000, signal, onModel} = {}) {
+  ask(prompt, system, {model = 'fast', use, effort, images = [], timeout = 30000, signal, onModel} = {}) {
     // No tools, no session saved, run outside the workspace so it doesn't load its CLAUDE.md. The message
     // goes in as stream-json so it can carry images. Haiku ~3 s; Sonnet for analysis.
     const content = [
       ...images.map((f) => ({type: 'image', source: {type: 'base64', media_type: f.endsWith('.png') ? 'image/png' : 'image/jpeg', data: fs.readFileSync(f).toString('base64')}})),
       {type: 'text', text: prompt},
     ];
-    const args = ['-p', '--model', model === 'fast' ? 'haiku' : 'sonnet', '--no-session-persistence', '--tools', '', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--system-prompt', system];
+    const alias = use || (model === 'fast' ? 'haiku' : 'sonnet');
+    const args = ['-p', '--model', alias, ...(effort ? ['--effort', effort] : []), '--no-session-persistence', '--tools', '', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--system-prompt', system];
     return new Promise((resolve, reject) => {
       const p = start(claudePath ?? 'claude', args, {cwd: os.tmpdir(), detached: GROUP});
       let out = '';
@@ -360,7 +363,7 @@ export const claude: AgentCli = {
         if (!r) return reject(new Error(err.trim().split('\n').pop() || 'respuesta ilegible de claude'));
         if (r.is_error) return reject(new Error(r.result || 'claude devolvió un error'));
         const init = jsonLines(out).find((e) => e.type === 'system' && typeof (e as {model?: unknown}).model === 'string') as {model: string} | undefined;
-        onModel?.(init?.model ?? (model === 'fast' ? 'haiku' : 'sonnet'));
+        onModel?.(init?.model ?? alias);
         resolve(String(r.result ?? ''));
       });
       p.stdin.end(JSON.stringify({type: 'user', message: {role: 'user', content}}) + '\n');
@@ -643,7 +646,7 @@ export const codex: AgentCli = {
     return []; // reasoning, todo_list, warnings
   },
 
-  ask(prompt, system, {model = 'fast', images = [], timeout = 30000, signal, onModel} = {}) {
+  ask(prompt, system, {model = 'fast', use, effort, images = [], timeout = 30000, signal, onModel} = {}) {
     // Read-only, no session saved, without the user's config (plugins, hooks), outside the workspace so it
     // doesn't read its instructions. Its default model; less reasoning for the fast answers.
     const args = [
@@ -654,8 +657,9 @@ export const codex: AgentCli = {
       '--ignore-user-config',
       '-s',
       'read-only',
+      ...(use ? ['-m', use] : []),
       '-c',
-      `model_reasoning_effort=${toml(model === 'fast' ? 'low' : 'medium')}`,
+      `model_reasoning_effort=${toml(effort || (model === 'fast' ? 'low' : 'medium'))}`,
       '-c',
       `developer_instructions=${toml(`${system}\n\nResponde solo con texto: no uses herramientas ni comandos.`)}`,
       ...images.map((f) => `--image=${f}`),
@@ -679,7 +683,7 @@ export const codex: AgentCli = {
         if (failed) return reject(new Error(failed.error?.message || 'codex devolvió un error'));
         const msgs = evs.filter((e) => e.type === 'item.completed' && e.item?.type === 'agent_message').map((e) => e.item!.text ?? '');
         if (!evs.some((e) => e.type === 'turn.completed') || !msgs.length) return reject(new Error(err.trim().split('\n').pop() || 'respuesta ilegible de codex'));
-        const m = codexDefaultModel();
+        const m = use || codexDefaultModel();
         if (m) onModel?.(m);
         resolve(msgs[msgs.length - 1]);
       });
@@ -886,7 +890,7 @@ export const opencode: AgentCli = {
     return [];
   },
 
-  ask(prompt, system, {images = [], timeout = 30000, signal} = {}) {
+  ask(prompt, system, {use, images = [], timeout = 30000, signal, onModel} = {}) {
     // No write or command tools, outside the workspace so it doesn't read its instructions. Its default model, and the
     // session is deleted afterwards. By name: denying "*" gets refused as a usage limit on its free models.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-studio-ask-'));
@@ -894,7 +898,7 @@ export const opencode: AgentCli = {
     fs.writeFileSync(file, `${system}\n\nResponde solo con texto: no uses herramientas ni comandos.`);
     const deny = Object.fromEntries(['shell', 'bash', 'edit', 'write', 'task', 'webfetch', 'websearch', 'skill'].map((t) => [t, 'deny']));
     const config = {agent: {ask: {mode: 'primary', prompt: `{file:${file}}`, permission: deny}}};
-    const args = ['run', '--standalone', '--format', 'json', '--agent', 'ask', ...images.flatMap((f) => ['-f', f])];
+    const args = ['run', '--standalone', '--format', 'json', '--agent', 'ask', ...(use ? ['--model', use] : []), ...images.flatMap((f) => ['-f', f])];
     const bin = opencodePath ?? 'opencode';
     return new Promise((resolve, reject) => {
       const p = start(bin, args, {cwd: dir, env: {...process.env, PWD: dir, OPENCODE_CONFIG_CONTENT: JSON.stringify(config)}, detached: GROUP});
@@ -923,6 +927,7 @@ export const opencode: AgentCli = {
         if (failed) return reject(new Error(failed.error?.message || failed.error?.type || 'opencode devolvió un error'));
         const texts = evs.filter((e) => e.type === 'text').map((e) => e.part?.text ?? '');
         if (!texts.length) return reject(new Error(err.trim().split('\n').pop() || 'respuesta ilegible de opencode'));
+        if (use) onModel?.(use);
         resolve(texts[texts.length - 1]);
       });
       p.stdin.end(prompt);
