@@ -92,8 +92,9 @@ style's template (`template/`), with the look changed to its `style.json`; say s
    `src/captions.ts` (checked word for word against the transcript), one scene per act in `src/film/scenes.tsx`.
    Every time comes from a cue (`cue('phrase')`, `at('phrase')`), so a new voice re-times the film. Sizes and
    frames from `src/lib.ts` (`W`, `H`, `FPS`, `f()`), never literal numbers. The components are the style's.
-7. **Board** — `./snap.sh out/board <sec> …` renders stills and `sheet.png`. Show a key frame per beat; get
-   approval. Pass the times literally (in zsh a space-separated list in one variable doesn't split).
+7. **Board** — `./snap.sh out/board <sec> …` renders stills and `sheet.png`. The sheet shades in red where
+   Instagram's interface covers the frame (`SHEET_UI=tiktok|youtube|none` for others): no caption, number or
+   footnote may sit in red; fix it before showing. Show a key frame per beat; get approval. Pass the times literally (in zsh a space-separated list in one variable doesn't split).
 8. **Sound** — the cue sheet in `audio/mix.py`, with times from the same cues the scenes use;
    `../../../../.venv/bin/python audio/mix.py` → `public/mix.wav`; set `audio: true` in `src/Root.tsx`. Which sounds:
    the style's. Say at delivery which sounds are synthetic.

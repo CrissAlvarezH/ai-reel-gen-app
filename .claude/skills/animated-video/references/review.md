@@ -48,7 +48,8 @@ plus what to keep, so fixes don't break what works. Between them, cover:
   happens in each line with the sound off; which pictures would a viewer share, and which are the
   literal default a better idea would beat; dead stretches.
 - **Design and sound:** the bar against each shot's anchor frame, whether the accent is where the
-  eye should go, safe zones, caption legibility, and the audio measured with ffmpeg (VO-to-bed
+  eye should go, safe zones (Instagram by default, red on `sheet.png`: top 220 px, bottom from
+  y 1500, right column x ≥ 940 below y 1150, on 1080×1920), caption legibility, and the audio measured with ffmpeg (VO-to-bed
   ratio, masking, loudness, true peak, effects on their events).
 
 Scores plateau fast and recalibrate between rounds (one film's judges stuck at 6–7 out of 10
