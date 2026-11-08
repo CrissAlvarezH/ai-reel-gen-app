@@ -72,6 +72,11 @@ style's template (`template/`), with the look changed to its `style.json`; say s
    from the profile; words ≈ the voice's measured pace × the target seconds. Goal: reach, unless told otherwise.
    Spell numbers out in `audio/vo.txt` ("mil cuarenta y dos") and map them back to digits in `src/captions.ts`
    `DISPLAY`. Get approval. Write `audio/vo.txt` and `audio/beats.json`.
+   **Claim check** — always, also when working alone (an automation, "de forma autónoma"), before the voice: give a
+   fresh agent only `audio/vo.txt`, the planned on-screen figures and notes, and the sources. It opens each source,
+   checks every claim as worded in the script, recomputes the figures and returns each claim as correct, nuanced or
+   false. Fix the false ones before generating the voice; nuances go to `caption.md`. If it can't finish, run it again
+   (or say plainly that it didn't run): never replace it with your own check.
 3. **Pictures** — brainstorm a picture per beat with a fresh agent (animated-video → find the pictures). Prefer
    **one recurring physical motif that plays the system** across the film (a card-catalog cabinet = the server,
    drawers = records). The pictures keep the script's question open: the first frame raises it, and no picture or
@@ -105,7 +110,8 @@ style's template (`template/`), with the look changed to its `style.json`; say s
     `ps -A -o pid=,ppid=,command= | awk '$2==1 && /chrome-headless-shell/ {print $1}' | xargs kill`. Then
     `CONCURRENCY=3 ./render.sh <name>` → `out/<name>.mp4`, normalised to the format's loudness. Check duration,
     loudness, first and last frame. Write `caption.md` with the profile's caption rules and the credits; its opening raises the hook's question rather than answering it. If the video or caption asks people to comment a word to receive something, write `automatizacion.json` (Reel Studio → Instrucciones automatización) with what gets pasted into ManyChat or InstantDM, as strings: `keyword` (the exact word), `reply` (the public reply to the comment), `dm` (the direct message) and `link`. Each is copied as is, so no notes inside them; leave empty what's missing and never invent a link. Report
-    the path, open issues, skipped checks, what is synthetic or invented, and the credits.
+    the path, open issues, skipped checks, what is synthetic or invented, and the credits. Say whether the claim check
+    and the mute test ran, and what each one changed.
 
 ## After a video
 
