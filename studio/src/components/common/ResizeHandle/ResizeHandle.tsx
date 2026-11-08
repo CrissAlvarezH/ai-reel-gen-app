@@ -18,7 +18,6 @@ export default function ResizeHandle(props: ResizeHandleProps) {
       onDoubleClick={props.onReset}
     >
       <div className={s.line} />
-      <span className={s.grip} />
     </div>
   );
 }
