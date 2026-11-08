@@ -649,7 +649,7 @@ function ItemDialog({id, sources, onClose}: {id: string | null; sources: Source[
             </DialogHeader>
             <div className="min-h-0 flex-1 overflow-y-auto rounded-md border bg-muted/20 p-4">
               {html ? (
-                <div className="prose prose-sm max-w-none prose-invert prose-headings:mt-4 prose-headings:mb-1 prose-headings:text-base prose-p:my-1.5 prose-ul:my-1.5 prose-img:rounded-md" dangerouslySetInnerHTML={{__html: html}} />
+                <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:mt-4 prose-headings:mb-1 prose-headings:text-base prose-p:my-1.5 prose-ul:my-1.5 prose-img:rounded-md" dangerouslySetInnerHTML={{__html: html}} />
               ) : (
                 <p className="text-sm text-muted-foreground">El agente no guardó contenido para este resultado.</p>
               )}

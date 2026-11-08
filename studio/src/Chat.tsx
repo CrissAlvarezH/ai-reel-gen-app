@@ -123,7 +123,7 @@ function Item({item, slug, onSeek, onPermission}: {item: ChatItem; slug: string 
     case 'assistant':
       return (
         <div
-          className="prose prose-sm max-w-none prose-invert prose-p:my-2 prose-pre:bg-muted prose-code:before:content-none prose-code:after:content-none prose-img:my-2 prose-img:inline-block prose-img:max-h-72 prose-img:max-w-full prose-img:cursor-zoom-in prose-img:rounded-md"
+          className="prose prose-sm max-w-none dark:prose-invert prose-p:my-2 prose-pre:bg-muted prose-code:before:content-none prose-code:after:content-none prose-img:my-2 prose-img:inline-block prose-img:max-h-72 prose-img:max-w-full prose-img:cursor-zoom-in prose-img:rounded-md"
           dangerouslySetInnerHTML={{__html: md(item.text)}}
           // An image the agent showed opens in full in a new tab.
           onClick={(e) => {
@@ -429,7 +429,7 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
         )}
         {st?.items.map((it) => <Item key={it.id} item={it} slug={slug} onSeek={(t) => studio.seekRef.current(t)} onPermission={(item, allow) => chatApi.answerPermission(chatKey, chatId, item, allow)} />)}
         {st?.running && st.live && (
-          <div className="prose prose-sm max-w-none prose-invert prose-p:my-2 prose-img:my-2 prose-img:inline-block prose-img:max-h-72 prose-img:max-w-full prose-img:rounded-md after:ml-0.5 after:animate-pulse after:content-['▍']" dangerouslySetInnerHTML={{__html: md(st.live)}} />
+          <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-2 prose-img:my-2 prose-img:inline-block prose-img:max-h-72 prose-img:max-w-full prose-img:rounded-md after:ml-0.5 after:animate-pulse after:content-['▍']" dangerouslySetInnerHTML={{__html: md(st.live)}} />
         )}
         {st?.running && (
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">

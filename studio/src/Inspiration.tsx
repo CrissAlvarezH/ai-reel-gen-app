@@ -918,7 +918,7 @@ function ReelsView({
             <CollapsibleContent>
               <CardContent>
                 <div
-                  className="prose prose-sm max-w-none prose-invert prose-headings:mt-4 prose-headings:mb-1 prose-headings:text-base prose-p:my-1.5 prose-ul:my-1.5"
+                  className="prose prose-sm max-w-none dark:prose-invert prose-headings:mt-4 prose-headings:mb-1 prose-headings:text-base prose-p:my-1.5 prose-ul:my-1.5"
                   dangerouslySetInnerHTML={{__html: md(account.analysis.text.replace(/\[([A-Za-z0-9_-]{5,40})\](?!\()/g, (_, c) => `[${c}](#/inspiracion/@${account.username}/${c})`))}}
                 />
               </CardContent>
