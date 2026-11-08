@@ -183,20 +183,6 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   return (
     <nav className="sticky top-14 hidden h-[calc(100vh-3.5rem)] flex-col overflow-hidden border-r bg-card/40 lg:flex">
       <ProjectPicker compact={compact} />
-      {/* The main action, always at hand. */}
-      <a
-        href="#/nuevo"
-        title={compact ? 'Nuevo video' : undefined}
-        aria-label={compact ? 'Nuevo video' : undefined}
-        aria-current={page === 'new' ? 'page' : undefined}
-        className={cn(
-          'mx-2 mt-2 flex flex-none items-center justify-center gap-2 rounded-md bg-primary text-sm font-medium text-primary-foreground shadow-sm transition-all duration-150 hover:bg-primary/90 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-[0.98]',
-          compact ? 'h-8' : 'h-9 px-3',
-        )}
-      >
-        <Plus className="size-4 flex-none" />
-        {!compact && <span className="animate-fade-in truncate">Nuevo video</span>}
-      </a>
       {/* The pages scroll on their own when they don't fit (a short window, or the video list dragged up). */}
       <div ref={menuRef} className="flex min-h-12 flex-col overflow-y-auto overscroll-contain" style={{flex: videosHeight && !compact ? '1 1 0' : '0 1 auto'}}>
       {GROUPS.map((g) => (
