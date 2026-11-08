@@ -18,6 +18,7 @@ import {api, chatApi, fmtAgo, fmtSize, fmtTime, useLive, voiceApi, type Act, typ
 import {VoiceDialog} from './ProfileVoice';
 import {AudienceFit} from './AudienceFit';
 import {HookStrength} from './HookStrength';
+import {ReelAudit} from './Audit';
 import {ConflictNote, SaveBar, saveOnCmdS, useEditable} from './Editable';
 import {ScriptEditor, StructureBar, parts, taggedScript, type ScriptValue} from './ScriptEditor';
 import {LivePreview, type PreviewControls} from './Preview';
@@ -301,6 +302,7 @@ export function ReelView({slug}: {slug: string}) {
         </div>
       </div>
       <ReelProgress steps={reel.progress} />
+      <ReelAudit slug={reel.slug} />
       <ReelFormat reel={reel} onChanged={load} />
       <ReelStyle reel={reel} onChanged={load} />
       {!reel.videoFormat?.footage && <ReelVoice reel={reel} onChanged={load} />}

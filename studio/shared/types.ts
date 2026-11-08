@@ -195,7 +195,7 @@ export type PillarSet = {name: string; pillars: Pillar[]; leftovers: string[]};
 /* ───── Where Cristian is in the UI (sent with every message to the agent) ───── */
 
 export type UiContext = {
-  page: 'account' | 'library' | 'ideas' | 'audience' | 'automations' | 'sources' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
+  page: 'account' | 'library' | 'ideas' | 'audience' | 'automations' | 'audit' | 'sources' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
   slug?: string;
   style?: string; // style open on the Estilos page (styles/<id>)
   videoFormat?: string; // format open on the Formatos page (formats/<id>)
@@ -362,7 +362,7 @@ export type ChatEvent =
   | {op: 'chats'};
 
 // workspace: the studio now works on another folder (every page reloads).
-export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'automations'} | {type: 'styles'} | {type: 'formats'} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
+export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'automations'} | {type: 'audit'} | {type: 'styles'} | {type: 'formats'} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
 
 /* ───── Profile and voice (config/, set in Ajustes) ───── */
 
@@ -650,3 +650,45 @@ export type SourceItemDetail = SourceItem & {markdown: string};
 // items/fresh: how many results each source has, and how many not opened yet.
 export type SourcesView = {sources: (Source & {items: number; fresh: number})[]; tags: string[]};
 export type SourceItemList = {rows: SourceItem[]; total: number};
+
+/* ───── Auditoría (server/fact-audit.ts) ───── */
+
+// Three agents check, each on its own and without seeing the others, that the facts a video's script states are right,
+// with sources; then their findings are merged into one report. Per project, in projects/<id>/fact-audit.json.
+export type FactVerdict = 'error' | 'matiz' | 'ok'; // wrong · true but missing context or loosely put · checked and right
+export type FactSource = {title: string; url: string};
+export type FactFinding = {
+  id: string;
+  claim: string; // the line of the script, quoted
+  verdict: FactVerdict;
+  explanation: string; // what the sources say
+  correction: string; // how to say it right ('' for ok)
+  sources: FactSource[];
+  agents: number[]; // which reviewers (1–3) flagged or checked it
+  disputed: boolean; // the reviewers disagreed on the verdict
+};
+export type FactReviewer = {n: number; lens: string; state: 'pending' | 'running' | 'done' | 'error' | 'stopped'; model: string; error: string; claims: number; flagged: number; at: number | null};
+// status: how the run went. state: what he did with it (Pendiente, Resuelto, Archivado).
+export type FactReportStatus = 'queued' | 'running' | 'done' | 'error' | 'stopped' | 'interrupted';
+export type FactReportState = 'open' | 'resolved' | 'archived';
+export type FactReport = {
+  id: string;
+  slug: string;
+  title: string;
+  trigger: 'manual' | 'auto';
+  script: string; // the script it checked, as it was
+  scriptHash: string;
+  prompt: string; // his instructions at the time
+  created: number;
+  finished: number | null;
+  status: FactReportStatus;
+  state: FactReportState;
+  reviewers: FactReviewer[];
+  summary: string;
+  findings: FactFinding[];
+  error: string;
+  stale?: boolean; // in the view: the script changed since
+};
+export type FactAuditSettings = {auto: boolean; prompt: string; model: string; effort: string}; // effort: the reviewers' reasoning effort ('high' by default)
+export type FactAuditVideo = {slug: string; title: string; script: boolean; updated: number; lastAudit: number | null; stale: boolean; busy: boolean};
+export type FactAuditView = {settings: FactAuditSettings; agent: string; models: {id: string; label: string; efforts: string[]}[]; videos: FactAuditVideo[]; reports: FactReport[]};

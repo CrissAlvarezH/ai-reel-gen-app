@@ -1,6 +1,6 @@
 import type {Comment, IdeaRef, InspirationRef, UiContext} from '../api';
 
-export type AuditKind = 'audience' | 'hook';
+export type AuditKind = 'audience' | 'hook' | 'facts'; // facts: the latest report of Auditoría
 
 /** A mutable box read and written without re-rendering (like a React ref, but shared app-wide). */
 export type Box<T> = {current: T};

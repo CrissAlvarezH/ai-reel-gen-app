@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import ResizeHandle from '@/components/common/ResizeHandle';
 import {marked} from 'marked';
-import {ArrowUp, Check, History, ImagePlus, Lightbulb, Loader2, PanelRightClose, PanelRightOpen, Plus, Square, Target, Wrench, X} from 'lucide-react';
+import {ArrowUp, Check, History, ImagePlus, Lightbulb, Loader2, PanelRightClose, PanelRightOpen, Plus, ShieldCheck, Square, Target, Wrench, X} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
 import ListSkeleton from '@/components/common/ListSkeleton';
@@ -193,7 +193,8 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
   const refs = slug ? [] : studio.refs;
   const ideaRefs = slug ? [] : studio.ideaRefs;
   // The reel's script reviews attached with "Agregar al chat" (its conversation only): audience and/or hook.
-  const auditKinds = slug ? (['audience', 'hook'] as const).filter((k) => studio.audits.includes(`${k}/${slug}`)) : [];
+  // Auditoría's latest report too (facts).
+  const auditKinds = slug ? (['audience', 'hook', 'facts'] as const).filter((k) => studio.audits.includes(`${k}/${slug}`)) : [];
   const audit = auditKinds.length > 0;
   const [st, setSt] = useState<ChatState | null>(null);
   // Only asked for while they'd show: writing them spends a little of his plan.
@@ -351,7 +352,7 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
     setErr('');
     stick.current = true;
     try {
-      await chatApi.send(chatKey, chatId, audit && !msg.trim() ? (auditKinds.length > 1 ? 'Aplica estos análisis al guion.' : auditKinds[0] === 'hook' ? 'Aplica este análisis del gancho al guion.' : 'Aplica este análisis de audiencia al guion.') : msg, comments, {...studio.uiRef.current}, refs.length ? refs : undefined, ready.length ? ready : undefined, ideaRefs.length ? ideaRefs : undefined, audit ? [...auditKinds] : undefined);
+      await chatApi.send(chatKey, chatId, audit && !msg.trim() ? (auditKinds.length > 1 ? 'Aplica estos análisis al guion.' : auditKinds[0] === 'hook' ? 'Aplica este análisis del gancho al guion.' : auditKinds[0] === 'facts' ? 'Corrige en el guion los errores y matices de esta auditoría.' : 'Aplica este análisis de audiencia al guion.') : msg, comments, {...studio.uiRef.current}, refs.length ? refs : undefined, ready.length ? ready : undefined, ideaRefs.length ? ideaRefs : undefined, audit ? [...auditKinds] : undefined);
       setText('');
       for (const i of images) URL.revokeObjectURL(i.url);
       setImages([]);
@@ -471,7 +472,7 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
         )}
         {auditKinds.map((k) => (
           <div key={k} className="flex items-center gap-2 self-start rounded-md bg-muted py-0.5 pr-0.5 pl-2 text-xs">
-            <Target className="size-3.5 text-muted-foreground" /> {k === 'hook' ? 'Análisis del gancho' : 'Análisis de audiencia del guion'}
+            {k === 'facts' ? <ShieldCheck className="size-3.5 text-muted-foreground" /> : <Target className="size-3.5 text-muted-foreground" />} {k === 'hook' ? 'Análisis del gancho' : k === 'facts' ? 'Auditoría de datos' : 'Análisis de audiencia del guion'}
             <Button variant="ghost" size="icon-xs" onClick={() => studio.removeAudit(slug!, k)} title="Quitar">
               <X />
             </Button>

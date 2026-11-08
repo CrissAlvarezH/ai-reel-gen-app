@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {AlertCircle, CalendarClock, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Newspaper, Palette, Plus, Settings as SettingsIcon, Sparkles, Target, UserRound} from 'lucide-react';
+import {AlertCircle, CalendarClock, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Newspaper, Palette, Plus, Settings as SettingsIcon, ShieldCheck, Sparkles, Target, UserRound} from 'lucide-react';
 import {cn} from '@/lib/utils';
 import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState, type ProgressStep, type ReelSummary} from './api';
 import {ReelProgressRing} from './ReelProgress';
@@ -107,6 +107,7 @@ const GROUPS: {label: string; pages: {href: string; icon: typeof UserRound; labe
       {href: '#/audiencia', icon: Target, label: 'Perfil de audiencia', is: ['audience']},
       {href: '#/inspiracion', icon: Sparkles, label: 'Inspiración', is: ['inspiration']},
       {href: '#/fuentes', icon: Newspaper, label: 'Fuentes de información', is: ['sources']},
+      {href: '#/auditoria', icon: ShieldCheck, label: 'Auditoría', is: ['audit']},
     ],
   },
   {

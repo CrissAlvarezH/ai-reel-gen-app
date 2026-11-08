@@ -33,6 +33,7 @@ import * as audience from './audience.ts';
 import * as scriptCheck from './script-check.ts';
 import * as hookCheck from './hook-check.ts';
 import * as automations from './automations.ts';
+import * as factAudit from './fact-audit.ts';
 import * as db from './db.ts';
 import * as uploads from './uploads.ts';
 import type {Agent, IdeasBoard, ServerEvent} from '../shared/types.ts';
@@ -82,6 +83,7 @@ const notBusy = (id: string) => {
   const dir = workspace.projectDir(id);
   if (chat.runningIn(dir)) throw httpError(409, 'Un agente está trabajando en este proyecto: detenlo antes de borrarlo.');
   if (automations.runningIn(id)) throw httpError(409, 'Hay una automatización en marcha en este proyecto: detenla antes de borrarlo.');
+  if (factAudit.runningIn(id)) throw httpError(409, 'Hay una auditoría en marcha en este proyecto: detenla antes de borrarlo.');
   const slugs = fs.existsSync(path.join(dir, 'videos')) ? fs.readdirSync(path.join(dir, 'videos')) : [];
   if (slugs.some(installing)) throw httpError(409, 'Aún se están instalando las dependencias de un video: inténtalo en un momento.');
 };
@@ -428,6 +430,15 @@ app.put('/api/automations/:id', handle((req) => automations.edit(req.params.id, 
 app.delete('/api/automations/:id', handle((req) => automations.remove(req.params.id)));
 app.post('/api/automations/:id/run', handle((req) => automations.runNow(req.params.id)));
 app.post('/api/automation-runs/:id/stop', handle((req) => automations.stop(req.params.id)));
+
+// Auditoría (server/fact-audit.ts), of the open project: three agents check a script's facts with sources. Every change
+// answers with the whole view.
+app.get('/api/audit', handle(() => factAudit.view()));
+app.put('/api/audit/settings', handle((req) => factAudit.setSettings(req.body)));
+app.post('/api/audit/run', handle((req) => factAudit.start(req.body?.slugs)));
+app.put('/api/audit/reports/:id/state', handle((req) => factAudit.setState(req.params.id, req.body?.state)));
+app.post('/api/audit/reports/:id/stop', handle((req) => factAudit.stop(req.params.id)));
+app.delete('/api/audit/reports/:id', handle((req) => factAudit.remove(req.params.id)));
 // Ideas de contenido (server/ideas.ts): the page and the agent (tools/ideas.py, which says its project in ?project=).
 // Every change answers with the whole board and tells the pages.
 const ideasProject = (req: Req) => (typeof req.query.project === 'string' ? req.query.project : undefined);
@@ -555,6 +566,7 @@ function send(obj: ServerEvent) {
 chat.setBroadcast(send);
 inspiration.setBroadcast(send);
 account.setBroadcast(send);
+factAudit.setNotify(() => send({type: 'audit'}));
 const pending = new Map<string, NodeJS.Timeout>();
 const announce = (slug: string) => {
   clearTimeout(pending.get(slug));
@@ -642,6 +654,7 @@ app.use(vite.middlewares);
 // new one and tell every open page to reload.
 workspace.onChange(() => {
   chat.stopAll();
+  factAudit.stopAll();
   inspiration.reset();
   account.reset();
   watchVideos();
@@ -664,6 +677,7 @@ workspace.onProjectChange(() => {
 for (const sig of ['SIGINT', 'SIGTERM'] as const)
   process.on(sig, () => {
     chat.stopAll();
+    factAudit.stopAll();
     process.exit(0);
   });
 
@@ -682,6 +696,7 @@ process.env.REEL_STUDIO_URL = `http://${HOST === '0.0.0.0' || HOST === '::' ? '1
 server.listen(PORT, HOST, () => {
   console.log(`Reel Studio → http://localhost:${PORT}`);
   automations.startScheduler(() => send({type: 'automations'}));
+  factAudit.startScanner();
   if (HOST === '0.0.0.0') {
     const ips = Object.values(os.networkInterfaces())
       .flat()

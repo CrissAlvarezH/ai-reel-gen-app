@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView} from '../shared/types';
+import type {FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -126,7 +126,7 @@ export const chatApi = {
   // images: names of images already uploaded with uploadImage.
   // ideas: ideas from Ideas de contenido attached to a message of the general conversation.
   // audit: the reel's Alineación con tu audiencia goes with it (its conversation).
-  send: (key: string, chat: string, text: string, comments: Comment[], context?: unknown, refs?: InspirationRef[], images?: string[], ideas?: IdeaRef[], audit?: ('audience' | 'hook')[]) =>
+  send: (key: string, chat: string, text: string, comments: Comment[], context?: unknown, refs?: InspirationRef[], images?: string[], ideas?: IdeaRef[], audit?: ('audience' | 'hook' | 'facts')[]) =>
     post(`/api/chat/${key}/${chat}`, {text, comments, context, refs, images, ideas, audit}),
   // An image pasted or dropped into the message box, saved in the project; its name goes with the message.
   uploadImage: (file: Blob) => fetch('/api/chat-images', {method: 'POST', headers: {'Content-Type': file.type}, body: file}).then((r) => json<{name: string}>(r)),
@@ -385,6 +385,20 @@ export const automationsApi = {
   remove: (id: string) => automationsCall('DELETE', `/api/automations/${id}`),
   run: (id: string) => automationsCall('POST', `/api/automations/${id}/run`),
   stop: (run: string) => automationsCall('POST', `/api/automation-runs/${run}/stop`),
+};
+
+/* ───── Auditoría ───── */
+
+// Every change answers with the whole view.
+const auditCall = (method: string, path: string, body?: unknown) =>
+  fetch(path, {method, headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)}).then((r) => json<FactAuditView>(r));
+export const auditApi = {
+  view: () => auditCall('GET', '/api/audit'),
+  settings: (s: Partial<FactAuditSettings>) => auditCall('PUT', '/api/audit/settings', s),
+  run: (slugs: string[]) => auditCall('POST', '/api/audit/run', {slugs}),
+  setState: (id: string, state: FactReportState) => auditCall('PUT', `/api/audit/reports/${id}/state`, {state}),
+  stop: (id: string) => auditCall('POST', `/api/audit/reports/${id}/stop`),
+  remove: (id: string) => auditCall('DELETE', `/api/audit/reports/${id}`),
 };
 
 /* ───── Ideas de contenido ───── */

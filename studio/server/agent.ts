@@ -28,7 +28,8 @@ export type AgentEvent =
 // onModel: told the model that answered (as its CLI names it), when it says.
 // use: one of the CLI's models() by id, in place of the tier's ('' or absent: the tier's). effort: its reasoning effort
 // (absent: Claude's own default, Codex's by tier; OpenCode has none).
-export type AskOptions = {model?: 'fast' | 'smart'; use?: string; effort?: string; images?: string[]; timeout?: number; signal?: AbortSignal; onModel?: (model: string) => void};
+// web: it may search and read the web (and nothing else): for answers that must cite sources (fact-audit.ts).
+export type AskOptions = {model?: 'fast' | 'smart'; use?: string; effort?: string; images?: string[]; web?: boolean; timeout?: number; signal?: AbortSignal; onModel?: (model: string) => void};
 
 // model / effort: '' or missing = the CLI's own default.
 // chrome: Ajustes → Agente's switch; only Claude Code has this.
@@ -41,8 +42,8 @@ export interface AgentCli {
   // One turn of a conversation: a process whose stdout is one JSON event per line (see parse).
   turn(opts: TurnOptions): ChildProcessWithoutNullStreams;
   parse(event: unknown): AgentEvent[];
-  // A one-off answer with no tools: by default the CLI's fastest model (e.g. naming a new reel). images:
-  // JPEG or PNG files sent with the prompt. timeout in ms. signal stops it (rejects with «detenido»).
+  // A one-off answer with no tools (with web: only web search and fetch): by default the CLI's fastest model (e.g.
+  // naming a new reel). images: JPEG or PNG files sent with the prompt. timeout in ms. signal stops it (rejects with «detenido»).
   ask(prompt: string, system: string, opts?: AskOptions): Promise<string>;
   // The command that continues a conversation in a terminal.
   resumeCommand(sessionId: string): string;
@@ -337,15 +338,15 @@ export const claude: AgentCli = {
     return out;
   },
 
-  ask(prompt, system, {model = 'fast', use, effort, images = [], timeout = 30000, signal, onModel} = {}) {
-    // No tools, no session saved, run outside the workspace so it doesn't load its CLAUDE.md. The message
-    // goes in as stream-json so it can carry images. Haiku ~3 s; Sonnet for analysis.
+  ask(prompt, system, {model = 'fast', use, effort, images = [], web = false, timeout = 30000, signal, onModel} = {}) {
+    // No tools (web: only WebSearch and WebFetch, allowed without asking), no session saved, run outside the workspace
+    // so it doesn't load its CLAUDE.md. The message goes in as stream-json so it can carry images. Haiku ~3 s; Sonnet for analysis.
     const content = [
       ...images.map((f) => ({type: 'image', source: {type: 'base64', media_type: f.endsWith('.png') ? 'image/png' : 'image/jpeg', data: fs.readFileSync(f).toString('base64')}})),
       {type: 'text', text: prompt},
     ];
     const alias = use || (model === 'fast' ? 'haiku' : 'sonnet');
-    const args = ['-p', '--model', alias, ...(effort ? ['--effort', effort] : []), '--no-session-persistence', '--tools', '', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--system-prompt', system];
+    const args = ['-p', '--model', alias, ...(effort ? ['--effort', effort] : []), '--no-session-persistence', ...(web ? ['--tools', 'WebSearch,WebFetch', '--allowedTools', 'WebSearch,WebFetch'] : ['--tools', '']), '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--system-prompt', system];
     return new Promise((resolve, reject) => {
       const p = start(claudePath ?? 'claude', args, {cwd: os.tmpdir(), detached: GROUP});
       let out = '';
@@ -646,9 +647,9 @@ export const codex: AgentCli = {
     return []; // reasoning, todo_list, warnings
   },
 
-  ask(prompt, system, {model = 'fast', use, effort, images = [], timeout = 30000, signal, onModel} = {}) {
+  ask(prompt, system, {model = 'fast', use, effort, images = [], web = false, timeout = 30000, signal, onModel} = {}) {
     // Read-only, no session saved, without the user's config (plugins, hooks), outside the workspace so it
-    // doesn't read its instructions. Its default model; less reasoning for the fast answers.
+    // doesn't read its instructions. Its default model; less reasoning for the fast answers. web: its live web search.
     const args = [
       'exec',
       '--json',
@@ -660,8 +661,9 @@ export const codex: AgentCli = {
       ...(use ? ['-m', use] : []),
       '-c',
       `model_reasoning_effort=${toml(effort || (model === 'fast' ? 'low' : 'medium'))}`,
+      ...(web ? ['-c', 'web_search="live"'] : []),
       '-c',
-      `developer_instructions=${toml(`${system}\n\nResponde solo con texto: no uses herramientas ni comandos.`)}`,
+      `developer_instructions=${toml(`${system}\n\n${web ? 'Puedes buscar y leer en la web; no ejecutes comandos ni leas archivos.' : 'Responde solo con texto: no uses herramientas ni comandos.'}`)}`,
       ...images.map((f) => `--image=${f}`),
       '-',
     ];
@@ -890,13 +892,14 @@ export const opencode: AgentCli = {
     return [];
   },
 
-  ask(prompt, system, {use, images = [], timeout = 30000, signal, onModel} = {}) {
-    // No write or command tools, outside the workspace so it doesn't read its instructions. Its default model, and the
-    // session is deleted afterwards. By name: denying "*" gets refused as a usage limit on its free models.
+  ask(prompt, system, {use, images = [], web = false, timeout = 30000, signal, onModel} = {}) {
+    // No write or command tools (web: its web search and fetch stay), outside the workspace so it doesn't read its
+    // instructions. Its default model, and the session is deleted afterwards. By name: denying "*" gets refused as a
+    // usage limit on its free models.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-studio-ask-'));
     const file = path.join(dir, 'system.md');
-    fs.writeFileSync(file, `${system}\n\nResponde solo con texto: no uses herramientas ni comandos.`);
-    const deny = Object.fromEntries(['shell', 'bash', 'edit', 'write', 'task', 'webfetch', 'websearch', 'skill'].map((t) => [t, 'deny']));
+    fs.writeFileSync(file, `${system}\n\n${web ? 'Puedes buscar y leer en la web; no ejecutes comandos ni leas archivos.' : 'Responde solo con texto: no uses herramientas ni comandos.'}`);
+    const deny = Object.fromEntries(['shell', 'bash', 'edit', 'write', 'task', ...(web ? [] : ['webfetch', 'websearch']), 'skill'].map((t) => [t, 'deny']));
     const config = {agent: {ask: {mode: 'primary', prompt: `{file:${file}}`, permission: deny}}};
     const args = ['run', '--standalone', '--format', 'json', '--agent', 'ask', ...(use ? ['--model', use] : []), ...images.flatMap((f) => ['-f', f])];
     const bin = opencodePath ?? 'opencode';

@@ -18,6 +18,7 @@ import {agentNote as sourcesNote} from './sources.ts';
 import {audienceText} from './audience.ts';
 import * as scriptCheck from './script-check.ts';
 import * as hookCheck from './hook-check.ts';
+import * as factAudit from './fact-audit.ts';
 import * as uploads from './uploads.ts';
 import {newVideoStyle} from './styles.ts';
 import {listFormats} from './formats.ts';
@@ -631,7 +632,7 @@ const SYSTEM = (key: string) =>
         ...COMMON(),
       ].join('\n');
 
-const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', ideas: 'Ideas de contenido', automations: 'Automatizaciones', sources: 'Fuentes de información', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', audience: 'Perfil de audiencia', reel: null};
+const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', ideas: 'Ideas de contenido', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', audience: 'Perfil de audiencia', reel: null};
 const fmtCtx = (c: UiContext | undefined, progress?: string, style?: string, voice?: string, kind?: string) => {
   if (!c || typeof c !== 'object') return '';
   const parts: (string | null | undefined)[] = [PAGES[c.page] ?? (c.slug ? `video ${c.slug}` : null)];
@@ -735,7 +736,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   const audited =
     key === GENERAL
       ? ''
-      : [kinds.includes('audience') && scriptCheck.agentText(key), kinds.includes('hook') && hookCheck.state(key).check && hookCheck.agentText(key)].filter(Boolean).join('\n\n');
+      : [kinds.includes('audience') && scriptCheck.agentText(key), kinds.includes('hook') && hookCheck.state(key).check && hookCheck.agentText(key), kinds.includes('facts') && factAudit.agentText(key)].filter(Boolean).join('\n\n');
   if (!text?.trim() && !comments?.length && !refs.length && !ideaRefs.length && !images.length && !audited) throw httpError(400, 'mensaje vacío');
   // The reel's progress, so the agent always knows what's left without asking.
   const progress =
