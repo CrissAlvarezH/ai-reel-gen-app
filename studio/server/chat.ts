@@ -44,7 +44,8 @@ type Store = {active: string; chats: Chat[]};
 type PendingPermission = {answer: (allow: boolean) => void; expire: () => void; request: string};
 // moveTo: the video its agent asked to go on in (a general conversation), once the turn ends. moveAuto: it was set by
 // scripts/new-video.sh when its agent created that video ('many': it created more than one, so it stays).
-type Run = {dir: string; proc: ChildProcess; pending: Map<string, PendingPermission>; started: number; live: string; tool: string | null; stderr: string; result?: {ok: boolean; text?: string}; stopped?: boolean; context?: ChatContext; said?: boolean; moveTo?: string; moveAuto?: 'one' | 'many'};
+// created: every video scripts/new-video.sh made for this turn, in order (an automation's next steps are told them).
+type Run = {dir: string; proc: ChildProcess; pending: Map<string, PendingPermission>; started: number; live: string; tool: string | null; stderr: string; result?: {ok: boolean; text?: string}; stopped?: boolean; context?: ChatContext; said?: boolean; moveTo?: string; moveAuto?: 'one' | 'many'; created?: string[]};
 
 let seq = 0;
 const id = () => `${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -676,6 +677,7 @@ export function requestMove(key: string, chat: string, slug: unknown, auto = fal
   if (!r) throw httpError(409, 'solo su agente la mueve, durante su turno');
   if (auto) {
     if (typeof slug !== 'string' || !listSlugs().includes(slug)) throw httpError(404, 'ese video no existe en el proyecto abierto');
+    if (!r.created?.includes(slug)) (r.created ??= []).push(slug);
     if (r.moveTo && !r.moveAuto) return {slug: r.moveTo, when: 'al terminar este turno'}; // its agent already chose
     if (r.moveAuto) {
       r.moveTo = undefined;
@@ -697,8 +699,8 @@ export type SendInput = {text?: string; comments?: Comment[]; refs?: unknown; id
 // A turn nobody is watching (server/automations.ts); separate from SendInput, which comes straight from the request.
 // system: added to its system prompt. onDone: when it ends; text is the last thing it said.
 // agent/model/effort: the CLI it runs on (an automation's step); absent: the one in Ajustes.
-// onDone's video: the one the conversation moved to when the turn ended (it's among that video's now).
-export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boolean; text: string; video?: string}) => void; agent?: string; model?: string; effort?: string};
+// onDone's video: the one the conversation moved to when the turn ended (it's among that video's now). created: the videos it made.
+export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boolean; text: string; video?: string; created: string[]}) => void; agent?: string; model?: string; effort?: string};
 
 // note: text for the agent only, ahead of the message (not shown in the transcript).
 // chat: which conversation; by default the open one.
@@ -892,7 +894,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
       if (ended) return;
       ended = true;
       const said = find(load(key, dir), chat).items.findLast((i) => i.role === 'assistant');
-      unattended?.onDone({ok, stopped, text: said?.role === 'assistant' ? said.text : '', video: run.moveTo && here() ? run.moveTo : undefined});
+      unattended?.onDone({ok, stopped, text: said?.role === 'assistant' ? said.text : '', video: run.moveTo && here() ? run.moveTo : undefined, created: run.created ?? []});
     });
 
   proc.on('close', (code, signal) => {

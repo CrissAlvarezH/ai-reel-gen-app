@@ -600,8 +600,8 @@ export type AutomationInput = Pick<Automation, 'name' | 'cron' | 'enabled' | 'st
 // interrupted: the studio closed while it was running.
 export type AutomationRunState = 'running' | 'done' | 'error' | 'stopped' | 'interrupted';
 // A step as it was when the run started. chat: its conversation (an agent's, once started). summary: what it ended up saying or doing.
-// video: the video its conversation moved to (it made one); absent: it's in the general conversation.
-export type AutomationRunStep = AutomationStep & {state: AutomationRunState | 'pending'; chat: string | null; video?: string; summary?: string};
+// video: the video its conversation moved to (it made one); absent: it's in the general conversation. videos: the ones it created.
+export type AutomationRunStep = AutomationStep & {state: AutomationRunState | 'pending'; chat: string | null; video?: string; videos?: string[]; summary?: string};
 // stopping: asked to stop while a step that can't be cut short finishes.
 export type AutomationRun = {id: string; automation: string; name: string; trigger: 'cron' | 'manual'; started: number; ended: number | null; state: AutomationRunState; stopping?: boolean; error?: string; steps: AutomationRunStep[]};
 // runs: most recent first.

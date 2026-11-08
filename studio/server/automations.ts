@@ -18,7 +18,7 @@ import * as chat from './chat.ts';
 import * as insp from './inspiration.ts';
 import {IS_MAC, readJson, writeJson} from './platform.ts';
 import {httpError} from './reels.ts';
-import {PROJECT, listProjects, projectDir, withProject} from './workspace.ts';
+import {PROJECT, VIDEOS, listProjects, projectDir, rel, withProject} from './workspace.ts';
 
 type Store = {automations: Automation[]; runs: AutomationRun[]};
 const KEEP_RUNS = 50;
@@ -161,6 +161,19 @@ const AUTONOMOUS = (name: string, step: number, total: number) =>
     chat.imagesText(),
   ].join('\n');
 
+// What an agent step is told about the steps before it in this run (they all ended well: one that didn't ends the
+// flow). where: a video's folder, as the agent sees it. The last one's full text goes below, so not its summary.
+export function runContext(done: AutomationRunStep[], previous: string, where: (slug: string) => string) {
+  if (!done.length) return '';
+  const what = (st: AutomationRunStep) => (st.type === 'agent' ? 'agente' : st.type === 'account' ? `Mi cuenta, ${st.limit} reels` : st.type === 'post' ? `reel ${st.code} de Mi cuenta` : `@${st.username} de Inspiración, ${st.limit} reels`);
+  const lines = done.map((st, n) => {
+    const vids = st.videos?.length ? `\n  Videos que creó: ${st.videos.map((v) => `${v} (${where(v)})`).join(', ')}` : st.type === 'agent' ? '\n  No creó videos.' : '';
+    const said = n < done.length - 1 && st.summary ? `\n  Resumen: ${st.summary}` : '';
+    return `- Paso ${n + 1} (${what(st)})${vids}${said}`;
+  });
+  return [`Contexto de esta ejecución, los pasos anteriores:`, ...lines, previous && `Resultado del paso anterior:\n${previous.slice(-4000)}`].filter(Boolean).join('\n');
+}
+
 function patchRun(file: string, id: string, fn: (r: AutomationRun) => void) {
   const s = read(file);
   const r = s.runs.find((x) => x.id === id);
@@ -225,13 +238,14 @@ function runStep(id: string, name: string, steps: AutomationStep[], i: number, p
       const conversation = chat.backgroundChat(chat.GENERAL);
       a.chat = conversation;
       mark({chat: conversation});
-      const note = previous && `Resultado del paso anterior de esta automatización:\n${previous.slice(-4000)}`;
+      const done = read(a.file).runs.find((r) => r.id === id)?.steps.slice(0, i) ?? [];
+      const note = runContext(done, previous, (v) => `${rel(path.join(VIDEOS, v))}/`);
       chat.send(chat.GENERAL, {text: step.prompt, note}, conversation, {
         system: AUTONOMOUS(name, i + 1, steps.length),
         ...(step.agent ? {agent: step.agent, model: step.model, effort: step.effort} : {}),
         // Its conversation says why it failed; the run only points there.
-        onDone: ({ok, stopped, text, video}) => {
-          if (video) mark({video});
+        onDone: ({ok, stopped, text, video, created}) => {
+          mark({...(video ? {video} : {}), ...(created.length ? {videos: created} : {})});
           end(ok, stopped, ok || stopped ? text : 'abre su conversación para ver qué pasó.');
         },
       });

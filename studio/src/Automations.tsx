@@ -284,6 +284,17 @@ function RunRow({run: r}: {run: AutomationRun}) {
               <StepHead n={i + 1} type={s.type} state={s.state} />
               <p className="mt-1 line-clamp-2 text-sm whitespace-pre-line text-muted-foreground">{stepText(s)}</p>
               {s.summary && <p className="mt-1 line-clamp-4 text-sm whitespace-pre-line">{s.summary}</p>}
+              {!!s.videos?.length && (
+                <p className="mt-1 text-sm">
+                  Videos creados:{' '}
+                  {s.videos.map((v, j) => (
+                    <span key={v}>
+                      {j > 0 && ', '}
+                      <a className="underline" href={`#/reel/${v}`}>{v}</a>
+                    </span>
+                  ))}
+                </p>
+              )}
               {s.chat && (
                 <Button variant="outline" size="xs" className="mt-1.5" onClick={() => void show(s.chat!, s.video)}>
                   <MessageSquare /> Ver conversación
