@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import ResizeHandle from '@/components/common/ResizeHandle';
 import {marked} from 'marked';
-import {ArrowUp, Check, History, ImagePlus, Lightbulb, Loader2, PanelRightClose, Plus, Square, Target, Wrench, X} from 'lucide-react';
+import {ArrowUp, Check, History, ImagePlus, Lightbulb, Loader2, PanelRightClose, PanelRightOpen, Plus, Square, Target, Wrench, X} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
 import ListSkeleton from '@/components/common/ListSkeleton';
@@ -684,6 +684,7 @@ export function AgentPanel({slug}: {slug: string | null}) {
     >
       {!open && (
         <button onClick={() => setOpen(true)} title={`Abrir ${agent} (⌘J)`} className="animate-fade-in flex h-full w-full flex-col items-center gap-3 py-3 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <PanelRightOpen className="size-4" />
           <span className="rotate-180 text-xs font-medium [writing-mode:vertical-rl]">{agent}</span>
           {running ? <Loader2 className="size-4 animate-spin text-foreground" /> : unread ? <Unread /> : null}
         </button>
@@ -747,7 +748,7 @@ export function AgentPanel({slug}: {slug: string | null}) {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={() => setOpen(false)} title="Recoger (⌘J)">
+          <Button variant="ghost" size="icon-sm" onClick={() => setOpen(false)} title="Recoger (⌘J)">
             <PanelRightClose />
           </Button>
         </div>
