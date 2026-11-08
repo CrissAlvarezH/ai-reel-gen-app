@@ -3,7 +3,7 @@
 // /style-files/ (only files a style lists).
 import fs from 'node:fs';
 import path from 'node:path';
-import type {Style, StyleRef} from '../shared/types.ts';
+import type {Style, StyleRef, StyleThumbnail} from '../shared/types.ts';
 
 import {STYLES} from './workspace.ts';
 import {getProfile} from './config.ts';
@@ -14,6 +14,14 @@ const list = <T>(v: unknown, ok: (x: Record<string, unknown>) => boolean) =>
   (Array.isArray(v) ? v.filter((x) => !!x && typeof x === 'object' && ok(x as Record<string, unknown>)) : []) as T[];
 const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
 const fileUrl = (rel: string) => `/style-files/${rel.split('/').map(encodeURIComponent).join('/')}`;
+
+// style.json "thumbnail": {look, avoid, example (a workspace-relative image)}; null when the style has none.
+function thumbnail(v: unknown): StyleThumbnail | null {
+  if (!v || typeof v !== 'object') return null;
+  const t = v as Record<string, unknown>;
+  const example = str(t.example);
+  return {look: strs(t.look), avoid: strs(t.avoid), example: example && fileUrl(example)};
+}
 
 function read(id: string) {
   try {
@@ -50,6 +58,7 @@ export function listStyles(): Style[] {
       motion: strs(j.motion),
       sources: strs(j.sources),
       avoid: strs(j.avoid),
+      thumbnail: thumbnail(j.thumbnail),
       examples: strs(j.examples).map(fileUrl),
       references: strs(j.references).map(fileUrl),
     });
@@ -59,7 +68,7 @@ export function listStyles(): Style[] {
 
 // Whether a workspace-relative image path is listed by some style (the only files /style-files/ serves).
 export function isStyleFile(rel: string) {
-  return listStyles().some((s) => [...s.examples, ...s.references].includes(fileUrl(rel)));
+  return listStyles().some((s) => [...s.examples, ...s.references, s.thumbnail?.example].includes(fileUrl(rel)));
 }
 
 export const validStyleId = (s: unknown): s is string => typeof s === 'string' && /^[a-z0-9][a-z0-9-]{0,60}$/.test(s);

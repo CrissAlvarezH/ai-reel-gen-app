@@ -20,7 +20,7 @@ project's board is the `content-ideas` skill's, before this process starts.
 - `projects/<id>/videos/<slug>/` — one video: a Remotion project copied from its style's template. `title.txt` (its name in
   the studio), `style.txt` (a style id), `audio/vo.txt` (the narration, exactly as it goes to the voice),
   `audio/beats.json` (the script's structure), `src/format.json` (size, fps, loudness), `CREDITS.md`,
-  `caption.md`, `out/` (renders, boards; not versioned).
+  `caption.md`, `out/` (renders, boards, `miniatura.png` the cover; not versioned).
 - `formats/<id>/format.json` — a format: the kind of video (all animation over a generated voice or over the
   creator's recorded voice; the creator talking to camera with animations…), what's on screen and how it's cut. A video names its format in `format.txt`
   (none: the default, animated). `skill` points to its own instructions, `overlay` to files it adds over the
@@ -109,7 +109,15 @@ style's template (`template/`), with the look changed to its `style.json`; say s
 10. **Render** — on macOS and Linux reap orphaned renderers first:
     `ps -A -o pid=,ppid=,command= | awk '$2==1 && /chrome-headless-shell/ {print $1}' | xargs kill`. Then
     `CONCURRENCY=3 ./render.sh <name>` → `out/<name>.mp4`, normalised to the format's loudness. Check duration,
-    loudness, first and last frame. Write `caption.md` with the profile's caption rules and the credits; its opening raises the hook's question rather than answering it. If the video or caption asks people to comment a word to receive something, write `automatizacion.json` (Reel Studio → Instrucciones automatización) with what gets pasted into ManyChat or InstantDM, as strings: `keyword` (the exact word), `reply` (the public reply to the comment), `dm` (the direct message) and `link`. Each is copied as is, so no notes inside them; leave empty what's missing and never invent a link. Report
+    loudness, first and last frame. Write `caption.md` with the profile's caption rules and the credits; its opening raises the hook's question rather than answering it. If the video or caption asks people to comment a word to receive something, write `automatizacion.json` (Reel Studio → Instrucciones automatización) with what gets pasted into ManyChat or InstantDM, as strings: `keyword` (the exact word), `reply` (the public reply to the comment), `dm` (the direct message) and `link`. Each is copied as is, so no notes inside them; leave empty what's missing and never invent a link.
+    **Thumbnail** — the cover posted with the reel, as its style's `thumbnail` in `style.json` says (look, avoid,
+    example; a style without one: its palette and fonts, a few big words of what the video is about and one simple
+    picture). Write it in `src/thumbnail/Thumbnail.tsx` (its own entry, `src/thumbnail/index.tsx`, loads its fonts;
+    leave `src/Root.tsx` alone) and `./thumb.sh` → `out/miniatura.png`, next to the renders (Reel Studio → Miniatura).
+    A video without them: copy `thumb.sh` and `src/thumbnail/` from `template/`. That folder doesn't count as a
+    change to the film, so the render stays current; never change file dates. Its picture can be the film's own (render a scene's
+    component at a chosen frame, or reuse its props) or a new one. It says what the video is about without giving
+    the answer, and all its text fits the centred 3:4 the profile grid shows. Look at it before reporting. Report
     the path, open issues, skipped checks, what is synthetic or invented, and the credits. Say whether the claim check
     and the mute test ran, and what each one changed.
 

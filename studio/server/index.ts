@@ -197,6 +197,12 @@ app.post('/api/reels/:slug/reveal-version', reel, handle((req) => {
   const filename = decodeURIComponent(version.url.split('/').pop()!);
   reveal(path.join(VIDEOS, req.params.slug, 'out', filename), true);
 }));
+// The thumbnail (out/miniatura.png) selected in its folder, like a version.
+app.post('/api/reels/:slug/reveal-thumbnail', reel, handle((req) => {
+  const thumb = detail(req.params.slug).thumbnail;
+  if (!thumb) throw httpError(404, 'Este video todavía no tiene miniatura.');
+  reveal(path.join(VIDEOS, req.params.slug, 'out', decodeURIComponent(thumb.url.split('?')[0].split('/').pop()!)), true);
+}));
 
 // Structure tags for the script, suggested by the agent (the UI saves them to audio/beats.json).
 app.post('/api/reels/:slug/beats/suggest', reel, handle((req) => beats.suggest(req.body?.text)));

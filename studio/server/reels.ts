@@ -173,12 +173,14 @@ function versions(slug: string, dir: string): Version[] {
     .sort((a, b) => b.mtime - a.mtime);
 }
 
-// Image groups under out/ (boards, mute-test sheets, fix stills): one group per folder, plus loose pngs.
+const THUMB = /^miniatura\.(png|jpe?g|webp)$/i;
+
+// Image groups under out/ (boards, mute-test sheets, fix stills): one group per folder, plus loose pngs (not the thumbnail).
 function boards(slug: string, dir: string): BoardGroup[] {
   const out = path.join(dir, 'out');
   const groups: BoardGroup[] = [];
   const mtime = (p: string) => stat(p)?.mtimeMs ?? 0;
-  const loose = ls(out, isImg);
+  const loose = ls(out, (n) => isImg(n) && !THUMB.test(n));
   if (loose.length) groups.push({name: 'out/', images: loose.map((n) => url(slug, `out/${n}`)), mtime: Math.max(...loose.map((n) => mtime(path.join(out, n))))});
   for (const d of ls(out, (n) => n !== 'studio-frames' && !!stat(path.join(out, n))?.isDirectory())) {
     const imgs = ls(path.join(out, d), isImg);
@@ -198,12 +200,12 @@ function scriptInfo(slug: string, text: string | null) {
   return {words: n, seconds: Math.round((n / pace) * 10) / 10, pace, voice: voiceRef(slug)};
 }
 
-// Newest modification time inside a folder (node_modules and dotfiles left out).
-function newest(p: string): number {
+// Newest modification time inside a folder (node_modules, dotfiles and the folders in skip left out).
+function newest(p: string, skip: string[] = []): number {
   const st = stat(p);
   if (!st) return 0;
   if (!st.isDirectory()) return st.mtimeMs;
-  return Math.max(0, ...ls(p, (n) => n !== 'node_modules').map((n) => newest(path.join(p, n))));
+  return Math.max(0, ...ls(p, (n) => n !== 'node_modules' && !skip.includes(n)).map((n) => newest(path.join(p, n))));
 }
 
 // The voice is stale when vo.txt no longer says what words.json (the timed VO) says.
@@ -232,7 +234,8 @@ function progress(dir: string, script: string, words: Word[], vers: Version[], w
   function rest(): ProgressStep[] {
     const mixAt = mt('public/mix.wav');
     const renderAt = vers[0]?.mtime ?? 0;
-    const inputsAt = Math.max(newest(path.join(dir, 'src')), newest(path.join(dir, 'public')), voiceAt);
+    // src/thumbnail/ is the cover (./thumb.sh), not the film: changing it doesn't call for a new render.
+    const inputsAt = Math.max(newest(path.join(dir, 'src'), ['thumbnail']), newest(path.join(dir, 'public')), voiceAt);
     const what = withFootage ? 'el corte' : 'la voz';
     return [
       {key: 'sonido', label: 'Efectos de sonido', done: voz && mixAt > 0 && mixAt >= voiceAt, note: mixAt > 0 && mixAt < voiceAt ? `${what} cambió: hay que volver a mezclar` : undefined},
@@ -291,6 +294,14 @@ function beats(dir: string): Beat[] {
   return raw.filter((b): b is Beat => !!b && (BEAT_TAGS as readonly string[]).includes(b.tag) && typeof b.line === 'string');
 }
 
+// The cover: out/miniatura.png (or .jpg/.webp), rendered by ./thumb.sh next to the renders, so it's in the folder
+// "Descargar video" opens. The mtime in its url makes the browser fetch it again when it's re-rendered.
+function thumbnailOf(slug: string, dir: string): ReelDetail['thumbnail'] {
+  const name = ls(path.join(dir, 'out'), (n) => THUMB.test(n))[0];
+  const st = name ? stat(path.join(dir, 'out', name)) : null;
+  return name && st ? {url: `${url(slug, `out/${name}`)}?v=${Math.round(st.mtimeMs)}`, mtime: st.mtimeMs} : null;
+}
+
 export function detail(slug: string): ReelDetail {
   const dir = path.join(VIDEOS, slug);
   const script = read(path.join(dir, 'audio/vo.txt')) ?? '';
@@ -311,6 +322,7 @@ export function detail(slug: string): ReelDetail {
     credits: read(path.join(dir, 'CREDITS.md')) ?? '',
     caption: read(path.join(dir, 'caption.md')) ?? '',
     automation: read(path.join(dir, 'automatizacion.json')) ?? '',
+    thumbnail: thumbnailOf(slug, dir),
     // New reels copy a playable example from the template. Wait for their own script and scenes before
     // offering that code as a preview, so the example doesn't look like an already-made video.
     previewEntry: script.trim() && !isPlaceholder(slug, script.trim()) && stat(path.join(dir, 'src/Root.tsx')) && hasOwnScenes(slug) ? fsUrl(path.join(dir, 'src/Root.tsx')) : null,

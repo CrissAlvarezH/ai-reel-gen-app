@@ -51,6 +51,7 @@ export type ReelDetail = Omit<ReelSummary, 'words'> & {
   credits: string;
   caption: string;
   automation: string; // automatizacion.json as it is on disk: the comment-to-DM automation (ManyChat, InstantDM)
+  thumbnail: {url: string; mtime: number} | null; // out/miniatura.png (./thumb.sh renders it): the cover posted with the reel
   previewEntry: string | null;
   format: Format | null; // src/format.json; null in videos made before it existed (1080×1920 at 30 fps in their Root.tsx)
   footage: FootageClip[]; // footage/: his own recording, for formats with footage
@@ -69,6 +70,8 @@ export type StyleColor = {name: string; hex: string; meaning: string};
 export type StyleFont = {family: string; css: string; weight?: number; google?: string; use: string; sample: string}; // google: the family as Google Fonts' css2 wants it
 // A style as a video names it. ready: it has its own skill and template.
 // ready: the style has its own skill and template. template: the folder new videos copy (its own, or the default style's).
+// How a video's thumbnail (its cover) looks in this style: style.json "thumbnail".
+export type StyleThumbnail = {look: string[]; avoid: string[]; example: string | null}; // example: url of a sample
 export type StyleRef = {id: string; name: string; ready: boolean; skill: string | null; template: string};
 export type Style = {
   id: string;
@@ -85,6 +88,7 @@ export type Style = {
   motion: string[];
   sources: string[]; // where its pictures come from
   avoid: string[];
+  thumbnail: StyleThumbnail | null;
   examples: string[]; // urls of approved frames
   references: string[]; // urls of the inspiration it came from
 };

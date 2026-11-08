@@ -653,7 +653,7 @@ function ScriptPanel({reel}: {reel: ReelDetail}) {
   );
 }
 
-/* ───────────── Assets: cutouts, boards, credits, caption, automation ───────────── */
+/* ───────────── Assets: cutouts, boards, credits, caption, thumbnail, automation ───────────── */
 
 function Assets({reel}: {reel: ReelDetail}) {
   const [tab, setTab] = useState(() => {
@@ -672,7 +672,7 @@ function Assets({reel}: {reel: ReelDetail}) {
     }
   };
   const [zoom, setZoom] = useState<string | null>(null);
-  useStudio().uiRef.current.tab = {cut: 'Recortes', boards: 'Boards y sheets', credits: 'Créditos', caption: 'Caption IG', automation: 'Instrucciones automatización'}[tab];
+  useStudio().uiRef.current.tab = {cut: 'Recortes', boards: 'Boards y sheets', credits: 'Créditos', caption: 'Caption IG', thumbnail: 'Miniatura', automation: 'Instrucciones automatización'}[tab];
 
   return (
     <Card>
@@ -687,6 +687,7 @@ function Assets({reel}: {reel: ReelDetail}) {
             </TabsTrigger>
             <TabsTrigger value="credits">Créditos</TabsTrigger>
             <TabsTrigger value="caption">Caption IG</TabsTrigger>
+            <TabsTrigger value="thumbnail">Miniatura</TabsTrigger>
             <TabsTrigger value="automation">Instrucciones automatización</TabsTrigger>
           </TabsList>
           <TabsContent value="cut" className="pt-3">
@@ -712,6 +713,9 @@ function Assets({reel}: {reel: ReelDetail}) {
           </TabsContent>
           <TabsContent value="caption" className="pt-3">
             <CaptionTab reel={reel} />
+          </TabsContent>
+          <TabsContent value="thumbnail" className="pt-3">
+            <ThumbnailTab reel={reel} onZoom={setZoom} />
           </TabsContent>
           <TabsContent value="automation" className="pt-3">
             <AutomationTab reel={reel} />
@@ -844,6 +848,94 @@ function CaptionTab({reel}: {reel: ReelDetail}) {
       <SaveBar ed={ed}>
         <span className="font-mono">caption.md</span> · se publica tal cual en Instagram
       </SaveBar>
+    </div>
+  );
+}
+
+/* ───────────── Thumbnail: miniatura.png, the cover posted with the reel ───────────── */
+
+// The cover (out/miniatura.png, next to the renders) as it shows in the reel (9:16) and as the profile grid crops it (3:4, centred), next to how the
+// video's style says its thumbnails look (style.json "thumbnail").
+function ThumbnailTab({reel, onZoom}: {reel: ReelDetail; onZoom: (u: string) => void}) {
+  const style = useStyles()?.find((s) => s.id === reel.style?.id);
+  const t = reel.thumbnail;
+  const guide = style?.thumbnail;
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  // Like the video's Descargar: shows the file in its folder (Finder, Explorer…) instead of downloading a copy.
+  const revealThumb = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await api.revealThumbnail(reel.slug);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="grid gap-6 md:grid-cols-[auto_1fr]">
+      {t ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-end gap-4">
+            <figure>
+              <button onClick={() => onZoom(t.url)} className="block cursor-zoom-in overflow-hidden rounded-md border">
+                <img src={t.url} alt="Miniatura" className="aspect-[9/16] h-96 w-auto object-cover" />
+              </button>
+              <figcaption className="mt-1 text-xs text-muted-foreground">Reel · 9:16</figcaption>
+            </figure>
+            <figure>
+              <button onClick={() => onZoom(t.url)} className="block cursor-zoom-in overflow-hidden rounded-md border">
+                <img src={t.url} alt="Miniatura en la cuadrícula del perfil" className="aspect-[3/4] h-48 w-auto object-cover" />
+              </button>
+              <figcaption className="mt-1 text-xs text-muted-foreground">Cuadrícula del perfil · 3:4</figcaption>
+            </figure>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>
+              <span className="font-mono">out/miniatura.png</span> · {fmtAgo(t.mtime)}
+            </span>
+            <Button variant="secondary" size="sm" disabled={busy} onClick={revealThumb} title="Mostrar la miniatura en su carpeta">
+              {busy ? <Loader2 className="animate-spin" /> : <Download />} Descargar
+            </Button>
+          </div>
+          {err && <p role="alert" className="text-xs text-destructive">{err}</p>}
+        </div>
+      ) : (
+        <div className="flex aspect-[9/16] h-96 flex-col items-center justify-center gap-2 rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+          <p>Todavía no hay miniatura.</p>
+          <p className="text-xs">Pídesela al agente en el chat: la hace con el estilo del video y aparece aquí y en out/, junto al video.</p>
+        </div>
+      )}
+      <div className="flex flex-col gap-4 text-sm">
+        {guide ? (
+          <>
+            <p className="text-xs font-medium text-muted-foreground uppercase">Miniatura en «{style.name}»</p>
+            {guide.look.length > 0 && (
+              <ul className="flex list-disc flex-col gap-1 pl-4 marker:text-muted-foreground">
+                {guide.look.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            )}
+            {guide.avoid.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground uppercase">Evitar</p>
+                <ul className="flex list-disc flex-col gap-1 pl-4 marker:text-muted-foreground">
+                  {guide.avoid.map((x) => (
+                    <li key={x}>{x}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        ) : (
+          style && <p className="text-muted-foreground">El estilo «{style.name}» no dice cómo son sus miniaturas: el agente la hará con su paleta y su tipografía.</p>
+        )}
+        <p className="text-xs text-muted-foreground">En la cuadrícula del perfil Instagram recorta el centro: el texto tiene que caber ahí.</p>
+      </div>
     </div>
   );
 }

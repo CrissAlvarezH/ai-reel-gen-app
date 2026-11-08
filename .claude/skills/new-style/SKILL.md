@@ -44,6 +44,8 @@ One step at a time, in this order; skip what he already said. What you need:
 6. **Pictures**: real photos (how they're treated: cutouts, halftone, duotone…), illustrations drawn in code,
    icons, or none.
 7. **What to avoid**: what would break the look.
+8. **Thumbnail**: how a video's cover looks in this style (the title, the picture, what's left out). Propose one
+   from the rest if he has none in mind.
 
 Then show him the whole style in one compact summary (a line each: name, palette with meanings, fonts, look,
 motion, pictures, avoid) and ask for his OK before writing it.
@@ -66,6 +68,7 @@ motion, pictures, avoid) and ask for his OK before writing it.
   "motion": ["How things move."],
   "sources": ["Where the pictures come from and how they're treated."],
   "avoid": ["What breaks the look, and why."],
+  "thumbnail": {"look": ["How the cover is made, one point each."], "avoid": ["What breaks it."], "example": null},
   "examples": [],
   "references": ["styles/<id>/refs/ref-1.jpg"]
 }
@@ -80,6 +83,7 @@ motion, pictures, avoid) and ask for his OK before writing it.
   - `references` and `examples` are paths relative to the workspace. `examples` are approved frames of videos
     made in this style: empty until there is one. Without examples the studio draws a poster from the palette
     and fonts.
+  - `thumbnail.example`: a sample cover (workspace-relative image), null until a video in this style has one.
   - Never set `"default": true` (only he changes the default style).
 - Validate the JSON (`python3 -m json.tool styles/<id>/style.json`). The Estilos page shows it on its own.
 

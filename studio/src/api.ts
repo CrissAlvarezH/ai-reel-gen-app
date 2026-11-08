@@ -39,6 +39,7 @@ export const api = {
   // Opens the reel's folder in the file manager of the machine running the studio.
   reveal: (slug: string) => fetch(`/api/reels/${slug}/reveal`, {method: 'POST'}).then((r) => json(r)),
   revealVersion: (slug: string, url: string) => post(`/api/reels/${slug}/reveal-version`, {url}),
+  revealThumbnail: (slug: string) => post(`/api/reels/${slug}/reveal-thumbnail`),
   // Structure tags for a script, suggested by the agent (not saved until the script is).
   suggestBeats: (slug: string, text: string) =>
     fetch(`/api/reels/${slug}/beats/suggest`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text})}).then((r) => json<Beat[]>(r)),

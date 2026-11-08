@@ -319,6 +319,23 @@ function StyleDetail({style: s, styles, setDefault}: {style: Style; styles: Styl
         <Rules title="Evitar" items={s.avoid} />
       </div>
 
+      {s.thumbnail && (
+        <div>
+          <Heading>Miniatura</Heading>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            {s.thumbnail.example && (
+              <button onClick={() => setZoom(s.thumbnail!.example)} className="flex-none cursor-zoom-in self-start overflow-hidden rounded-md border">
+                <img src={s.thumbnail.example} alt="Ejemplo de miniatura" loading="lazy" className="aspect-[9/16] w-44 object-cover" />
+              </button>
+            )}
+            <div className="grid flex-1 gap-6 md:grid-cols-2">
+              <Rules title="Cómo se ve" items={s.thumbnail.look} />
+              <Rules title="Evitar" items={s.thumbnail.avoid} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {s.references.length > 0 && (
         <div>
           <Heading>Referencias de las que salió</Heading>
