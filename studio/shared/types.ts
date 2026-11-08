@@ -613,7 +613,8 @@ export const MAX_ACCOUNT_REELS = 200;
 export const MAX_ANALYSIS_SECONDS = 180; // the longest reel an account's "Analizar…" takes
 // agent step: agent/model/effort pin the CLI it runs on (absent: the one in Ajustes, with its starting choice).
 // sources: an agent extracts what's new from Fuentes de información (those ids; none: every active one), on its CLI like an agent step.
-export type AutomationStep = {type: 'agent'; prompt: string; agent?: string; model?: string; effort?: string} | {type: 'sources'; sources: string[]; agent?: string; model?: string; effort?: string} | {type: 'account'; limit: number} | {type: 'post'; code: string; label: string} | {type: 'external'; username: string; limit: number};
+export type AutomationStep = {type: 'agent'; prompt: string; agent?: string; model?: string; effort?: string} | {type: 'sources'; sources: string[]; agent?: string; model?: string; effort?: string} | {type: 'account'; limit: number} | {type: 'post'; code: string; label: string} | {type: 'external'; username: string; limit: number}; // username ALL_EXTERNAL: every scanned account of the project when it runs
+export const ALL_EXTERNAL = '*';
 export type Automation = {id: string; name: string; cron: string; enabled: boolean; steps: AutomationStep[]; created: number};
 export type AutomationInput = Pick<Automation, 'name' | 'cron' | 'enabled' | 'steps'>;
 // interrupted: the studio closed while it was running.

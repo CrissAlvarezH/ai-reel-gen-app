@@ -715,6 +715,17 @@ async function completeReels(u: string, codes: string[], dir: string, step: Step
 }
 
 // An account an automation can update: one scanned in the open project (not one with only loose reels).
+// The scanned accounts of a project, oldest first (an automation's "Actualizar cuenta externa" with Todas).
+export const followedIn = (project: string) =>
+  withProject(project, () =>
+    dirs(DIR())
+      .filter((u) => USER.test(u))
+      .map((u) => readAccount(u))
+      .filter((a) => !!a?.followed)
+      .sort((a, b) => a!.added - b!.added)
+      .map((a) => a!.username),
+  );
+
 export const isFollowed = (u: unknown): u is string => typeof u === 'string' && USER.test(u) && !!readAccount(u)?.followed;
 
 // "Actualizar métricas": read one reel's metrics and metadata again from the scraper (one reel's price). The video
@@ -1041,6 +1052,7 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
     const toAnalyse = codes.filter((c) => processed(reelDir(u, c)) && !readReel(u, c)?.error && wanted(c));
     Object.assign(job, {stage: 'analyzing', done: 0, total: toAnalyse.length});
     changed();
+    let newly = 0; // analysed well in this run
     await Promise.all(
       toAnalyse.map((c) =>
         analyseSlot(async () => {
@@ -1049,6 +1061,7 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
           changed();
           try {
             await analyseReel(u, c, med, () => alive(g), ctrl.signal);
+            newly++;
           } catch (e) {
             if (g === gen && !stopped()) fail(c, e);
           } finally {
@@ -1065,7 +1078,9 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
     live();
     const a = readAccount(u);
     const analysed = reelCodes(u).filter((c) => d(c, 'analysis.json')).length;
-    if (a?.followed && !opts.analyse && analysed >= MIN_FOR_MEDIAN && (toAnalyse.length || !a.analysis || opts.reanalyse || opts.codes)) {
+    // codes: only if one of them is new to the general analysis (none failed or all of them already in it: nothing to redo).
+    const redo = opts.codes ? newly > 0 || opts.codes.some((c) => d(c, 'analysis.json') && !(a?.analysis?.codes ?? []).includes(c)) : toAnalyse.length || !a?.analysis || opts.reanalyse;
+    if (a?.followed && !opts.analyse && analysed >= MIN_FOR_MEDIAN && redo) {
       Object.assign(job, {stage: 'summary', done: 0, total: 1});
       changed();
       await analyseAccount(u, () => alive(g), ctrl.signal).catch((e) => {

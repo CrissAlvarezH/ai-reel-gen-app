@@ -337,6 +337,12 @@ app.get('/api/settings/chrome', handle(() => ({enabled: config.getChromeAccess()
 app.put('/api/settings/chrome', handle((req) => ({enabled: config.setChromeAccess(req.body?.enabled)})));
 
 // Inspiración (server/inspiration.ts): other accounts' reels, downloaded with Apify or ScrapeCreators, processed and analysed.
+// tools/social.py (inspiration analyse) names the agent's project, as for Mi cuenta: refused if another one is open now.
+app.use('/api/inspiration', (req: Req, res: Response, next: () => void) => {
+  const p = req.get('x-reel-studio-project');
+  if (p && p !== workspace.PROJECT) return void res.status(409).json({error: `Inspiración está abierta en otro proyecto; abre «${p}» en Reel Studio para esto`});
+  next();
+});
 app.get('/api/inspiration', handle(() => inspiration.status()));
 const addKind = (v: unknown) => (v === 'video' || v === 'account' ? v : undefined);
 app.post('/api/inspiration/estimate', handle((req) => inspiration.estimate(req.body?.input, Number(req.body?.limit) || 30, addKind(req.body?.kind))));

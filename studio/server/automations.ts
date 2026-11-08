@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {cronMatches, nextRun} from '../shared/cron.ts';
-import {MAX_ACCOUNT_REELS} from '../shared/types.ts';
+import {ALL_EXTERNAL, MAX_ACCOUNT_REELS} from '../shared/types.ts';
 import type {Automation, AutomationInput, AutomationRun, AutomationRunState, AutomationRunStep, AutomationStep, AutomationsView} from '../shared/types.ts';
 import * as account from './account.ts';
 import {AGENTS} from './agent.ts';
@@ -95,6 +95,7 @@ function cleanStep(raw: unknown, prior: AutomationStep[]): AutomationStep {
     const limit = Number(st.limit);
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ACCOUNT_REELS) throw httpError(400, `el paso de cuenta externa descarga de 1 a ${MAX_ACCOUNT_REELS} reels`);
     // One it already had stays, even if the account has left Inspiración: the run says so, and the switch can still turn it off.
+    if (st.username === ALL_EXTERNAL) return {type: 'external', username: ALL_EXTERNAL, limit};
     if (!prior.some((p) => p.type === 'external' && p.username === st.username) && !insp.isFollowed(st.username)) throw httpError(400, 'elige una cuenta escaneada en Inspiración');
     return {type: 'external', username: st.username as string, limit};
   }
@@ -178,7 +179,7 @@ const AUTONOMOUS = (name: string, step: number, total: number) =>
 // flow). where: a video's folder, as the agent sees it. The last one's full text goes below, so not its summary.
 export function runContext(done: AutomationRunStep[], previous: string, where: (slug: string) => string) {
   if (!done.length) return '';
-  const what = (st: AutomationRunStep) => (st.type === 'agent' ? 'agente' : st.type === 'sources' ? `extraer fuentes de información${st.sources.length ? ` (${st.sources.length})` : ' (todas las activas)'}` : st.type === 'account' ? `Mi cuenta, ${st.limit} reels` : st.type === 'post' ? `reel ${st.code} de Mi cuenta` : `@${st.username} de Inspiración, ${st.limit} reels`);
+  const what = (st: AutomationRunStep) => (st.type === 'agent' ? 'agente' : st.type === 'sources' ? `extraer fuentes de información${st.sources.length ? ` (${st.sources.length})` : ' (todas las activas)'}` : st.type === 'account' ? `Mi cuenta, ${st.limit} reels` : st.type === 'post' ? `reel ${st.code} de Mi cuenta` : st.username === ALL_EXTERNAL ? `todas las cuentas de Inspiración, ${st.limit} reels de cada una` : `@${st.username} de Inspiración, ${st.limit} reels`);
   const lines = done.map((st, n) => {
     const vids = st.videos?.length ? `\n  Videos que creó: ${st.videos.map((v) => `${v} (${where(v)})`).join(', ')}` : st.type === 'agent' || st.type === 'sources' ? '\n  No creó videos.' : '';
     const said = n < done.length - 1 && st.summary ? `\n  Resumen: ${st.summary}` : '';
@@ -210,6 +211,7 @@ function finish(id: string, state: AutomationRunState, error?: string) {
 
 // A step that downloads into Mi cuenta: what it did, or null if another workspace opened meanwhile.
 function fromScraper(project: string, step: Exclude<AutomationStep, {type: 'agent' | 'sources'}>, work: AbortController): Promise<string | null> {
+  if (step.type === 'external' && step.username === ALL_EXTERNAL) return refreshAllExternal(project, step.limit, work);
   if (step.type === 'external')
     return insp.refreshProjectAccount(project, step.username, step.limit, work).then(
       (r) => r && `@${step.username} actualizada en Inspiración: ${r.reels} reels con sus números (${r.fresh} nuevos, sin analizar)${r.profile ? ', y su perfil' : '; su perfil no se pudo actualizar y conserva los datos anteriores'}.${r.problem ? ` Aviso: ${r.problem}.` : ''}`,
@@ -221,6 +223,30 @@ function fromScraper(project: string, step: Exclude<AutomationStep, {type: 'agen
     if (!r.reels) throw new Error(r.problem ?? 'no llegó ningún reel');
     return `Mi cuenta actualizada: ${r.reels} reels de @${r.username}${r.profile ? ' y su perfil' : '; su perfil no se pudo actualizar y conserva los datos anteriores'}.${r.problem ? ` Aviso: ${r.problem}.` : ''}`;
   });
+}
+
+// "Actualizar cuenta externa" with Todas: every scanned account of the project, one after another, only their numbers.
+// One that fails (private, renamed…) doesn't stop the rest; the step fails only if none could be updated.
+export async function refreshAllExternal(project: string, limit: number, work: AbortController): Promise<string | null> {
+  const users = insp.followedIn(project);
+  if (!users.length) throw new Error('Inspiración no tiene cuentas escaneadas');
+  const ok: string[] = [];
+  const failed: string[] = [];
+  let fresh = 0;
+  for (const u of users) {
+    if (work.signal.aborted) throw new insp.Stopped('detenido');
+    try {
+      const r = await insp.refreshProjectAccount(project, u, limit, work);
+      if (r === null) return null;
+      fresh += r.fresh;
+      ok.push(`@${u} (${r.reels} reels${r.fresh ? `, ${r.fresh} nuevos` : ''}${r.problem ? `; aviso: ${r.problem}` : ''})`);
+    } catch (e) {
+      if (e instanceof insp.Stopped) throw e;
+      failed.push(`@${u}: ${(e as Error).message}`);
+    }
+  }
+  if (!ok.length) throw new Error(`no se pudo actualizar ninguna cuenta. ${failed.join(' · ')}`);
+  return `Inspiración actualizada: ${ok.length} de ${users.length} cuentas con sus números y su perfil, ${fresh} reels nuevos sin analizar. ${ok.join(', ')}.${failed.length ? ` Fallaron: ${failed.join(' · ')}.` : ''}`;
 }
 
 function runStep(id: string, name: string, steps: AutomationStep[], i: number, previous: string) {

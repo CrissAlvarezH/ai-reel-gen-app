@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useState} from 'react';
-import {Bot, CalendarClock, Check, ChevronDown, Clapperboard, Loader2, MessageSquare, Newspaper, Pencil, Play, Plus, RefreshCw, Search, Sparkles, Square, Trash2, X, type LucideIcon} from 'lucide-react';
+import {Bot, CalendarClock, Check, ChevronDown, Clapperboard, Loader2, MessageSquare, Newspaper, Pencil, Play, Plus, RefreshCw, Search, Sparkles, Square, Trash2, Users, X, type LucideIcon} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Dialog, DialogContent, DialogDescription, DialogTitle} from '@/components/ui/dialog';
@@ -11,7 +11,7 @@ import {Switch} from '@/components/ui/switch';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
 import {nextRun, nextRuns} from '../shared/cron';
-import {MAX_ACCOUNT_REELS} from '../shared/types';
+import {ALL_EXTERNAL, MAX_ACCOUNT_REELS} from '../shared/types';
 import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, sourcesApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type AutomationAgent, type InspirationAccount, type OwnReel, type OwnReelList, type SourcesView} from './api';
 import {useConfirm} from './confirm';
 import {AgentLogo} from './AgentLogo';
@@ -37,10 +37,10 @@ const STEP_KINDS: Record<AutomationStep['type'], {label: string; icon: LucideIco
   sources: {label: 'Extraer fuentes', icon: Newspaper, description: 'Un agente recorre tus Fuentes de información y guarda lo nuevo. Sin tu Chrome.', blank: {type: 'sources', sources: []}},
   account: {label: 'Actualizar Mi cuenta', icon: RefreshCw, description: 'Descarga tus reels más recientes con sus números y tu perfil.', blank: {type: 'account', limit: DEFAULT_REELS}},
   post: {label: 'Actualizar un post', icon: Clapperboard, description: 'Trae los números y la metadata de un reel de Mi cuenta.', blank: {type: 'post', code: '', label: ''}},
-  external: {label: 'Actualizar cuenta externa', icon: Sparkles, description: 'Trae los reels más recientes de una cuenta de Inspiración con sus números, y su perfil. No analiza nada.', blank: {type: 'external', username: '', limit: DEFAULT_REELS}},
+  external: {label: 'Actualizar cuenta externa', icon: Sparkles, description: 'Trae los reels más recientes de una cuenta de Inspiración, o de todas, con sus números, y su perfil. No analiza nada.', blank: {type: 'external', username: '', limit: DEFAULT_REELS}},
 };
 const stepText = (s: AutomationStep) =>
-  s.type === 'agent' ? s.prompt : s.type === 'sources' ? (s.sources.length ? `Lo nuevo de ${s.sources.length === 1 ? '1 fuente' : `${s.sources.length} fuentes`} de información.` : 'Lo nuevo de todas las fuentes de información activas.') : s.type === 'account' ? `Tus ${s.limit} reels más recientes con sus números, y tu perfil.` : s.type === 'external' ? `Los ${s.limit} reels más recientes de @${s.username} con sus números, y su perfil.` : s.label || `Reel ${s.code}`;
+  s.type === 'agent' ? s.prompt : s.type === 'sources' ? (s.sources.length ? `Lo nuevo de ${s.sources.length === 1 ? '1 fuente' : `${s.sources.length} fuentes`} de información.` : 'Lo nuevo de todas las fuentes de información activas.') : s.type === 'account' ? `Tus ${s.limit} reels más recientes con sus números, y tu perfil.` : s.type === 'external' ? (s.username === ALL_EXTERNAL ? `Los ${s.limit} reels más recientes de cada cuenta de Inspiración con sus números, y sus perfiles.` : `Los ${s.limit} reels más recientes de @${s.username} con sus números, y su perfil.`) : s.label || `Reel ${s.code}`;
 
 type RunState = AutomationRunStep['state'];
 const STATE: Record<RunState, {label: string; dot: string; variant: 'secondary' | 'outline' | 'destructive'}> = {
@@ -149,7 +149,11 @@ export function Automations() {
     try {
       for (const s of a.steps) {
         if (s.type === 'agent' || s.type === 'sources') continue;
-        const {charge} = await (s.type === 'account' ? accountApi.estimate(s.limit) : s.type === 'external' ? inspirationApi.estimate(s.username, s.limit, 'account') : accountApi.refreshCost());
+        const {charge} = await (s.type === 'account'
+          ? accountApi.estimate(s.limit)
+          : s.type === 'external'
+            ? inspirationApi.estimate(s.username === ALL_EXTERNAL ? await allExternal() : s.username, s.limit, 'account')
+            : accountApi.refreshCost());
         if (!(await confirm({title: `¿Ejecutar «${a.name}»?`, description: `${STEP_KINDS[s.type].label}: ${stepText(s)} ${charge}.`, action: 'Ejecutar'}))) return;
       }
     } catch (e) {
@@ -216,7 +220,7 @@ export function Automations() {
                   <StepHead n={i + 1} type={s.type} state={s.state} />
                   <div className="mt-1 flex items-center gap-3">
                     {s.type === 'post' && <PostThumb code={s.code} />}
-                    {s.type === 'external' && <Avatar account={{username: s.username, avatar: true, profile: null}} />}
+                    {s.type === 'external' && (s.username === ALL_EXTERNAL ? <AllAccountsIcon /> : <Avatar account={{username: s.username, avatar: true, profile: null}} />)}
                     <p className="line-clamp-3 min-w-0 flex-1 text-sm whitespace-pre-line">{stepText(s)}</p>
                   </div>
                 </Point>
@@ -389,13 +393,13 @@ function AgentStepFields<T extends AgentStep>({n, step, agents, onChange}: {n: n
   );
 }
 
-function AccountStepFields({n, limit, onChange}: {n: number; limit: number; onChange: (limit: number) => void}) {
+function AccountStepFields({n, limit, onChange, label = 'Reels a actualizar'}: {n: number; limit: number; onChange: (limit: number) => void; label?: string}) {
   const valid = Number.isInteger(limit) && limit >= 1 && limit <= MAX_ACCOUNT_REELS;
   const id = `automation-step-${n}-reels`;
   return (
     <div className="mt-2 flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <Label htmlFor={id}>Reels a actualizar</Label>
+        <Label htmlFor={id}>{label}</Label>
         <Input id={id} type="number" min={1} max={MAX_ACCOUNT_REELS} value={Number.isNaN(limit) ? '' : limit} onChange={(e) => onChange(e.target.valueAsNumber)} className="w-24" />
       </div>
       {!valid && <p className="text-xs text-destructive">De 1 a {MAX_ACCOUNT_REELS} reels.</p>}
@@ -548,6 +552,37 @@ function ExternalRow({account: x}: {account: InspirationAccount}) {
   );
 }
 
+// "Todas": every scanned account when the step runs, as one string for the scraper's estimate.
+const allExternal = () =>
+  inspirationApi.status().then((s) => {
+    const us = s.accounts.filter((x) => x.followed).map((x) => `@${x.username}`);
+    if (!us.length) throw new Error('Inspiración no tiene cuentas escaneadas');
+    return us.join(' ');
+  });
+
+function AllAccountsIcon() {
+  return (
+    <div className="grid size-12 flex-none place-items-center rounded-full border bg-muted text-muted-foreground">
+      <Users className="size-5" />
+    </div>
+  );
+}
+
+// count: the scanned accounts now (null: loading); the reels add up, one limit per account.
+function AllAccountsRow({count, limit}: {count: number | null; limit: number}) {
+  return (
+    <>
+      <AllAccountsIcon />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">Todas las cuentas</p>
+        <p className="text-xs text-muted-foreground">
+          {count == null ? 'Las cuentas escaneadas cuando se ejecute' : `Hoy ${count === 1 ? '1 cuenta' : `${count} cuentas`}: hasta ${count * limit} reels por ejecución`}; las que escanees después entran solas.
+        </p>
+      </div>
+    </>
+  );
+}
+
 // The Inspiración account a step points to, chosen in its own dialog like a post. The accounts come from the page's own
 // list, so one that isn't there yet is scanned in Inspiración first.
 function ExternalStepFields({n, step, onChange}: {n: number; step: Extract<AutomationStep, {type: 'external'}>; onChange: (step: AutomationStep) => void}) {
@@ -557,19 +592,24 @@ function ExternalStepFields({n, step, onChange}: {n: number; step: Extract<Autom
   useEffect(() => {
     inspirationApi.status().then((s) => setAccounts(s.accounts.filter((x) => x.followed)), (e: Error) => setErr(e.message));
   }, []);
+  const all = step.username === ALL_EXTERNAL;
   const chosen = accounts?.find((x) => x.username === step.username);
+  const choose = (username: string) => {
+    onChange({...step, username});
+    setPicking(false);
+  };
   return (
     <div className="mt-2 flex flex-col gap-1.5">
-      {chosen && (
+      {(chosen || all) && (
         <div className="flex items-center gap-3 rounded-md border p-2">
-          <ExternalRow account={chosen} />
+          {all ? <AllAccountsRow count={accounts?.length ?? null} limit={step.limit} /> : <ExternalRow account={chosen!} />}
         </div>
       )}
       <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setPicking(true)}>
         <Sparkles /> {step.username ? 'Cambiar cuenta' : 'Elegir cuenta'}
       </Button>
-      {accounts && step.username && !chosen && <p className="text-xs text-destructive">@{step.username} ya no está en Inspiración: elige otra.</p>}
-      <AccountStepFields n={n} limit={step.limit} onChange={(limit) => onChange({...step, limit})} />
+      {accounts && step.username && !chosen && !all && <p className="text-xs text-destructive">@{step.username} ya no está en Inspiración: elige otra.</p>}
+      <AccountStepFields n={n} limit={step.limit} onChange={(limit) => onChange({...step, limit})} label={all ? 'Reels por cuenta' : undefined} />
       {picking && (
         <Dialog open onOpenChange={(o) => !o && setPicking(false)}>
           <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-xl">
@@ -580,16 +620,21 @@ function ExternalStepFields({n, step, onChange}: {n: number; step: Extract<Autom
               {!accounts && !err && <Loader2 className="size-5 animate-spin text-muted-foreground" />}
               {accounts && !accounts.length && <p className="p-6 text-center text-sm text-muted-foreground">Inspiración aún no tiene cuentas: escanea alguna allí primero.</p>}
               <ul className="flex flex-col gap-1">
+                {!!accounts?.length && (
+                  <li>
+                    <button type="button" aria-pressed={all} className={cn('flex w-full items-center gap-3 rounded-md p-2 text-left hover:bg-muted', all && 'bg-muted')} onClick={() => choose(ALL_EXTERNAL)}>
+                      <AllAccountsRow count={accounts.length} limit={step.limit} />
+                      {all && <Check className="size-4 flex-none" />}
+                    </button>
+                  </li>
+                )}
                 {accounts?.map((x) => (
                   <li key={x.username}>
                     <button
                       type="button"
                       aria-pressed={x.username === step.username}
                       className={cn('flex w-full items-center gap-3 rounded-md p-2 text-left hover:bg-muted', x.username === step.username && 'bg-muted')}
-                      onClick={() => {
-                        onChange({...step, username: x.username});
-                        setPicking(false);
-                      }}
+                      onClick={() => choose(x.username)}
                     >
                       <ExternalRow account={x} />
                       {x.username === step.username && <Check className="size-4 flex-none" />}

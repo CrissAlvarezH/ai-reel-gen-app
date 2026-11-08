@@ -13,6 +13,15 @@
 #        social.py analyse status        what's running, how many are analysed and which failed
 #        social.py analyse wait          wait until what's running ends (up to 9 min), then the status
 #        social.py analyse stop          stop what's running
+# And the analysis of Inspiración's accounts (the other accounts this project studies; also his Claude subscription,
+# in the background; when it ends the account's general analysis is redone with them):
+#        social.py inspiration analyse @account top [n]     its n best reels by Multiplicador (5), those missing
+#                                                          (Inspiración → Destacados → Analizar)
+#        social.py inspiration analyse @account pending     every reel of it not analysed yet
+#        social.py inspiration analyse @account <code…>     those reels, if not analysed yet
+#        social.py inspiration analyse status [@account]    what's running and how many are analysed
+#        social.py inspiration analyse wait [@account]      wait until it ends (up to 9 min), then the status
+#        social.py inspiration analyse stop @account        stop it
 # Needs Reel Studio running (REEL_STUDIO_URL, set for its agents; default http://127.0.0.1:4000).
 import json, os, sys, urllib.error, urllib.request
 
@@ -145,9 +154,77 @@ elif cmd == "analyse":
         body = {"all": True} if what == "pending" else {"codes": rest}
         r = call("/api/account/reels/analyse", body)
         print(f"{r['queued']} reel{'s' if r['queued'] != 1 else ''} en cola: se transcriben y el agente los analiza en segundo plano (tarda uno o dos minutos cada uno). Espera con «analyse wait».")
+elif cmd == "inspiration":
+    import time
+
+    STAGES = {"fetching": "descargando", "processing": "transcribiendo", "analyzing": "analizando reels", "summary": "rehaciendo el análisis general"}
+    args = rest[1:] if rest and rest[0] == "analyse" else sys.exit("uso: social.py inspiration analyse @cuenta top [n] | pending | <code…> | status | wait | stop")
+
+    def accounts():
+        return [a for a in call("/api/inspiration")["accounts"] if a["followed"]]
+
+    def account(u):
+        u = u.lstrip("@").lower()
+        a = next((a for a in accounts() if a["username"].lower() == u), None)
+        return a or sys.exit(f"error: @{u} no es una cuenta escaneada en Inspiración")
+
+    def status(only=None):
+        running = False
+        for a in [only] if only else accounts():
+            c = call(f"/api/inspiration/list/{a['username']}?size=1")["counts"]
+            total = sum(c.values())
+            job = a.get("job")
+            running = running or bool(job)
+            line = f"@{a['username']}: {c.get('ready', 0)} de {total} reels analizados"
+            if job:
+                line += f". En marcha: {STAGES.get(job['stage'], job['stage'])}" + (f", {job['done']} de {job['total']}" if job["total"] > 1 else "")
+            if c.get("error"):
+                line += f". {c['error']} con error"
+            if a.get("error"):
+                line += f". Aviso: {a['error']}"
+            print(line + ".")
+        print("Los análisis están en el índice (tablas de Inspiración, ver studio_sql.py --schema), en analysis.json de cada reel y el general en account.json (analysis.text).")
+        return running
+
+    what = args[0] if args else "status"
+    if what in ("status", "wait", "stop"):
+        only = account(args[1]) if len(args) > 1 else None
+        if what == "stop":
+            if not only:
+                sys.exit("uso: social.py inspiration analyse stop @cuenta")
+            call(f"/api/inspiration/accounts/{only['username']}/stop", {})
+            print(f"Detenido @{only['username']}.")
+            only = account(only["username"])
+        if what == "wait":
+            end = time.time() + 9 * 60
+            busy = lambda: any(a.get("job") for a in ([account(only["username"])] if only else accounts()))
+            while busy() and time.time() < end:
+                time.sleep(10)
+            only = account(only["username"]) if only else None
+        if status(only) and what == "wait":
+            print("Sigue en marcha: vuelve a esperar con «inspiration analyse wait».")
+    else:
+        a = account(what)
+        u, how = a["username"], args[1:] or sys.exit("dime qué analizar: top [n], pending o los códigos")
+        if how[0] == "top":
+            n = int(how[1]) if len(how) > 1 else 5
+            rows = call(f"/api/inspiration/list/{u}?sort=ratio&desc=true&page=0&size={n}&minRatio=1")["rows"]
+            done = set((a.get("analysis") or {}).get("codes") or [])
+            codes = [r["code"] for r in rows if r["state"] != "ready" or (done and r["code"] not in done)]
+            if not rows:
+                sys.exit(f"@{u} no tiene reels por encima de su mediana todavía.")
+            if not codes:
+                sys.exit(f"Los {len(rows)} destacados de @{u} ya están analizados y en su análisis general.")
+            body = {"codes": codes}
+        elif how[0] == "pending":
+            body, codes = {}, None
+        else:
+            body, codes = {"codes": how}, how
+        call(f"/api/inspiration/accounts/{u}/process", body)
+        print(f"@{u}: en marcha ({len(codes)} reel{'s' if len(codes) != 1 else ''}: {' '.join(codes)})." if codes else f"@{u}: en marcha con todos los que faltan.", "Se transcriben, el agente los analiza y luego rehace el análisis general de la cuenta. Espera con «inspiration analyse wait @" + u + "».")
 elif cmd == "cost":
     kind = rest[0] if rest else "reels"
     r = call("/api/social/cost", {"kind": kind, "limit": int(rest[1]) if len(rest) > 1 else 12})
     print(f"{r['charge']}.")
 else:
-    sys.exit(f"no conozco «{cmd}»: mine, reels, reel, profile, cost o analyse")
+    sys.exit(f"no conozco «{cmd}»: mine, reels, reel, profile, cost, analyse o inspiration")
