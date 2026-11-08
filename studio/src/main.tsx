@@ -1,7 +1,7 @@
 import {StrictMode, useEffect, useState} from 'react';
 import ResizeHandle from '@/components/common/ResizeHandle';
 import {createRoot} from 'react-dom/client';
-import {ChevronRight} from 'lucide-react';
+import {ChevronRight, Clapperboard} from 'lucide-react';
 import {TooltipProvider} from '@/components/ui/tooltip';
 import Logo from '@/components/common/Logo';
 import ThemeToggle from '@/components/common/ThemeToggle';
@@ -59,8 +59,9 @@ function App() {
   return (
     <>
       <header className="app-titlebar sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur">
-        <a href="#/" aria-label="Reel Studio: inicio" className="rounded-md transition-opacity hover:opacity-80">
-          <Logo variant="full" size={26} />
+        <a href="#/" className="flex items-center gap-2 font-semibold">
+          <Clapperboard className="size-5" />
+          Reel Studio
         </a>
         {page !== 'library' && (
           <nav aria-label="Ruta" className="flex min-w-0 items-center gap-1.5 text-sm">
