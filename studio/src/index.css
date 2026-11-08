@@ -403,6 +403,11 @@
   cursor: col-resize !important;
   user-select: none !important;
 }
+/* The same while dragging the top edge of the sidebar's video list up or down (Sidebar.tsx). */
+.resizing-rows, .resizing-rows * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
 
 /* Switching theme (useThemeStore): a circle of the new theme grows from where you clicked (View Transitions). */
 ::view-transition-old(root),

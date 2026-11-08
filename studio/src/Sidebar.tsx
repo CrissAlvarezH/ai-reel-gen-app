@@ -155,6 +155,18 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
     setOpen(true);
   };
 
+  // The video list's height, dragged from its top edge (null: the room the pages leave).
+  const {videosHeight, setVideosHeight} = useStudio();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const videosRef = useRef<HTMLDivElement>(null);
+  const rowDrag = useRef<{y: number; start: number; last: number | null} | null>(null);
+  const endRowDrag = () => {
+    if (!rowDrag.current) return;
+    setVideosHeight(rowDrag.current.last, true);
+    rowDrag.current = null;
+    document.documentElement.classList.remove('resizing-rows');
+  };
+
   const general = agents.find((a) => !a.slug);
   const rows = agents
     .filter((a) => a.slug)
@@ -185,6 +197,8 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
         <Plus className="size-4 flex-none" />
         {!compact && <span className="animate-fade-in truncate">Nuevo video</span>}
       </a>
+      {/* The pages scroll on their own when they don't fit (a short window, or the video list dragged up). */}
+      <div ref={menuRef} className="flex min-h-12 flex-col overflow-y-auto overscroll-contain" style={{flex: videosHeight && !compact ? '1 1 0' : '0 1 auto'}}>
       {GROUPS.map((g) => (
         <div key={g.label} className={cn('flex flex-none flex-col', compact ? 'mx-2 mt-2 border-t pt-1.5 [&>a]:mx-0' : 'mt-3')}>
           {!compact && <p className="animate-fade-in px-4 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{g.label}</p>}
@@ -195,6 +209,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
           ))}
         </div>
       ))}
+      </div>
       {rows.length > 0 &&
         (compact ? (
           <div className="mx-2 mt-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain border-t pt-3">
@@ -211,7 +226,27 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
             ))}
           </div>
         ) : (
-          <div className="mt-3 flex min-h-0 flex-1 flex-col">
+          <div ref={videosRef} className="relative mt-1 flex min-h-24 flex-col pt-2" style={{flex: videosHeight ? `0 0 ${videosHeight}px` : '1 1 0'}}>
+            <RowResizeHandle
+              onPointerDown={(e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                rowDrag.current = {y: e.clientY, start: videosRef.current!.getBoundingClientRect().height, last: videosHeight};
+                document.documentElement.classList.add('resizing-rows');
+              }}
+              onPointerMove={(e) => {
+                const d = rowDrag.current;
+                if (!d) return;
+                // Up makes the list taller; the pages above keep at least a little room (and scroll).
+                const max = videosRef.current!.getBoundingClientRect().height + menuRef.current!.getBoundingClientRect().height - 48;
+                d.last = Math.round(Math.max(96, Math.min(max, d.start - (e.clientY - d.y))));
+                setVideosHeight(d.last, false);
+              }}
+              onPointerUp={endRowDrag}
+              onPointerCancel={endRowDrag}
+              onDoubleClick={() => setVideosHeight(null)}
+            />
             <div className="group/videos flex items-center justify-between pr-3 pb-1 pl-4">
               <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
                 Videos <span className="tabular-nums">{rows.length}</span>
@@ -251,5 +286,22 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
         <NavLink href="#/ajustes" icon={SettingsIcon} label="Ajustes" active={page === 'settings'} compact={compact} />
       </div>
     </nav>
+  );
+}
+
+// The top edge of the video list: drag it up or down; double click, back to the room the pages leave. A thin line that
+// shows faintly on hover, like the columns' edges (components/common/ResizeHandle).
+function RowResizeHandle(props: Pick<React.HTMLAttributes<HTMLDivElement>, 'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel' | 'onDoubleClick'>) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Cambiar el alto de la lista de videos"
+      title="Arrastra para cambiar el alto · doble clic: el alto por defecto"
+      className="group absolute inset-x-0 -top-1.5 z-10 h-3 cursor-row-resize touch-none"
+      {...props}
+    >
+      <div className="absolute inset-x-0 top-1.5 h-px bg-border transition-colors group-hover:bg-foreground/30 group-active:bg-foreground/50" />
+    </div>
   );
 }

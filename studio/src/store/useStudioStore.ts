@@ -23,6 +23,12 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     if (keep) write('studio.sidebar.width', w ? String(Math.round(w)) : '');
   },
 
+  videosHeight: Number(read('studio.sidebar.videos', '')) || null,
+  setVideosHeight: (h, keep = true) => {
+    set({videosHeight: h});
+    if (keep) write('studio.sidebar.videos', h ? String(Math.round(h)) : '');
+  },
+
   chatWidth: Number(read('studio.agent.width', '')) || null,
   // keep: remember it (at the end of a drag, not on every move).
   setChatWidth: (w, keep = true) => {

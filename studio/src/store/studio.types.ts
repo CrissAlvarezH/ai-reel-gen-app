@@ -19,6 +19,9 @@ export type StudioState = {
   // The sidebar's width when he dragged its edge (px); null: the default.
   sideWidth: number | null;
   setSideWidth: (w: number | null, keep?: boolean) => void;
+  /** The sidebar's video list height (px), dragged from its top edge; null: whatever is left under the pages. */
+  videosHeight: number | null;
+  setVideosHeight: (h: number | null, keep?: boolean) => void;
   // The panel's width when he dragged its edge (px); null: the default for the screen.
   chatWidth: number | null;
   setChatWidth: (w: number | null, keep?: boolean) => void;
