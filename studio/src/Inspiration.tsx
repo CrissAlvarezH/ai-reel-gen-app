@@ -362,7 +362,7 @@ function HighlightCard({account: a, rows, open, onOpenChange, transcriber}: {acc
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 {rows.map((r, i) => (
                   <button key={r.code} type="button" onClick={() => go(HIGHLIGHTS, r.code)} className="group/reel animate-fade-in flex min-w-0 flex-col gap-1.5 text-left" style={{animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: 'both'}}>
-                    <div className="hover-lift relative aspect-[9/16] overflow-hidden rounded-lg bg-muted ring-primary/40 group-hover/reel:ring-2">
+                    <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-muted ring-foreground/40 group-hover/reel:ring-2">
                       {r.thumb && <img src={inspirationApi.file(r, 'thumb.jpg')} alt="" loading="lazy" className="size-full object-cover" />}
                       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/85 to-transparent px-2 pt-8 pb-2">
                         <span className="text-lg font-semibold text-emerald-400 tabular-nums">{r.ratio != null ? `${r.ratio.toFixed(1)}×` : '—'}</span>

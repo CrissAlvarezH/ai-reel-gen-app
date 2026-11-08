@@ -82,7 +82,7 @@ function FormatGrid({formats}: {formats: ReelFormat[]}) {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {formats.map((f, i) => (
-            <a key={f.id} href={`#/formatos/${f.id}`} className="group hover-lift animate-fade-in flex flex-col overflow-hidden rounded-xl border bg-card transition-colors hover:border-primary/40" style={{animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: 'both'}}>
+            <a key={f.id} href={`#/formatos/${f.id}`} className="group animate-fade-in flex flex-col overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/30" style={{animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: 'both'}}>
               <div className="flex h-64 justify-center gap-2 overflow-hidden border-b bg-muted/30 p-3">
                 {f.examples.length ? (
                   f.examples.slice(0, 3).map((u) => <img key={u} src={u} alt="" loading="lazy" className="h-full min-w-0 flex-1 rounded-sm object-cover object-top" />)

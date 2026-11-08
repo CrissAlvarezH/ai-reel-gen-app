@@ -189,7 +189,7 @@
     }
 }
 
-/* Motion: page entrance, fades, lift on hover and skeleton shimmer. */
+/* Motion: page entrance, fades and skeleton shimmer. */
 @keyframes page-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
@@ -207,15 +207,6 @@
 }
 .animate-fade-in {
   animation: fade-in 200ms ease-out both;
-}
-.hover-lift {
-  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    background-color .15s, color .15s, border-color .15s;
-}
-.hover-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px -8px color-mix(in oklab, var(--primary) 35%, transparent),
-    0 2px 6px -2px color-mix(in oklab, var(--primary) 20%, transparent);
 }
 .shimmer {
   background-color: var(--muted);
@@ -247,9 +238,6 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
-  }
-  .hover-lift:hover {
-    transform: none;
   }
 }
 /* Desktop app (Electron, desktop/main.ts): the app's header (.app-titlebar, main.tsx; not any <header>) doubles as the title bar, with the Mac window

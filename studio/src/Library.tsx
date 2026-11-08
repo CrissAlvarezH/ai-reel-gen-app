@@ -135,9 +135,9 @@ export function Library() {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
           {reels.map((r, i) => (
-            <div key={r.slug} className="group hover-lift animate-fade-in relative rounded-xl" style={{animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: 'both'}}>
+            <div key={r.slug} className="group animate-fade-in relative rounded-xl" style={{animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: 'both'}}>
               <a href={`#/reel/${r.slug}`} className="block h-full">
-                <Card className="h-full gap-0 overflow-hidden py-0 transition-colors group-hover:border-primary/40">
+                <Card className="h-full gap-0 overflow-hidden py-0 transition-colors group-hover:border-foreground/30">
                   <div className="relative grid aspect-[3/4] place-items-center overflow-hidden bg-muted">
                     {r.instagram && <PostedBadge p={r.instagram} />}
                     {r.thumb ? (
