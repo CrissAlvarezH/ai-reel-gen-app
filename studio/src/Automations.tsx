@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useState} from 'react';
-import {Bot, CalendarClock, Check, ChevronDown, Clapperboard, Loader2, MessageSquare, Pencil, Play, Plus, RefreshCw, Search, Sparkles, Square, Trash2, X, type LucideIcon} from 'lucide-react';
+import {Bot, CalendarClock, Check, ChevronDown, Clapperboard, Loader2, MessageSquare, Newspaper, Pencil, Play, Plus, RefreshCw, Search, Sparkles, Square, Trash2, X, type LucideIcon} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Dialog, DialogContent, DialogDescription, DialogTitle} from '@/components/ui/dialog';
@@ -12,7 +12,7 @@ import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
 import {nextRun, nextRuns} from '../shared/cron';
 import {MAX_ACCOUNT_REELS} from '../shared/types';
-import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type AutomationAgent, type InspirationAccount, type OwnReel, type OwnReelList} from './api';
+import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, sourcesApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type AutomationAgent, type InspirationAccount, type OwnReel, type OwnReelList, type SourcesView} from './api';
 import {useConfirm} from './confirm';
 import {AgentLogo} from './AgentLogo';
 import {EFFORT_LABELS} from './ChatControls';
@@ -34,12 +34,13 @@ const DEFAULT_REELS = 10;
 // The kinds of step, in the order the menu offers them.
 const STEP_KINDS: Record<AutomationStep['type'], {label: string; icon: LucideIcon; description: string; blank: AutomationStep}> = {
   agent: {label: 'Agente', icon: Bot, description: 'Un agente autónomo hace lo que le pidas, sin preguntarte nada.', blank: {type: 'agent', prompt: ''}},
+  sources: {label: 'Extraer fuentes', icon: Newspaper, description: 'Un agente recorre tus Fuentes de información y guarda lo nuevo. Sin tu Chrome.', blank: {type: 'sources', sources: []}},
   account: {label: 'Actualizar Mi cuenta', icon: RefreshCw, description: 'Descarga tus reels más recientes con sus números y tu perfil.', blank: {type: 'account', limit: DEFAULT_REELS}},
   post: {label: 'Actualizar un post', icon: Clapperboard, description: 'Trae los números y la metadata de un reel de Mi cuenta.', blank: {type: 'post', code: '', label: ''}},
   external: {label: 'Actualizar cuenta externa', icon: Sparkles, description: 'Trae los reels más recientes de una cuenta de Inspiración con sus números, y su perfil. No analiza nada.', blank: {type: 'external', username: '', limit: DEFAULT_REELS}},
 };
 const stepText = (s: AutomationStep) =>
-  s.type === 'agent' ? s.prompt : s.type === 'account' ? `Tus ${s.limit} reels más recientes con sus números, y tu perfil.` : s.type === 'external' ? `Los ${s.limit} reels más recientes de @${s.username} con sus números, y su perfil.` : s.label || `Reel ${s.code}`;
+  s.type === 'agent' ? s.prompt : s.type === 'sources' ? (s.sources.length ? `Lo nuevo de ${s.sources.length === 1 ? '1 fuente' : `${s.sources.length} fuentes`} de información.` : 'Lo nuevo de todas las fuentes de información activas.') : s.type === 'account' ? `Tus ${s.limit} reels más recientes con sus números, y tu perfil.` : s.type === 'external' ? `Los ${s.limit} reels más recientes de @${s.username} con sus números, y su perfil.` : s.label || `Reel ${s.code}`;
 
 type RunState = AutomationRunStep['state'];
 const STATE: Record<RunState, {label: string; dot: string; variant: 'secondary' | 'outline' | 'destructive'}> = {
@@ -147,7 +148,7 @@ export function Automations() {
     setErr('');
     try {
       for (const s of a.steps) {
-        if (s.type === 'agent') continue;
+        if (s.type === 'agent' || s.type === 'sources') continue;
         const {charge} = await (s.type === 'account' ? accountApi.estimate(s.limit) : s.type === 'external' ? inspirationApi.estimate(s.username, s.limit, 'account') : accountApi.refreshCost());
         if (!(await confirm({title: `¿Ejecutar «${a.name}»?`, description: `${STEP_KINDS[s.type].label}: ${stepText(s)} ${charge}.`, action: 'Ejecutar'}))) return;
       }
@@ -310,14 +311,14 @@ function RunRow({run: r}: {run: AutomationRun}) {
 
 // An agent step's CLI, model and effort. Radix's Select can't hold '': the CLI's default model/effort go as DEFAULT.
 const DEFAULT = '__default';
-type AgentStep = Extract<AutomationStep, {type: 'agent'}>;
+type AgentStep = Extract<AutomationStep, {type: 'agent' | 'sources'}>;
 // A step that doesn't say yet: the agent in Ajustes, with what a new conversation starts on.
-const withAgent = (s: AgentStep, agents: AutomationAgent[]): AgentStep => {
+const withAgent = <T extends AgentStep>(s: T, agents: AutomationAgent[]): T => {
   if (s.agent) return s;
   const d = agents.find((x) => x.default) ?? agents[0];
   return d ? {...s, agent: d.id, model: d.choice.model, effort: d.choice.effort} : s;
 };
-function AgentStepFields({n, step, agents, onChange}: {n: number; step: AgentStep; agents: AutomationAgent[] | null; onChange: (s: AgentStep) => void}) {
+function AgentStepFields<T extends AgentStep>({n, step, agents, onChange}: {n: number; step: T; agents: AutomationAgent[] | null; onChange: (s: T) => void}) {
   if (!agents) return null;
   const cli = agents.find((x) => x.id === step.agent);
   const model = cli?.models.find((x) => x.id === step.model) ?? cli?.models[0];
@@ -604,6 +605,48 @@ function ExternalStepFields({n, step, onChange}: {n: number; step: Extract<Autom
   );
 }
 
+// Which Fuentes de información a step extracts: all the active ones (none chosen), or some.
+function SourcesStepFields({n, chosen, onChange}: {n: number; chosen: string[]; onChange: (ids: string[]) => void}) {
+  const [view, setView] = useState<SourcesView | null>(null);
+  const [err, setErr] = useState('');
+  useEffect(() => void sourcesApi.view().then(setView, (e: Error) => setErr(e.message)), []);
+  if (err) return <p className="mt-2 text-xs text-destructive">{err}</p>;
+  if (!view) return null;
+  if (!view.sources.length)
+    return (
+      <p className="mt-2 text-xs text-muted-foreground">
+        Todavía no hay fuentes: créalas en{' '}
+        <a href="#/fuentes" className="underline underline-offset-2">
+          Fuentes de información
+        </a>
+        .
+      </p>
+    );
+  const gone = chosen.filter((id) => !view.sources.some((x) => x.id === id));
+  const toggle = (id: string, on: boolean) => onChange(on ? [...chosen, id] : chosen.filter((x) => x !== id));
+  return (
+    <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label={`Fuentes del paso ${n}`}>
+      <label className="flex items-center gap-2 text-sm">
+        <Switch checked={!chosen.length} onCheckedChange={(all) => onChange(all ? [] : view.sources.filter((x) => x.enabled).map((x) => x.id))} />
+        Todas las activas{!chosen.length && <span className="text-xs text-muted-foreground">· {view.sources.filter((x) => x.enabled).length} ahora</span>}
+      </label>
+      {chosen.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {view.sources.map((x) => {
+            const on = chosen.includes(x.id);
+            return (
+              <Button key={x.id} type="button" variant={on ? 'secondary' : 'outline'} size="xs" aria-pressed={on} onClick={() => toggle(x.id, !on)}>
+                {on && <Check />} {x.name}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+      {gone.length > 0 && <p className="text-xs text-destructive">{gone.length === 1 ? 'Una fuente elegida ya no existe' : `${gone.length} fuentes elegidas ya no existen`}: se salta{gone.length === 1 ? '' : 'n'}.</p>}
+    </div>
+  );
+}
+
 function AutomationForm({automation: a, onClose, onSaved}: {automation: Automation | null; onClose: () => void; onSaved: (v: AutomationsView) => void}) {
   const [name, setName] = useState(a?.name ?? '');
   const [cron, setCron] = useState(a?.cron ?? '0 9 * * *');
@@ -612,12 +655,12 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
   const [agents, setAgents] = useState<AutomationAgent[] | null>(null);
   useEffect(() => void automationsApi.agents().then(setAgents, () => setAgents([])), []);
   useEffect(() => {
-    if (agents?.length && steps.some((s) => s.type === 'agent' && !s.agent)) setSteps((all) => all.map((s) => (s.type === 'agent' ? withAgent(s, agents) : s)));
+    if (agents?.length && steps.some((s) => (s.type === 'agent' || s.type === 'sources') && !s.agent)) setSteps((all) => all.map((s) => (s.type === 'agent' || s.type === 'sources' ? withAgent(s, agents) : s)));
   }, [agents, steps]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const next = nextRun(cron);
-  const stepReady = (s: AutomationStep) => (s.type === 'agent' ? !!s.prompt.trim() : s.type === 'post' ? !!s.code : (s.type === 'account' || !!s.username) && Number.isInteger(s.limit) && s.limit >= 1 && s.limit <= MAX_ACCOUNT_REELS);
+  const stepReady = (s: AutomationStep) => (s.type === 'agent' ? !!s.prompt.trim() : s.type === 'sources' ? true : s.type === 'post' ? !!s.code : (s.type === 'account' || !!s.username) && Number.isInteger(s.limit) && s.limit >= 1 && s.limit <= MAX_ACCOUNT_REELS);
   // What's missing, said next to Guardar so a greyed-out button isn't a riddle.
   const missing = !name.trim() ? 'Ponle un nombre' : !next ? 'Revisa el horario' : !steps.length ? 'Añade un paso' : !steps.every(stepReady) ? `Completa el paso ${steps.findIndex((s) => !stepReady(s)) + 1}` : '';
   const ready = !missing;
@@ -683,6 +726,11 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
                   <>
                     <AgentStepFields n={i + 1} step={s} agents={agents} onChange={(step) => setStep(i, step)} />
                     <Textarea className="mt-2" value={s.prompt} rows={3} aria-label={`Prompt del paso ${i + 1}`} onChange={(e) => setStep(i, {...s, prompt: e.target.value})} placeholder={i ? 'Toma 2 ideas de cada vertical y conviértelas en videos, una a una' : 'Crea 1 idea en cada vertical'} />
+                  </>
+                ) : s.type === 'sources' ? (
+                  <>
+                    <AgentStepFields n={i + 1} step={s} agents={agents} onChange={(step) => setStep(i, step)} />
+                    <SourcesStepFields n={i + 1} chosen={s.sources} onChange={(ids) => setStep(i, {...s, sources: ids})} />
                   </>
                 ) : s.type === 'post' ? (
                   <PostStepFields code={s.code} onChange={(code) => setStep(i, {type: 'post', code, label: ''})} />

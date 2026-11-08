@@ -28,6 +28,7 @@ import * as inspiration from './inspiration.ts';
 import * as account from './account.ts';
 import * as cloud from './cloud.ts';
 import * as ideas from './ideas.ts';
+import * as sources from './sources.ts';
 import * as audience from './audience.ts';
 import * as scriptCheck from './script-check.ts';
 import * as hookCheck from './hook-check.ts';
@@ -436,6 +437,38 @@ app.delete('/api/ideas/lists/:id', ideasChange((p, req) => ideas.removeList(p, r
 app.post('/api/ideas/verticals', ideasChange((p, req) => ideas.addVertical(p, req.body ?? {})));
 app.put('/api/ideas/verticals/:id', ideasChange((p, req) => ideas.editVertical(p, req.params.id, req.body ?? {})));
 app.delete('/api/ideas/verticals/:id', ideasChange((p, req) => ideas.removeVertical(p, req.params.id)));
+// Fuentes de información (server/sources.ts): the page and the agent (tools/sources.py, which says its project in ?project=).
+// Every change tells the pages.
+const sourcesChange = <T>(fn: (project: string | undefined, req: Req) => T | Promise<T>) =>
+  handle(async (req) => {
+    const out = await fn(ideasProject(req), req);
+    send({type: 'sources'});
+    return out;
+  });
+// A new general conversation with a request about the sources (the open project's), shown in the panel.
+const sourcesChat = (fn: (req: Req) => {text: string; note: string}) =>
+  handle((req) => {
+    const {text, note} = fn(req);
+    const {id} = chat.newChat(chat.GENERAL);
+    chat.send(chat.GENERAL, {text, note, context: req.body?.context}, id);
+    return {chat: id};
+  });
+const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+app.get('/api/sources', handle((req) => sources.view(ideasProject(req))));
+app.post('/api/sources', sourcesChange((p, req) => sources.addSource(p, req.body ?? {})));
+app.post('/api/sources/new', sourcesChat((req) => sources.createRequest(undefined, req.body?.text, chat.SOURCES_TOOL())));
+app.post('/api/sources/extract', sourcesChat((req) => sources.extractRequest(undefined, ids(req.body?.ids), chat.SOURCES_TOOL())));
+app.post('/api/sources/apify', handle((req) => sources.apify(req.body ?? {})));
+app.put('/api/sources/:id', sourcesChange((p, req) => sources.editSource(p, req.params.id, req.body ?? {})));
+app.delete('/api/sources/:id', sourcesChange((p, req) => sources.removeSource(p, req.params.id)));
+app.post('/api/sources/:id/done', sourcesChange((p, req) => sources.markRun(p, req.params.id, req.body ?? {})));
+app.post('/api/sources/:id/configure', sourcesChat((req) => sources.configureRequest(undefined, req.params.id, chat.SOURCES_TOOL())));
+app.get('/api/source-items', handle((req) => sources.listItems(ideasProject(req), req.query as sources.ItemQuery)));
+app.post('/api/source-items', sourcesChange((p, req) => sources.addItem(p, req.body ?? {})));
+app.get('/api/source-items/:id', handle((req) => sources.item(ideasProject(req), req.params.id)));
+app.put('/api/source-items/:id', sourcesChange((p, req) => sources.editItem(p, req.params.id, req.body ?? {})));
+app.delete('/api/source-items/:id', sourcesChange((p, req) => sources.removeItem(p, req.params.id)));
+app.post('/api/source-items/:id/idea', sourcesChat((req) => sources.ideaRequest(undefined, req.params.id, chat.SOURCES_TOOL())));
 
 // The studio's index (server/db.ts): tools/studio_sql.py asks for it to be brought up to date before a query.
 app.post('/api/index/sync', handle(() => (db.sync(true), {ok: true})));

@@ -16,6 +16,7 @@ import * as account from './account.ts';
 import {AGENTS} from './agent.ts';
 import * as chat from './chat.ts';
 import * as insp from './inspiration.ts';
+import * as sources from './sources.ts';
 import {IS_MAC, readJson, writeJson} from './platform.ts';
 import {httpError} from './reels.ts';
 import {PROJECT, VIDEOS, listProjects, projectDir, rel, withProject} from './workspace.ts';
@@ -54,6 +55,20 @@ export function view(): AutomationsView {
   };
 }
 
+// An agent step's own CLI, model and effort: ones that CLI offers ('' = its default). None: the one in Ajustes.
+function agentChoice(st: Record<string, unknown>): {agent?: string; model?: string; effort?: string} {
+  if (st.agent === undefined || st.agent === null) return {};
+  const cli = AGENTS.find((x) => x.id === st.agent);
+  if (!cli) throw httpError(400, 'ese agente no existe');
+  const models = cli.models();
+  const model = typeof st.model === 'string' ? st.model : '';
+  const m = models.find((x) => x.id === model);
+  if (!m && !(model === '' && !models.length)) throw httpError(400, `${cli.label} no tiene el modelo «${model}»`);
+  const effort = typeof st.effort === 'string' ? st.effort : '';
+  if (effort && !m?.efforts.includes(effort)) throw httpError(400, `ese modelo de ${cli.label} no tiene el esfuerzo «${effort}»`);
+  return {agent: cli.id, model, effort};
+}
+
 // prior: the steps it had. A reel it already points to stays valid even if it's gone, or a broken flow couldn't be turned off.
 function cleanStep(raw: unknown, prior: AutomationStep[]): AutomationStep {
   const st = (raw ?? {}) as Record<string, unknown>;
@@ -61,17 +76,15 @@ function cleanStep(raw: unknown, prior: AutomationStep[]): AutomationStep {
   if (st.type === 'agent') {
     const prompt = typeof st.prompt === 'string' ? st.prompt.trim() : '';
     if (!prompt || prompt.length > MAX_PROMPT) throw httpError(400, `cada paso de agente necesita un prompt de hasta ${MAX_PROMPT} caracteres`);
-    if (st.agent === undefined || st.agent === null) return {type: 'agent', prompt};
-    // Its own CLI, model and effort: ones that CLI offers ('' = its default).
-    const cli = AGENTS.find((x) => x.id === st.agent);
-    if (!cli) throw httpError(400, 'ese agente no existe');
-    const models = cli.models();
-    const model = typeof st.model === 'string' ? st.model : '';
-    const m = models.find((x) => x.id === model);
-    if (!m && !(model === '' && !models.length)) throw httpError(400, `${cli.label} no tiene el modelo «${model}»`);
-    const effort = typeof st.effort === 'string' ? st.effort : '';
-    if (effort && !m?.efforts.includes(effort)) throw httpError(400, `ese modelo de ${cli.label} no tiene el esfuerzo «${effort}»`);
-    return {type: 'agent', prompt, agent: cli.id, model, effort};
+    return {type: 'agent', prompt, ...agentChoice(st)};
+  }
+  if (st.type === 'sources') {
+    // Sources it already had stay, even if they're gone: the run says so, and the switch can still turn it off.
+    const had = new Set(prior.flatMap((p) => (p.type === 'sources' ? p.sources : [])));
+    const ids = Array.isArray(st.sources) ? [...new Set(st.sources.filter((x): x is string => typeof x === 'string'))] : [];
+    const known = new Set(sources.view(PROJECT).sources.map((x) => x.id));
+    if (ids.some((id) => !had.has(id) && !known.has(id))) throw httpError(400, 'esa fuente ya no existe: elígela otra vez');
+    return {type: 'sources', sources: ids, ...agentChoice(st)};
   }
   if (st.type === 'account') {
     const limit = Number(st.limit);
@@ -165,9 +178,9 @@ const AUTONOMOUS = (name: string, step: number, total: number) =>
 // flow). where: a video's folder, as the agent sees it. The last one's full text goes below, so not its summary.
 export function runContext(done: AutomationRunStep[], previous: string, where: (slug: string) => string) {
   if (!done.length) return '';
-  const what = (st: AutomationRunStep) => (st.type === 'agent' ? 'agente' : st.type === 'account' ? `Mi cuenta, ${st.limit} reels` : st.type === 'post' ? `reel ${st.code} de Mi cuenta` : `@${st.username} de Inspiración, ${st.limit} reels`);
+  const what = (st: AutomationRunStep) => (st.type === 'agent' ? 'agente' : st.type === 'sources' ? `extraer fuentes de información${st.sources.length ? ` (${st.sources.length})` : ' (todas las activas)'}` : st.type === 'account' ? `Mi cuenta, ${st.limit} reels` : st.type === 'post' ? `reel ${st.code} de Mi cuenta` : `@${st.username} de Inspiración, ${st.limit} reels`);
   const lines = done.map((st, n) => {
-    const vids = st.videos?.length ? `\n  Videos que creó: ${st.videos.map((v) => `${v} (${where(v)})`).join(', ')}` : st.type === 'agent' ? '\n  No creó videos.' : '';
+    const vids = st.videos?.length ? `\n  Videos que creó: ${st.videos.map((v) => `${v} (${where(v)})`).join(', ')}` : st.type === 'agent' || st.type === 'sources' ? '\n  No creó videos.' : '';
     const said = n < done.length - 1 && st.summary ? `\n  Resumen: ${st.summary}` : '';
     return `- Paso ${n + 1} (${what(st)})${vids}${said}`;
   });
@@ -196,7 +209,7 @@ function finish(id: string, state: AutomationRunState, error?: string) {
 }
 
 // A step that downloads into Mi cuenta: what it did, or null if another workspace opened meanwhile.
-function fromScraper(project: string, step: Exclude<AutomationStep, {type: 'agent'}>, work: AbortController): Promise<string | null> {
+function fromScraper(project: string, step: Exclude<AutomationStep, {type: 'agent' | 'sources'}>, work: AbortController): Promise<string | null> {
   if (step.type === 'external')
     return insp.refreshProjectAccount(project, step.username, step.limit, work).then(
       (r) => r && `@${step.username} actualizada en Inspiración: ${r.reels} reels con sus números (${r.fresh} nuevos, sin analizar)${r.profile ? ', y su perfil' : '; su perfil no se pudo actualizar y conserva los datos anteriores'}.${r.problem ? ` Aviso: ${r.problem}.` : ''}`,
@@ -226,7 +239,7 @@ function runStep(id: string, name: string, steps: AutomationStep[], i: number, p
   };
   mark({state: 'running'});
   try {
-    if (step.type !== 'agent') {
+    if (step.type !== 'agent' && step.type !== 'sources') {
       a.work = new AbortController();
       fromScraper(a.project, step, a.work).then(
         (text) => (text === null ? end(false, true, 'Se abrió otra carpeta de trabajo.') : end(true, false, text)),
@@ -235,12 +248,14 @@ function runStep(id: string, name: string, steps: AutomationStep[], i: number, p
       return;
     }
     withProject(a.project, () => {
+      // A sources step: the same request as the page's "Extraer", for an agent nobody is watching.
+      const ask = step.type === 'sources' ? sources.extractRequest(a.project, step.sources, chat.SOURCES_TOOL(), true) : {text: step.prompt, note: ''};
       const conversation = chat.backgroundChat(chat.GENERAL);
       a.chat = conversation;
       mark({chat: conversation});
       const done = read(a.file).runs.find((r) => r.id === id)?.steps.slice(0, i) ?? [];
       const note = runContext(done, previous, (v) => `${rel(path.join(VIDEOS, v))}/`);
-      chat.send(chat.GENERAL, {text: step.prompt, note}, conversation, {
+      chat.send(chat.GENERAL, {text: ask.text, note: [ask.note, note].filter(Boolean).join('\n\n')}, conversation, {
         system: AUTONOMOUS(name, i + 1, steps.length),
         ...(step.agent ? {agent: step.agent, model: step.model, effort: step.effort} : {}),
         // Its conversation says why it failed; the run only points there.

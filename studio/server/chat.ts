@@ -14,6 +14,7 @@ import {authorName, formatText, getChromeAccess, getImageSources, getProfile, ge
 import {agentNote as inspirationNote, refsText, validRefs} from './inspiration.ts';
 import {agentNote as accountNote, ownRefsText, validOwnRefs} from './account.ts';
 import {agentNote as ideasNote, ideaRefsText, validIdeaRefs} from './ideas.ts';
+import {agentNote as sourcesNote} from './sources.ts';
 import {audienceText} from './audience.ts';
 import * as scriptCheck from './script-check.ts';
 import * as uploads from './uploads.ts';
@@ -540,6 +541,9 @@ function voiceText(key: string) {
   ].join(' ');
 }
 
+// How the agent runs tools/sources.py (Fuentes de información): the app's own copy, like ideas.py.
+export const SOURCES_TOOL = () => `${PY} "${resource('tools/sources.py')}"`;
+
 // The studio's index (server/db.ts), for every conversation.
 const INDEX_LINE = () =>
   `Índice de la app: una base SQLite de solo lectura con todo lo que la app guarda en archivos, de todos los proyectos (filtra siempre por project; el abierto es '${PROJECT}'), que la app mantiene al día (no la escribas): ${PY} tools/studio_sql.py --schema (las tablas y qué significa cada columna) y ${PY} tools/studio_sql.py "SELECT …". Tablas: projects; videos y video_beats (los videos de cada proyecto: título, estilo, guion, caption, renders, estructura y el reel en que se publicó); own_accounts y own_reels (Mi cuenta de cada proyecto: sus reels con vistas, multiplicador, interacción y el video del que salió cada uno); insp_accounts, insp_reels e insp_beats (Inspiración). Úsalo para comparar, contar, ordenar o buscar entre muchos; para el detalle, abre los archivos.`;
@@ -559,6 +563,7 @@ const COMMON = () => [
   ...chromeNote(),
   // The app's own copy of the tool, not the workspace's: a workspace keeps the tools/ it was given when created.
   ideasNote(`${PY} "${resource('tools/ideas.py')}"`),
+  sourcesNote(SOURCES_TOOL()),
   'Imágenes en el chat: el chat muestra el markdown de imágenes. Cuando le hables de imágenes (las que buscaste o descargaste, referencias, fotogramas, recortes, boards, stills), enséñaselas en vez de describirlas: ![qué es](/workspace-files/<ruta desde la raíz del workspace>) para un archivo de esta carpeta (lo de internet, descárgalo antes aquí, donde vaya a quedarse) o ![qué es](https://…) para una imagen en internet; una línea de texto con cada una, no más.',
   ...(IS_WIN ? [`Esta máquina es Windows: tu shell es Git Bash. El Python del venv es ${UP()}/.venv/${VENV_BIN} (desde la carpeta de un video), no ${UP()}/.venv/bin/python como dicen las skills; usa python en vez de python3.`] : []),
   'Cada mensaje suyo empieza con una línea [UI: …] que dice dónde está en la UI en ese momento (página, versión en el reproductor, segundo, acto). Úsala para entender a qué se refiere ("esto", "aquí", "este momento") sin preguntarle; no la repitas.',
@@ -625,7 +630,7 @@ const SYSTEM = (key: string) =>
         ...COMMON(),
       ].join('\n');
 
-const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', ideas: 'Ideas de contenido', automations: 'Automatizaciones', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', audience: 'Perfil de audiencia', reel: null};
+const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', ideas: 'Ideas de contenido', automations: 'Automatizaciones', sources: 'Fuentes de información', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', audience: 'Perfil de audiencia', reel: null};
 const fmtCtx = (c: UiContext | undefined, progress?: string, style?: string, voice?: string, kind?: string) => {
   if (!c || typeof c !== 'object') return '';
   const parts: (string | null | undefined)[] = [PAGES[c.page] ?? (c.slug ? `video ${c.slug}` : null)];
@@ -635,6 +640,7 @@ const fmtCtx = (c: UiContext | undefined, progress?: string, style?: string, voi
     const [acc, code] = c.inspiration.slice(1).split('/');
     parts.push(code ? `reel abierto: ${relPath(PROJECT_DIR)}/inspiration/${acc}/${code}/` : `cuenta abierta: ${relPath(PROJECT_DIR)}/inspiration/${acc}/`);
   }
+  if (typeof c.sourceItem === 'string' && /^[a-f0-9]{8}$/.test(c.sourceItem)) parts.push(`resultado abierto: ${c.sourceItem} (sources.py item ${c.sourceItem})`);
   if (c.live) parts.push('reproductor: vista en vivo (código actual)');
   else if (c.version) parts.push(`reproductor: out/${c.version}.mp4`);
   if (typeof c.t === 'number' && (c.live || c.version))

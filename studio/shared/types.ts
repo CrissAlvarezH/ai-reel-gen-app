@@ -191,7 +191,7 @@ export type PillarSet = {name: string; pillars: Pillar[]; leftovers: string[]};
 /* ───── Where Cristian is in the UI (sent with every message to the agent) ───── */
 
 export type UiContext = {
-  page: 'account' | 'library' | 'ideas' | 'audience' | 'automations' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
+  page: 'account' | 'library' | 'ideas' | 'audience' | 'automations' | 'sources' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
   slug?: string;
   style?: string; // style open on the Estilos page (styles/<id>)
   videoFormat?: string; // format open on the Formatos page (formats/<id>)
@@ -203,6 +203,7 @@ export type UiContext = {
   tab?: string; // assets tab open (Recortes, Boards…)
   scriptDirty?: boolean;
   inspiration?: string; // account (and reel) open on the Inspiración page: "@user" or "@user/CODE"
+  sourceItem?: string; // result open on the Fuentes de información page (its id)
 };
 
 /* ───── Chat ───── */
@@ -357,7 +358,7 @@ export type ChatEvent =
   | {op: 'chats'};
 
 // workspace: the studio now works on another folder (every page reloads).
-export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'automations'} | {type: 'styles'} | {type: 'formats'} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
+export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'automations'} | {type: 'styles'} | {type: 'formats'} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
 
 /* ───── Profile and voice (config/, set in Ajustes) ───── */
 
@@ -611,7 +612,8 @@ export type ProjectContents = {videos: number; ideas: number; verticals: number;
 export const MAX_ACCOUNT_REELS = 200;
 export const MAX_ANALYSIS_SECONDS = 180; // the longest reel an account's "Analizar…" takes
 // agent step: agent/model/effort pin the CLI it runs on (absent: the one in Ajustes, with its starting choice).
-export type AutomationStep = {type: 'agent'; prompt: string; agent?: string; model?: string; effort?: string} | {type: 'account'; limit: number} | {type: 'post'; code: string; label: string} | {type: 'external'; username: string; limit: number};
+// sources: an agent extracts what's new from Fuentes de información (those ids; none: every active one), on its CLI like an agent step.
+export type AutomationStep = {type: 'agent'; prompt: string; agent?: string; model?: string; effort?: string} | {type: 'sources'; sources: string[]; agent?: string; model?: string; effort?: string} | {type: 'account'; limit: number} | {type: 'post'; code: string; label: string} | {type: 'external'; username: string; limit: number};
 export type Automation = {id: string; name: string; cron: string; enabled: boolean; steps: AutomationStep[]; created: number};
 export type AutomationInput = Pick<Automation, 'name' | 'cron' | 'enabled' | 'steps'>;
 // interrupted: the studio closed while it was running.
@@ -625,3 +627,21 @@ export type AutomationRun = {id: string; automation: string; name: string; trigg
 // Automatizaciones → a step's agent: each CLI that can run one, with its models and what a new conversation starts on.
 export type AutomationAgent = {id: string; label: string; ready: boolean; default: boolean; models: AgentModel[]; choice: {model: string; effort: string}};
 export type AutomationsView = {automations: (Automation & {running: boolean})[]; runs: AutomationRun[]};
+
+/* ───── Fuentes de información (projects/<id>/sources/) ───── */
+
+export type SourceLink = {url: string; label: string};
+// The last time an agent went through it (sources.py done). added: new results it saved.
+export type SourceRun = {at: number; ok: boolean; added: number; note: string};
+// description: what he wants from it, in his words; instructions: for the agent that extracts it (markdown). How to read
+// it is always the agent's call, with whatever it has (fetch, RSS, readers, his Chrome when he's there, Apify).
+export type Source = {id: string; name: string; description: string; instructions: string; links: SourceLink[]; enabled: boolean; created: number; updated: number; lastRun: SourceRun | null};
+// new: not opened yet; read; used: went into an idea or a video; discarded.
+export const SOURCE_ITEM_STATES = ['new', 'read', 'used', 'discarded'] as const;
+export type SourceItemState = (typeof SOURCE_ITEM_STATES)[number];
+// One thing an extraction found. url: its own page (unique within its source); published: the date it came out (YYYY-MM-DD).
+export type SourceItem = {id: string; source: string; title: string; url: string; links: SourceLink[]; summary: string; published: string | null; extracted: number; tags: string[]; state: SourceItemState};
+export type SourceItemDetail = SourceItem & {markdown: string};
+// items/fresh: how many results each source has, and how many not opened yet.
+export type SourcesView = {sources: (Source & {items: number; fresh: number})[]; tags: string[]};
+export type SourceItemList = {rows: SourceItem[]; total: number};

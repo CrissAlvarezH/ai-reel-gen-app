@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings} from '../shared/types';
+import type {AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -406,4 +406,28 @@ export const ideasApi = {
   addVertical: (input: {name: string; description: string; color?: IdeaColor; icon: IdeaIcon}) => ideasCall('POST', '/verticals', input),
   editVertical: (id: string, input: {name?: string; description?: string; color?: IdeaColor; icon?: IdeaIcon}) => ideasCall('PUT', `/verticals/${seg(id)}`, input),
   removeVertical: (id: string) => ideasCall('DELETE', `/verticals/${seg(id)}`),
+};
+
+/* ───── Fuentes de información ───── */
+
+const sourcesCall = <T>(method: string, path: string, body?: unknown) =>
+  fetch(path, {method, headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)}).then((r) => json<T>(r));
+export type SourceInput = {name?: string; description?: string; instructions?: string; links?: string; enabled?: boolean};
+export const sourcesApi = {
+  view: () => sourcesCall<SourcesView>('GET', '/api/sources'),
+  add: (input: SourceInput) => sourcesCall<SourcesView>('POST', '/api/sources', input),
+  edit: (id: string, input: SourceInput) => sourcesCall<SourcesView>('PUT', `/api/sources/${seg(id)}`, input),
+  remove: (id: string) => sourcesCall<SourcesView>('DELETE', `/api/sources/${seg(id)}`),
+  // A new general conversation (shown in the panel) where the agent interviews him and creates a source from what he
+  // wants to extract (text), extracts them (none: every active one), fills in
+  // a source he described in words, or turns a result into an idea.
+  create: (text: string, context?: unknown) => sourcesCall<{chat: string}>('POST', '/api/sources/new', {text, context}),
+  extract: (ids: string[], context?: unknown) => sourcesCall<{chat: string}>('POST', '/api/sources/extract', {ids, context}),
+  configure: (id: string, context?: unknown) => sourcesCall<{chat: string}>('POST', `/api/sources/${seg(id)}/configure`, {context}),
+  toIdea: (id: string, context?: unknown) => sourcesCall<{chat: string}>('POST', `/api/source-items/${seg(id)}/idea`, {context}),
+  items: (query: Record<string, string | number | boolean | undefined>) =>
+    sourcesCall<SourceItemList>('GET', `/api/source-items?${new URLSearchParams(Object.entries(query).filter((e): e is [string, string | number | boolean] => e[1] !== undefined && e[1] !== '').map(([k, v]) => [k, String(v)]))}`),
+  item: (id: string) => sourcesCall<SourceItemDetail>('GET', `/api/source-items/${seg(id)}`),
+  editItem: (id: string, input: {state?: SourceItemState; tags?: string[]}) => sourcesCall<SourceItem>('PUT', `/api/source-items/${seg(id)}`, input),
+  removeItem: (id: string) => sourcesCall('DELETE', `/api/source-items/${seg(id)}`),
 };

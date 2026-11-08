@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {AlertCircle, CalendarClock, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Palette, Plus, Settings as SettingsIcon, Sparkles, Target, UserRound} from 'lucide-react';
+import {AlertCircle, CalendarClock, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Newspaper, Palette, Plus, Settings as SettingsIcon, Sparkles, Target, UserRound} from 'lucide-react';
 import {cn} from '@/lib/utils';
 import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState, type ProgressStep, type ReelSummary} from './api';
 import {ReelProgressRing} from './ReelProgress';
@@ -153,6 +153,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
       <NavLink href="#/audiencia" icon={Target} label="Perfil de audiencia" active={page === 'audience'} compact={compact} />
       <NavLink href="#/ideas" icon={Lightbulb} label="Ideas de contenido" active={page === 'ideas'} compact={compact} />
       <NavLink href="#/automatizaciones" icon={CalendarClock} label="Automatizaciones" active={page === 'automations'} compact={compact} />
+      <NavLink href="#/fuentes" icon={Newspaper} label="Fuentes de información" active={page === 'sources'} compact={compact} />
       <NavLink href="#/inspiracion" icon={Sparkles} label="Inspiración" active={page === 'inspiration'} compact={compact} />
       <NavLink href="#/estilos" icon={Palette} label="Estilos y formatos" active={page === 'styles' || page === 'formats'} compact={compact} />
       {rows.length > 0 &&
