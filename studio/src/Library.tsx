@@ -137,7 +137,7 @@ export function Library() {
           {reels.map((r, i) => (
             <div key={r.slug} className="group animate-fade-in relative rounded-xl" style={{animationDelay: `${Math.min(i, 12) * 30}ms`, animationFillMode: 'both'}}>
               <a href={`#/reel/${r.slug}`} className="block h-full">
-                <Card className="h-full gap-0 overflow-hidden py-0 transition-colors group-hover:border-foreground/30">
+                <Card className="h-full gap-0 overflow-hidden py-0 transition-[box-shadow,color] group-hover:ring-foreground/30">
                   <div className="relative grid aspect-[3/4] place-items-center overflow-hidden bg-muted">
                     {r.instagram && <PostedBadge p={r.instagram} />}
                     {r.thumb ? (
