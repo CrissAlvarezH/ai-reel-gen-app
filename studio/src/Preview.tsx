@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import {Player, type PlayerRef} from '@remotion/player';
 import {AlertTriangle, Loader2, RotateCw, Sparkles} from 'lucide-react';
 import {Button} from '@/components/ui/button';
+import {Skeleton} from '@/components/ui/skeleton';
 import {chatApi, useAgentName, useLive} from './api';
 import {useStudio} from './studio';
 
@@ -180,7 +181,12 @@ export function LivePreview({
   }, [comp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (err) return <PreviewError slug={slug} message={err} onRetry={retry} />;
-  if (!comp) return <span className="text-sm text-muted-foreground">Cargando composición…</span>;
+  if (!comp)
+    return (
+      <Skeleton role="status" aria-live="polite" className="shimmer size-full min-h-40 rounded-none">
+        <span className="sr-only">Cargando composición…</span>
+      </Skeleton>
+    );
   return (
     <Player
       ref={player}

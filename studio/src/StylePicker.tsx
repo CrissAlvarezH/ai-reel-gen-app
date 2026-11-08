@@ -52,7 +52,7 @@ export function StyleDialog({open, onOpenChange, current, onPick}: {open: boolea
                   <span className="line-clamp-3 text-xs text-muted-foreground">{s.summary}</span>
                   <span className="mt-auto flex gap-1 pt-1">
                     {s.palette.map((c) => (
-                      <span key={c.hex} title={`${c.name}: ${c.meaning}`} className="size-3 rounded-full border border-white/15" style={{background: c.hex}} />
+                      <span key={c.hex} title={`${c.name}: ${c.meaning}`} className="size-3 rounded-full border border-foreground/15" style={{background: c.hex}} />
                     ))}
                   </span>
                 </div>

@@ -38,6 +38,8 @@ import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 import {Input} from '@/components/ui/input';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {cn} from '@/lib/utils';
+import PageSkeleton from '@/components/common/PageSkeleton';
+import ListSkeleton from '@/components/common/ListSkeleton';
 import {accountApi, fmtAgo, fmtTime, useSocket, type AccountStatus, type OwnReel, type OwnReelCard, type OwnReelList} from './api';
 import {useConfirm} from './confirm';
 import {FilterSelect, RatioHelp, SortHead} from './Inspiration';
@@ -303,7 +305,13 @@ export function Account() {
     }
   };
 
-  if (!st) return <p className="p-6 text-muted-foreground">{err || 'Cargando…'}</p>;
+  if (err && !st) return <p className="p-6 text-destructive">{err}</p>;
+  if (!st)
+    return (
+      <PageSkeleton maxWidth="max-w-6xl">
+        <ListSkeleton variant="table" count={8} announce={false} />
+      </PageSkeleton>
+    );
 
   const dialog = (
     <SetupDialog
@@ -324,8 +332,8 @@ export function Account() {
         <h1 className="text-2xl font-semibold tracking-tight">Mi cuenta</h1>
         <Card className="items-center py-12 text-center">
           <CardContent className="flex max-w-md flex-col items-center gap-4">
-            <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-              <UserRound className="size-6 text-muted-foreground" />
+            <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <UserRound className="size-6" />
             </div>
             <div className="flex flex-col gap-1.5">
               <p className="text-lg font-medium">Aún no has configurado tu cuenta</p>

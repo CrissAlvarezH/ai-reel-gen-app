@@ -10,6 +10,8 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/c
 import {Switch} from '@/components/ui/switch';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
+import ListSkeleton from '@/components/common/ListSkeleton';
+import EmptyState from '@/components/common/EmptyState';
 import {nextRun, nextRuns} from '../shared/cron';
 import {ALL_EXTERNAL, MAX_ACCOUNT_REELS} from '../shared/types';
 import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, sourcesApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type AutomationAgent, type InspirationAccount, type OwnReel, type OwnReelList, type SourcesView} from './api';
@@ -175,12 +177,9 @@ export function Automations() {
         </Button>
       </div>
       {err && <p className="text-sm text-destructive">{err}</p>}
-      {!view && !err && <Loader2 className="size-5 animate-spin text-muted-foreground" />}
+      {!view && !err && <ListSkeleton count={3} />}
       {view && !view.automations.length && (
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-          <CalendarClock className="size-6" />
-          Todavía no hay automatizaciones en este proyecto.
-        </div>
+        <EmptyState icon={CalendarClock} className="rounded-lg py-10" title="Todavía no hay automatizaciones en este proyecto." />
       )}
       {view?.automations.map((a) => {
         const next = a.enabled ? nextRun(a.cron) : null;

@@ -11,6 +11,7 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
+import PageSkeleton from '@/components/common/PageSkeleton';
 import {audienceApi, ideasApi, useSocket, type Audience, type AudienceLevels, type AudienceWant, type IdeaVertical, type PillarSet, type WantOption} from './api';
 import {COLORS, ICONS} from './Ideas';
 import {useConfirm} from './confirm';
@@ -1133,7 +1134,7 @@ export function AudiencePage() {
   };
 
   if (!draft || !saved)
-    return <main className="mx-auto flex max-w-6xl flex-col gap-6 p-6">{err ? <p className="text-sm text-destructive">{err}</p> : <Loader2 className="size-5 animate-spin text-muted-foreground" />}</main>;
+    return <main className="mx-auto flex max-w-6xl flex-col gap-6 p-6">{err ? <p className="text-sm text-destructive">{err}</p> : <PageSkeleton maxWidth="max-w-none" action={false} className="p-0" />}</main>;
 
   const props = {a: draft, set, persist: () => persist(), verticals};
   const reset = (a: Audience) => {

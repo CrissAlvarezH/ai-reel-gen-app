@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {AtSign, Bot, CheckCircle2, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, Puzzle, RefreshCw, Trash2, User, XCircle, type LucideIcon} from 'lucide-react';
+import {AtSign, Bot, CheckCircle2, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, Puzzle, RefreshCw, SunMoon, Trash2, User, XCircle} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
@@ -18,9 +18,13 @@ import {RequirementsCard} from './Requirements';
 import {ProjectAvatar, useProjects} from './ProjectPicker';
 import {SkillsSection} from './Skills';
 import {CloudSection} from './CloudSettings';
+import AppearanceSection from '@/components/settings/AppearanceSection';
+import SettingsHeader from '@/components/settings/SettingsHeader';
+import SettingsNav from '@/components/settings/SettingsNav';
+import type {SettingsGroup} from '@/components/settings/SettingsNav/SettingsNav.types';
 
-// Ajustes (#/ajustes/<section>): Proyecto, Cuenta, Modo, Instagram, Agente, Voz, Extracción de datos,
-// Requisitos and Skills. Skills reads the workspace's instructions and supporting files. Each service key is
+// Ajustes (#/ajustes/<section>), in groups: General (Proyecto, Cuenta, Apariencia), Creación de videos (Agente,
+// Voz, Skills), Conexiones (Instagram, Extracción de datos, Claves y servicios) and Sistema (Requisitos). Skills reads the workspace's instructions and supporting files. Each service key is
 // asked for where it's used.
 
 // What each key is used for, in the UI's words.
@@ -182,8 +186,8 @@ function ModeCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Modo</CardTitle>
-        <CardDescription>Dónde viven las claves de los servicios externos.</CardDescription>
+        <CardTitle>Dónde se guardan tus claves</CardTitle>
+        <CardDescription>Cada clave se pide donde se usa (Voz, Extracción de datos…); aquí eliges dónde viven.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1 rounded-lg border border-foreground/40 bg-muted/40 p-4">
@@ -352,7 +356,18 @@ export function AgentCard({chrome = false}: {chrome?: boolean}) {
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {!c && !err && <p className="text-sm text-muted-foreground">Buscando…</p>}
+        {!c && !err && (
+          <div role="status" className="flex flex-col gap-3 rounded-lg border p-4">
+            <span className="sr-only">Buscando…</span>
+            <div className="flex items-center gap-2">
+              <Skeleton className="size-4 rounded-full" />
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="ml-auto h-5 w-20 rounded-full" />
+            </div>
+            <Skeleton className="h-3 w-64 max-w-full" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+        )}
         {c?.agents.map((a) => {
           const ok = a.installed && a.loggedIn;
           const used = a.id === c.current;
@@ -515,7 +530,18 @@ export function ImagesCard({keys, onKeys}: {keys: KeyStatus[] | undefined; onKey
         <CardDescription>El agente puede buscar imágenes libremente en internet, sin configurar fuentes. Aquí puedes activar servicios adicionales con API key y la generación de imágenes.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {!on && !err && <p className="text-sm text-muted-foreground">Cargando…</p>}
+        {!on &&
+          !err &&
+          [0, 1, 2].map((i) => (
+            <div key={i} role={i ? undefined : 'status'} className="flex items-start gap-3 rounded-lg border p-4">
+              {!i && <span className="sr-only">Cargando…</span>}
+              <Skeleton className="mt-0.5 h-5 w-8 flex-none rounded-full" />
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3.5 w-72 max-w-full" />
+              </div>
+            </div>
+          ))}
         {err && <p className="text-sm text-destructive">{err}</p>}
         {on &&
           IMAGE_SOURCES.filter((s) => s.key).map((s) => {
@@ -570,7 +596,18 @@ export function SocialCard({keys, onKeys}: {keys: KeyStatus[] | undefined; onKey
         <CardDescription>Para Inspiración: descarga los reels de otras cuentas de Instagram para estudiarlos. Usa uno, el que elijas.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3" role="radiogroup" aria-label="Scraper">
-        {(!keys || !source) && !err && <p className="text-sm text-muted-foreground">Cargando…</p>}
+        {(!keys || !source) &&
+          !err &&
+          [0, 1].map((i) => (
+            <div key={i} role={i ? undefined : 'status'} className="flex items-start gap-3 rounded-lg border p-3">
+              {!i && <span className="sr-only">Cargando…</span>}
+              <Skeleton className="mt-0.5 size-4 flex-none rounded-full" />
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3.5 w-64 max-w-full" />
+              </div>
+            </div>
+          ))}
         {err && <p className="text-sm text-destructive">{err}</p>}
         {keys &&
           source &&
@@ -635,7 +672,29 @@ function ProjectCard() {
       setBusy(null);
     }
   };
-  if (!p) return <p className="text-sm text-muted-foreground">Cargando…</p>;
+  if (!p)
+    return (
+      <Card role="status">
+        <span className="sr-only">Cargando…</span>
+        <CardHeader>
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-4 w-full max-w-md" />
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          <div className="flex items-center gap-4">
+            <Skeleton className="size-16 rounded-xl" />
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-8 w-36 rounded-lg" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-8 w-full max-w-sm rounded-lg" />
+          </div>
+        </CardContent>
+      </Card>
+    );
   return (
     <Card>
       <CardHeader>
@@ -815,71 +874,157 @@ function DeleteProject({project: p, onClose}: {project: Project; onClose: () => 
 
 /* ───── The page ───── */
 
-const SECTIONS: {id: string; label: string; icon: LucideIcon; description: string}[] = [
-  {id: 'proyecto', label: 'Proyecto', icon: FolderKanban, description: 'El canal abierto: su nombre, su imagen, su público y sus reglas. También se borra aquí.'},
-  {id: 'cuenta', label: 'Cuenta', icon: User, description: 'Tu carpeta de trabajo y quién hace los videos.'},
-  {id: 'modo', label: 'Modo', icon: Monitor, description: 'Dónde viven las claves de los servicios externos.'},
-  {id: 'instagram', label: 'Instagram', icon: AtSign, description: 'Tu cuenta de Reel Studio y la cuenta de Instagram de este proyecto: sus números privados y, pronto, publicar.'},
-  {id: 'agente', label: 'Agente', icon: Bot, description: 'La herramienta que trabaja en cada video: la que va por defecto.'},
-  {id: 'voz', label: 'Voz', icon: Mic, description: 'La narración de los videos.'},
-  {id: 'datos', label: 'Extracción de datos', icon: Database, description: 'De dónde salen los reels de Inspiración y las imágenes.'},
-  {id: 'requisitos', label: 'Requisitos', icon: ListChecks, description: 'Lo que necesita este equipo.'},
-  {id: 'skills', label: 'Skills', icon: Puzzle, description: 'Las instrucciones que usan los agentes para crear tus videos. Ábrelas para consultar su contenido y sus archivos.'},
+// Grouped like GitHub's settings. The ids are routes (#/ajustes/<id>) linked from other pages: keep them.
+// Each subsection is a card of the section, with its wrapper's id below (child: a card drawn by another file).
+const GROUPS: SettingsGroup[] = [
+  {
+    id: 'general',
+    label: 'General',
+    sections: [
+      {
+        id: 'proyecto',
+        label: 'Proyecto',
+        icon: FolderKanban,
+        description: 'El canal abierto: su nombre, su imagen, su público y sus reglas. También se borra aquí.',
+        subsections: [
+          {label: 'Nombre e imagen', anchor: 'ajustes-proyecto'},
+          {label: 'Público y reglas', anchor: 'ajustes-reglas'},
+          {label: 'Zona de peligro', anchor: 'ajustes-peligro'},
+        ],
+      },
+      {
+        id: 'cuenta',
+        label: 'Cuenta',
+        icon: User,
+        description: 'Tu carpeta de trabajo y quién hace los videos.',
+        subsections: [
+          {label: 'Carpeta de trabajo', anchor: 'ajustes-carpeta'},
+          {label: 'Perfil', anchor: 'ajustes-perfil'},
+        ],
+      },
+      {id: 'apariencia', label: 'Apariencia', icon: SunMoon, description: 'Claro, oscuro o el que use tu equipo.', subsections: []},
+    ],
+  },
+  {
+    id: 'creacion',
+    label: 'Creación de videos',
+    sections: [
+      {id: 'agente', label: 'Agente', icon: Bot, description: 'La herramienta que trabaja en cada video: la que va por defecto.', subsections: []},
+      {
+        id: 'voz',
+        label: 'Voz',
+        icon: Mic,
+        description: 'La narración de los videos.',
+        subsections: [
+          {label: 'Generación de voz', anchor: 'ajustes-voz', child: 0},
+          {label: 'Voz del narrador', anchor: 'ajustes-voz', child: 1},
+        ],
+      },
+      {id: 'skills', label: 'Skills', icon: Puzzle, description: 'Las instrucciones que usan los agentes para crear tus videos. Ábrelas para consultar su contenido y sus archivos.', subsections: []},
+    ],
+  },
+  {
+    id: 'conexiones',
+    label: 'Conexiones',
+    sections: [
+      {
+        id: 'instagram',
+        label: 'Instagram',
+        icon: AtSign,
+        description: 'Tu cuenta de Reel Studio y la cuenta de Instagram de este proyecto: sus números privados y, pronto, publicar.',
+        subsections: [
+          {label: 'Cuenta de Reel Studio', anchor: 'ajustes-instagram', child: 0},
+          {label: 'Instagram de este proyecto', anchor: 'ajustes-instagram', child: 1},
+        ],
+      },
+      {
+        id: 'datos',
+        label: 'Extracción de datos',
+        icon: Database,
+        description: 'De dónde salen los reels de Inspiración y las imágenes.',
+        subsections: [
+          {label: 'Scraper de redes sociales', anchor: 'ajustes-scraper'},
+          {label: 'Imágenes', anchor: 'ajustes-imagenes'},
+        ],
+      },
+      // Its id stays 'modo' (old links).
+      {id: 'modo', label: 'Claves y servicios', icon: KeyRound, description: 'Dónde se guardan las claves de los servicios externos (ElevenLabs, Apify, Pexels…).', subsections: []},
+    ],
+  },
+  {
+    id: 'sistema',
+    label: 'Sistema',
+    sections: [{id: 'requisitos', label: 'Requisitos', icon: ListChecks, description: 'Lo que necesita este equipo.', subsections: []}],
+  },
 ];
+
+const SECTIONS = GROUPS.flatMap((g) => g.sections.map((s) => ({...s, group: g.label})));
+
+// Without a section in the route (#/ajustes): Proyecto, the first of General, as before.
+const DEFAULT_SECTION = 'proyecto';
+
+// A card's wrapper, for the nav's subsections to scroll to. Empty: takes no gap.
+const ANCHOR = 'flex scroll-mt-6 flex-col gap-4 empty:hidden';
 
 export function Settings({section: wanted}: {section?: string | null}) {
   const {uiRef} = useStudio();
-  const section = SECTIONS.find((s) => s.id === wanted) ?? SECTIONS[0];
+  const section = SECTIONS.find((s) => s.id === wanted) ?? SECTIONS.find((s) => s.id === DEFAULT_SECTION)!;
   uiRef.current = {page: 'settings'};
   const {keys, setKeys, err} = useKeys();
 
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6 md:flex-row md:items-start">
-      <nav className="flex flex-none gap-1 overflow-x-auto md:sticky md:top-6 md:w-52 md:flex-col md:overflow-visible">
-        <h1 className="mb-2 hidden px-3 text-2xl font-semibold tracking-tight md:block">Ajustes</h1>
-        {SECTIONS.map((s) => (
-          <a
-            key={s.id}
-            href={`#/ajustes/${s.id}`}
-            className={cn(
-              'flex flex-none items-center gap-2 rounded-md px-3 py-2 text-sm whitespace-nowrap hover:bg-muted/60',
-              s.id === section.id ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground',
-            )}
-          >
-            <s.icon className="size-4" /> {s.label}
-          </a>
-        ))}
-      </nav>
+    <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6 md:flex-row md:items-start md:gap-8">
+      <SettingsNav groups={GROUPS} active={section.id} />
 
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-xl font-semibold tracking-tight">{section.label}</h2>
-          <p className="text-sm text-muted-foreground">{section.description}</p>
-        </div>
+      <div key={section.id} className="animate-fade-in flex min-w-0 flex-1 flex-col gap-4">
+        <SettingsHeader group={section.group} title={section.label} description={section.description} />
         {err && <p className="text-destructive">{err}</p>}
 
         {section.id === 'proyecto' && (
           <>
-            <ProjectCard />
-            <ProjectRulesCard />
-            <DangerZone />
+            <div id="ajustes-proyecto" className={ANCHOR}>
+              <ProjectCard />
+            </div>
+            <div id="ajustes-reglas" className={ANCHOR}>
+              <ProjectRulesCard />
+            </div>
+            <div id="ajustes-peligro" className={ANCHOR}>
+              <DangerZone />
+            </div>
           </>
         )}
-        {section.id === 'instagram' && <CloudSection />}
+        {section.id === 'instagram' && (
+          <div id="ajustes-instagram" className={ANCHOR}>
+            <CloudSection />
+          </div>
+        )}
         {section.id === 'cuenta' && (
           <>
-            <WorkspaceCard />
-            <ProfileCard />
+            <div id="ajustes-carpeta" className={ANCHOR}>
+              <WorkspaceCard />
+            </div>
+            <div id="ajustes-perfil" className={ANCHOR}>
+              <ProfileCard />
+            </div>
           </>
         )}
+        {section.id === 'apariencia' && <AppearanceSection />}
         {section.id === 'modo' && <ModeCard />}
         {section.id === 'agente' && <AgentCard chrome />}
         {section.id === 'skills' && <SkillsSection />}
-        {section.id === 'voz' && <VoiceSection keys={keys} keysErr={err} onKeys={setKeys} />}
+        {section.id === 'voz' && (
+          <div id="ajustes-voz" className={ANCHOR}>
+            <VoiceSection keys={keys} keysErr={err} onKeys={setKeys} />
+          </div>
+        )}
         {section.id === 'datos' && (
           <>
-            <SocialCard keys={keys} onKeys={setKeys} />
-            <ImagesCard keys={keys} onKeys={setKeys} />
+            <div id="ajustes-scraper" className={ANCHOR}>
+              <SocialCard keys={keys} onKeys={setKeys} />
+            </div>
+            <div id="ajustes-imagenes" className={ANCHOR}>
+              <ImagesCard keys={keys} onKeys={setKeys} />
+            </div>
           </>
         )}
         {section.id === 'requisitos' && <RequirementsCard />}

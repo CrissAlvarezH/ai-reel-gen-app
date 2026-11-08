@@ -16,6 +16,7 @@ import {Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle} fro
 import {Input} from '@/components/ui/input';
 import {Skeleton} from '@/components/ui/skeleton';
 import {cn} from '@/lib/utils';
+import ListSkeleton from '@/components/common/ListSkeleton';
 import {fmtSize, skillsApi, type SkillCategory, type SkillDetail, type SkillDocument, type SkillSummary} from './api';
 
 const CATEGORIES: {id: SkillCategory; label: string; description: string}[] = [
@@ -161,7 +162,7 @@ function SkillReader({skill}: {skill: SkillSummary}) {
         <span className="text-xs text-muted-foreground">Ábrela en el explorador de archivos y edítala con VS Code o tu editor preferido.</span>
       </div>
       {folderError && <p role="alert" className="text-sm text-destructive">{folderError}</p>}
-      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : !detail ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Cargando skill…</p> : (
+      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : !detail ? <ListSkeleton count={4} /> : (
         <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border sm:grid-cols-[220px_minmax(0,1fr)] sm:grid-rows-1">
           <aside className="flex min-h-0 flex-col border-b bg-muted/20 sm:border-r sm:border-b-0">
             <div className="flex flex-col gap-2 border-b p-3"><p className="text-xs font-medium">Archivos · {detail.files.length}</p><Input value={fileQuery} onChange={(e) => setFileQuery(e.target.value)} aria-label="Buscar archivos de la skill" placeholder="Buscar archivo…" className="h-7 text-xs" /></div>
@@ -177,7 +178,7 @@ function SkillReader({skill}: {skill: SkillSummary}) {
           <div className="flex min-h-0 min-w-0 flex-col">
             <div className="flex min-h-11 shrink-0 items-center gap-2 border-b px-4 py-2"><span className="min-w-0 flex-1 truncate font-mono text-xs" title={selected}>{selected}</span>{isMarkdown && <Button variant="ghost" size="sm" onClick={() => setRaw((r) => !r)} aria-pressed={raw}>{raw ? 'Vista de lectura' : 'Ver Markdown'}</Button>}</div>
             <div key={selected} className="visible-scroll min-h-0 flex-1 overflow-auto p-5">
-              {fileError ? <p role="alert" className="text-sm text-destructive">{fileError}</p> : !document ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Cargando archivo…</p> : document.content === null ? <p className="text-sm text-muted-foreground">{document.note}</p> : isMarkdown && !raw ? <article className="prose prose-sm max-w-none break-words dark:prose-invert prose-headings:scroll-mt-4 prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre prose-pre:bg-muted prose-pre:text-foreground prose-code:break-words" dangerouslySetInnerHTML={{__html: html}} /> : <pre className="overflow-x-auto font-mono text-xs leading-relaxed whitespace-pre">{document.content ? <code dangerouslySetInnerHTML={{__html: colour(document.content, raw ? '' : selected.split('.').pop() ?? '')}} /> : 'Archivo vacío.'}</pre>}
+              {fileError ? <p role="alert" className="text-sm text-destructive">{fileError}</p> : !document ? <ListSkeleton variant="lines" count={12} /> : document.content === null ? <p className="text-sm text-muted-foreground">{document.note}</p> : isMarkdown && !raw ? <article className="prose prose-sm max-w-none break-words dark:prose-invert prose-headings:scroll-mt-4 prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre prose-pre:bg-muted prose-pre:text-foreground prose-code:break-words" dangerouslySetInnerHTML={{__html: html}} /> : <pre className="overflow-x-auto font-mono text-xs leading-relaxed whitespace-pre">{document.content ? <code dangerouslySetInnerHTML={{__html: colour(document.content, raw ? '' : selected.split('.').pop() ?? '')}} /> : 'Archivo vacío.'}</pre>}
             </div>
           </div>
         </div>

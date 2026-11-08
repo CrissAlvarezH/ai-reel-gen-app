@@ -68,7 +68,11 @@ export function ProjectPicker({compact = false}: {compact?: boolean}) {
               <ProjectAvatar project={current} className="size-6 text-xs" />
               <span className="flex min-w-0 flex-1 flex-col leading-tight">
                 <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Proyecto</span>
-                <span className={cn('truncate font-medium', !current && 'text-muted-foreground')}>{current?.name ?? (err ? 'Error' : 'Cargando…')}</span>
+                <span className={cn('truncate font-medium', !current && 'text-muted-foreground')}>{current?.name ?? (err ? 'Error' : (
+                  <span role="status" aria-live="polite" className="shimmer mt-0.5 block h-3.5 w-20 animate-pulse rounded-md bg-muted">
+                    <span className="sr-only">Cargando…</span>
+                  </span>
+                ))}</span>
               </span>
               <ChevronsUpDown className="size-4 flex-none text-muted-foreground" />
             </button>

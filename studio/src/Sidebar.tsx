@@ -55,20 +55,20 @@ function subtitle(a: Agent, st: AgentState) {
 }
 
 // A page of the sidebar: its icon and name, or only the icon (named on hover) when contracted.
-function NavLink({href, icon: I, label, active, compact, first, children}: {href: string; icon: typeof UserRound; label: string; active: boolean; compact: boolean; first?: boolean; children?: React.ReactNode}) {
+function NavLink({href, icon: I, label, active, compact, children}: {href: string; icon: typeof UserRound; label: string; active: boolean; compact: boolean; children?: React.ReactNode}) {
   return (
     <a
       href={href}
       title={compact ? label : undefined}
+      aria-current={active ? 'page' : undefined}
       className={cn(
-        'mx-2 flex items-center gap-2 rounded-md py-1.5 text-sm hover:bg-muted',
-        first ? 'mt-3' : 'mt-0.5',
+        'mx-2 mt-0.5 flex items-center gap-2 rounded-md py-1.5 text-sm transition-colors duration-150',
         compact ? 'relative justify-center px-0' : 'px-2',
-        active && 'bg-muted font-medium',
+        active ? 'bg-primary/10 font-medium text-primary' : 'text-foreground/80 hover:bg-muted hover:text-foreground',
       )}
     >
       <I className="size-4 flex-none" />
-      {!compact && <span className="flex-1">{label}</span>}
+      {!compact && <span className="animate-fade-in flex-1 truncate">{label}</span>}
       {children && (compact ? <span className="absolute -top-0.5 -right-0.5 scale-75">{children}</span> : children)}
     </a>
   );
@@ -89,6 +89,31 @@ function Posted({p}: {p: NonNullable<ReelSummary['instagram']>}) {
     </a>
   );
 }
+
+// The pages, in groups (their names are hidden when contracted).
+const GROUPS: {label: string; pages: {href: string; icon: typeof UserRound; label: string; is: Page[]}[]}[] = [
+  {
+    label: 'Crear',
+    pages: [
+      {href: '#/', icon: LayoutGrid, label: 'Biblioteca', is: ['library']},
+      {href: '#/ideas', icon: Lightbulb, label: 'Ideas de contenido', is: ['ideas']},
+      {href: '#/estilos', icon: Palette, label: 'Estilos y formatos', is: ['styles', 'formats']},
+    ],
+  },
+  {
+    label: 'Analizar',
+    pages: [
+      {href: '#/cuenta', icon: UserRound, label: 'Mi cuenta', is: ['account']},
+      {href: '#/audiencia', icon: Target, label: 'Perfil de audiencia', is: ['audience']},
+      {href: '#/inspiracion', icon: Sparkles, label: 'Inspiración', is: ['inspiration']},
+      {href: '#/fuentes', icon: Newspaper, label: 'Fuentes de información', is: ['sources']},
+    ],
+  },
+  {
+    label: 'Automatizar',
+    pages: [{href: '#/automatizaciones', icon: CalendarClock, label: 'Automatizaciones', is: ['automations']}],
+  },
+];
 
 export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   const {setOpen, sideOpen} = useStudio();
@@ -130,6 +155,18 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
     setOpen(true);
   };
 
+  // The video list's height, dragged from its top edge (null: the room the pages leave).
+  const {videosHeight, setVideosHeight} = useStudio();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const videosRef = useRef<HTMLDivElement>(null);
+  const rowDrag = useRef<{y: number; start: number; last: number | null} | null>(null);
+  const endRowDrag = () => {
+    if (!rowDrag.current) return;
+    setVideosHeight(rowDrag.current.last, true);
+    rowDrag.current = null;
+    document.documentElement.classList.remove('resizing-rows');
+  };
+
   const general = agents.find((a) => !a.slug);
   const rows = agents
     .filter((a) => a.slug)
@@ -146,16 +183,19 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   return (
     <nav className="sticky top-14 hidden h-[calc(100vh-3.5rem)] flex-col overflow-hidden border-r bg-card/40 lg:flex">
       <ProjectPicker compact={compact} />
-      <NavLink href="#/cuenta" icon={UserRound} label="Mi cuenta" active={page === 'account'} compact={compact} first />
-      <NavLink href="#/" icon={LayoutGrid} label="Biblioteca" active={page === 'library'} compact={compact}>
-        {generalState}
-      </NavLink>
-      <NavLink href="#/audiencia" icon={Target} label="Perfil de audiencia" active={page === 'audience'} compact={compact} />
-      <NavLink href="#/ideas" icon={Lightbulb} label="Ideas de contenido" active={page === 'ideas'} compact={compact} />
-      <NavLink href="#/automatizaciones" icon={CalendarClock} label="Automatizaciones" active={page === 'automations'} compact={compact} />
-      <NavLink href="#/fuentes" icon={Newspaper} label="Fuentes de información" active={page === 'sources'} compact={compact} />
-      <NavLink href="#/inspiracion" icon={Sparkles} label="Inspiración" active={page === 'inspiration'} compact={compact} />
-      <NavLink href="#/estilos" icon={Palette} label="Estilos y formatos" active={page === 'styles' || page === 'formats'} compact={compact} />
+      {/* The pages scroll on their own when they don't fit (a short window, or the video list dragged up). */}
+      <div ref={menuRef} className="flex min-h-12 flex-col overflow-y-auto overscroll-contain" style={{flex: videosHeight && !compact ? '1 1 0' : '0 1 auto'}}>
+      {GROUPS.map((g) => (
+        <div key={g.label} className={cn('flex flex-none flex-col', compact ? 'mx-2 mt-2 border-t pt-1.5 [&>a]:mx-0' : 'mt-3')}>
+          {!compact && <p className="animate-fade-in px-4 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{g.label}</p>}
+          {g.pages.map((p) => (
+            <NavLink key={p.href} href={p.href} icon={p.icon} label={p.label} active={p.is.includes(page)} compact={compact}>
+              {p.href === '#/' ? generalState : undefined}
+            </NavLink>
+          ))}
+        </div>
+      ))}
+      </div>
       {rows.length > 0 &&
         (compact ? (
           <div className="mx-2 mt-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain border-t pt-3">
@@ -164,7 +204,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
                 key={a.key}
                 onClick={() => go(a)}
                 title={`${a.title ?? a.slug} · ${STATE_LABEL[st]}`}
-                className={cn('relative flex justify-center rounded-md py-2 hover:bg-muted', a.slug === slug && 'bg-muted')}
+                className={cn('relative flex justify-center rounded-md py-2 transition-colors duration-150 hover:bg-muted', a.slug === slug && 'bg-primary/10 hover:bg-primary/10')}
               >
                 <StateGlyph state={st} />
                 <AgentLogo agent={a.agent ?? inUse} className="absolute right-1.5 bottom-1 size-2.5" />
@@ -172,7 +212,27 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
             ))}
           </div>
         ) : (
-          <div className="mt-3 flex min-h-0 flex-1 flex-col">
+          <div ref={videosRef} className="relative mt-1 flex min-h-24 flex-col pt-2" style={{flex: videosHeight ? `0 0 ${videosHeight}px` : '1 1 0'}}>
+            <RowResizeHandle
+              onPointerDown={(e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                rowDrag.current = {y: e.clientY, start: videosRef.current!.getBoundingClientRect().height, last: videosHeight};
+                document.documentElement.classList.add('resizing-rows');
+              }}
+              onPointerMove={(e) => {
+                const d = rowDrag.current;
+                if (!d) return;
+                // Up makes the list taller; the pages above keep at least a little room (and scroll).
+                const max = videosRef.current!.getBoundingClientRect().height + menuRef.current!.getBoundingClientRect().height - 48;
+                d.last = Math.round(Math.max(96, Math.min(max, d.start - (e.clientY - d.y))));
+                setVideosHeight(d.last, false);
+              }}
+              onPointerUp={endRowDrag}
+              onPointerCancel={endRowDrag}
+              onDoubleClick={() => setVideosHeight(null)}
+            />
             <div className="group/videos flex items-center justify-between pr-3 pb-1 pl-4">
               <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
                 Videos <span className="tabular-nums">{rows.length}</span>
@@ -181,7 +241,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
                 href="#/nuevo"
                 title="Nuevo video"
                 aria-label="Nuevo video"
-                className="-my-1.5 flex-none rounded-md p-1.5 text-muted-foreground opacity-0 group-hover/videos:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100"
+                className="-my-1.5 flex-none rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity group-hover/videos:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100"
               >
                 <Plus className="size-4" />
               </a>
@@ -189,7 +249,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
             {/* Only the video list scrolls; the pages above and Ajustes below stay put. */}
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {rows.map(({a, st}) => (
-                <div key={a.key} className={cn('group mx-2 flex items-center rounded-md hover:bg-muted', a.slug === slug && 'bg-muted')}>
+                <div key={a.key} className={cn('group mx-2 flex items-center rounded-md transition-colors duration-150 hover:bg-muted', a.slug === slug && 'bg-primary/10 hover:bg-primary/10')}>
                   <button onClick={() => go(a)} className="flex min-w-0 flex-1 flex-col gap-1 py-2 pl-2 text-left">
                     <span className="flex items-center gap-2 text-sm">
                       <StateIcon state={st} />
@@ -212,5 +272,22 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
         <NavLink href="#/ajustes" icon={SettingsIcon} label="Ajustes" active={page === 'settings'} compact={compact} />
       </div>
     </nav>
+  );
+}
+
+// The top edge of the video list: drag it up or down; double click, back to the room the pages leave. A thin line that
+// shows faintly on hover, like the columns' edges (components/common/ResizeHandle).
+function RowResizeHandle(props: Pick<React.HTMLAttributes<HTMLDivElement>, 'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel' | 'onDoubleClick'>) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Cambiar el alto de la lista de videos"
+      title="Arrastra para cambiar el alto · doble clic: el alto por defecto"
+      className="group absolute inset-x-0 -top-1.5 z-10 h-3 cursor-row-resize touch-none"
+      {...props}
+    >
+      <div className="absolute inset-x-0 top-1.5 h-px bg-border transition-colors group-hover:bg-foreground/30 group-active:bg-foreground/50" />
+    </div>
   );
 }
