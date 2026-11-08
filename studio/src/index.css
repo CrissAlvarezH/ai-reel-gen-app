@@ -49,75 +49,74 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Purple and white. Light: pure white with lavender surfaces and a violet-600 primary. Dark: near-black with a purple
-   cast, a brighter violet primary with dark text on it (AA). */
+/* Neutral greys, black and white (the original palette), in light and dark. */
 :root {
     --background: oklch(1 0 0);
-    --foreground: oklch(0.2 0.03 290);
+    --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.2 0.03 290);
+    --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.2 0.03 290);
-    --primary: oklch(0.55 0.23 293);
-    --primary-foreground: oklch(1 0 0);
-    --secondary: oklch(0.97 0.015 295);
-    --secondary-foreground: oklch(0.32 0.09 293);
-    --muted: oklch(0.97 0.015 295);
-    --muted-foreground: oklch(0.52 0.04 290);
-    --accent: oklch(0.955 0.025 295);
-    --accent-foreground: oklch(0.32 0.12 293);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.92 0.018 295);
-    --input: oklch(0.9 0.022 295);
-    --ring: oklch(0.6 0.2 293);
-    --chart-1: oklch(0.55 0.23 293);
-    --chart-2: oklch(0.7 0.16 300);
-    --chart-3: oklch(0.6 0.25 322);
-    --chart-4: oklch(0.45 0.2 285);
-    --chart-5: oklch(0.8 0.1 310);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
     --radius: 0.75rem;
-    --sidebar: oklch(0.985 0.008 295);
-    --sidebar-foreground: oklch(0.2 0.03 290);
-    --sidebar-primary: oklch(0.55 0.23 293);
-    --sidebar-primary-foreground: oklch(1 0 0);
-    --sidebar-accent: oklch(0.955 0.025 295);
-    --sidebar-accent-foreground: oklch(0.32 0.12 293);
-    --sidebar-border: oklch(0.93 0.015 295);
-    --sidebar-ring: oklch(0.6 0.2 293);
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
 }
 
 .dark {
-    --background: oklch(0.135 0.03 287);
-    --foreground: oklch(0.97 0.01 295);
-    --card: oklch(0.175 0.035 288);
-    --card-foreground: oklch(0.97 0.01 295);
-    --popover: oklch(0.2 0.04 289);
-    --popover-foreground: oklch(0.97 0.01 295);
-    --primary: oklch(0.72 0.17 295);
-    --primary-foreground: oklch(0.135 0.03 287);
-    --secondary: oklch(0.235 0.045 290);
-    --secondary-foreground: oklch(0.97 0.01 295);
-    --muted: oklch(0.235 0.045 290);
-    --muted-foreground: oklch(0.72 0.035 290);
-    --accent: oklch(0.27 0.07 292);
-    --accent-foreground: oklch(0.97 0.01 295);
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(0.82 0.08 295 / 12%);
-    --input: oklch(0.82 0.08 295 / 16%);
-    --ring: oklch(0.65 0.17 295);
-    --chart-1: oklch(0.72 0.17 295);
-    --chart-2: oklch(0.8 0.12 305);
-    --chart-3: oklch(0.7 0.22 322);
-    --chart-4: oklch(0.6 0.2 285);
-    --chart-5: oklch(0.88 0.07 310);
-    --sidebar: oklch(0.155 0.034 288);
-    --sidebar-foreground: oklch(0.97 0.01 295);
-    --sidebar-primary: oklch(0.72 0.17 295);
-    --sidebar-primary-foreground: oklch(0.135 0.03 287);
-    --sidebar-accent: oklch(0.26 0.05 292);
-    --sidebar-accent-foreground: oklch(0.97 0.01 295);
-    --sidebar-border: oklch(0.82 0.08 295 / 10%);
-    --sidebar-ring: oklch(0.65 0.17 295);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
 }
 
 /* The app was dark-only, and its pages use the palette's light shades (text-amber-400, bg-zinc-400...) that vanish on
@@ -290,7 +289,7 @@
   background-color: color-mix(in oklab, var(--vertical) 7%, oklch(1 0 0));
 }
 .dark .vertical-page {
-  background-color: color-mix(in oklab, var(--vertical) 10%, oklch(0.16 0.025 290));
+  background-color: color-mix(in oklab, var(--vertical) 10%, oklch(0.16 0 0));
 }
 [data-list] {
   --vertical: initial;
@@ -298,9 +297,9 @@
 .vertical-theme {
   --background: color-mix(in oklab, var(--vertical) 7%, oklch(1 0 0));
   --card: color-mix(in oklab, var(--vertical) 4%, oklch(1 0 0));
-  --muted: color-mix(in oklab, var(--vertical) 12%, oklch(0.97 0.015 295));
-  --accent: color-mix(in oklab, var(--vertical) 12%, oklch(0.97 0.015 295));
-  --muted-foreground: color-mix(in oklab, var(--vertical) 35%, oklch(0.45 0.04 290));
+  --muted: color-mix(in oklab, var(--vertical) 12%, oklch(0.97 0 0));
+  --accent: color-mix(in oklab, var(--vertical) 12%, oklch(0.97 0 0));
+  --muted-foreground: color-mix(in oklab, var(--vertical) 35%, oklch(0.45 0 0));
   --border: color-mix(in oklab, var(--vertical) 25%, transparent);
   --input: color-mix(in oklab, var(--vertical) 30%, transparent);
   --ring: var(--vertical);
@@ -308,14 +307,14 @@
   --primary-foreground: oklch(1 0 0);
 }
 .dark .vertical-theme {
-  --background: color-mix(in oklab, var(--vertical) 10%, oklch(0.16 0.025 290));
-  --card: color-mix(in oklab, var(--vertical) 14%, oklch(0.205 0.03 290));
-  --muted: color-mix(in oklab, var(--vertical) 20%, oklch(0.26 0.04 290));
-  --accent: color-mix(in oklab, var(--vertical) 20%, oklch(0.26 0.04 290));
-  --muted-foreground: color-mix(in oklab, var(--vertical) 35%, oklch(0.72 0.035 290));
+  --background: color-mix(in oklab, var(--vertical) 10%, oklch(0.16 0 0));
+  --card: color-mix(in oklab, var(--vertical) 14%, oklch(0.205 0 0));
+  --muted: color-mix(in oklab, var(--vertical) 20%, oklch(0.26 0 0));
+  --accent: color-mix(in oklab, var(--vertical) 20%, oklch(0.26 0 0));
+  --muted-foreground: color-mix(in oklab, var(--vertical) 35%, oklch(0.72 0 0));
   --border: color-mix(in oklab, var(--vertical) 30%, transparent);
   --input: color-mix(in oklab, var(--vertical) 35%, transparent);
-  --primary-foreground: oklch(0.16 0.025 290);
+  --primary-foreground: oklch(0.16 0 0);
 }
 
 /* Code colours in Ajustes → Skills (CodeMirror's classHighlighter). */
@@ -357,20 +356,9 @@
 
 /* ───── Redesign polish ───── */
 
-/* Dark mode with depth: a soft purple glow at the top of the page, cards that catch a little light on their top
-   edge, and primary buttons that glow. */
-.dark body {
-  background-image: radial-gradient(1200px 520px at 50% -180px, color-mix(in oklab, var(--primary) 13%, transparent), transparent 70%);
-  background-attachment: fixed;
-}
+/* Dark mode with depth: cards that catch a little light on their top edge. */
 .dark [data-slot="card"] {
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.045), 0 1px 2px oklch(0 0 0 / 0.35);
-}
-.dark [data-slot="button"][data-variant="default"] {
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 60%, transparent), 0 6px 20px -8px color-mix(in oklab, var(--primary) 70%, transparent);
-}
-.dark [data-slot="button"][data-variant="default"]:hover {
-  box-shadow: 0 0 0 1px var(--primary), 0 8px 26px -8px color-mix(in oklab, var(--primary) 85%, transparent);
 }
 [data-slot="button"][data-variant="default"] {
   transition: background-color .15s, box-shadow .2s, transform .15s;

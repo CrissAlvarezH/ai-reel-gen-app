@@ -1,6 +1,6 @@
 import {cva} from 'class-variance-authority';
 
-// A wide invisible grab area over the edge, with a thin line that lights up purple on hover and while dragging.
+// A wide invisible grab area over the edge, with a thin line that lights up on hover and while dragging.
 export const handle = cva('group absolute inset-y-0 z-20 hidden w-3 cursor-col-resize touch-none md:block', {
   variants: {
     edge: {

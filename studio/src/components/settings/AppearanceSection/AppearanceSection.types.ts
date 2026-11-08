@@ -11,7 +11,7 @@ export interface PreviewPalette {
   line: string;
   /** The title line. */
   strong: string;
-  /** The purple bits: the active page and the button. */
+  /** The accent: the active page and the button. */
   accent: string;
 }
 
