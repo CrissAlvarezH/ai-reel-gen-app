@@ -363,7 +363,7 @@ export const inspirationApi = {
   // One whole reel, for its card (account: where it is, when known).
   reel: (code: string, account?: string | null) => fetch(`/api/inspiration/reels/${code}${account ? `?account=${account}` : ''}`).then((r) => json<InspirationReel>(r)),
   // No limit: everything pending (loose videos). With one: an account's "Analizar…", as the automation's step.
-  process: (account: string, opts: {reanalyse?: boolean; limit?: number; maxSeconds?: number; fetch?: boolean} = {}) => post(`/api/inspiration/accounts/${account}/process`, opts),
+  process: (account: string, opts: {reanalyse?: boolean; limit?: number; maxSeconds?: number; fetch?: boolean; codes?: string[]} = {}) => post(`/api/inspiration/accounts/${account}/process`, opts),
   // Detener: stop what's transcribing or analysing in an account (or the owner of a loose video).
   stop: (account: string) => post(`/api/inspiration/accounts/${account}/stop`),
   removeAccount: (account: string) => del(`/api/inspiration/accounts/${account}`),

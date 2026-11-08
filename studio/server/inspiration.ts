@@ -983,7 +983,7 @@ async function analyseAccount(u: string, check: () => void, signal?: AbortSignal
 // comes from the creator: a download, "Procesar" or "Analizar video").
 const pipelines = new Set<string>();
 const again = new Set<string>(); // new reels arrived while it ran: go once more at the end
-async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[]; limit?: number; maxSeconds?: number} = {}) {
+async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[]; codes?: string[]; limit?: number; maxSeconds?: number} = {}) {
   if (pipelines.has(u)) return void again.add(u);
   const g = gen;
   pipelines.add(u);
@@ -996,7 +996,7 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
     if (stopped()) throw new Stopped('detenido');
   };
   const followed = !!readAccount(u)?.followed;
-  const codes = opts.analyse ?? (opts.limit ? newest(u, opts.limit, opts.maxSeconds ?? Infinity) : reelCodes(u));
+  const codes = opts.analyse ?? opts.codes ?? (opts.limit ? newest(u, opts.limit, opts.maxSeconds ?? Infinity) : reelCodes(u));
   for (const c of codes) {
     const r = readReel(u, c);
     if (r?.error) writeJson(path.join(reelDir(u, c), 'reel.json'), {...r, error: null});
@@ -1065,7 +1065,7 @@ async function pipeline(u: string, opts: {reanalyse?: boolean; analyse?: string[
     live();
     const a = readAccount(u);
     const analysed = reelCodes(u).filter((c) => d(c, 'analysis.json')).length;
-    if (a?.followed && !opts.analyse && analysed >= MIN_FOR_MEDIAN && (toAnalyse.length || !a.analysis || opts.reanalyse)) {
+    if (a?.followed && !opts.analyse && analysed >= MIN_FOR_MEDIAN && (toAnalyse.length || !a.analysis || opts.reanalyse || opts.codes)) {
       Object.assign(job, {stage: 'summary', done: 0, total: 1});
       changed();
       await analyseAccount(u, () => alive(g), ctrl.signal).catch((e) => {
@@ -1100,10 +1100,19 @@ export const newest = (u: string, limit: number, maxSeconds: number) =>
 // "Procesar" of loose videos (no limit: their pending and failed reels) and an account's "Analizar…": its newest `limit` reels
 // up to maxSeconds (fetch: read again from the scraper first, which is charged, as "Actualizar cuenta externa" does), what's
 // missing of them (reanalyse: those already analysed too), then the account.
-export function processAccount(u: string, o: {reanalyse?: unknown; limit?: unknown; maxSeconds?: unknown; fetch?: unknown} = {}) {
+// codes (Destacados' "Analizar"): those reels of a scanned account, what's missing of them, then the account again
+// so they enter its general analysis.
+export function processAccount(u: string, o: {reanalyse?: unknown; limit?: unknown; maxSeconds?: unknown; fetch?: unknown; codes?: unknown} = {}) {
   checkAccount(u);
   if (pipelines.has(u) || working(u)) throw httpError(409, `@${u} ya está trabajando`);
   const reanalyse = !!o.reanalyse;
+  if (o.codes != null) {
+    const known = new Set(reelCodes(u));
+    if (!Array.isArray(o.codes) || !o.codes.length || o.codes.some((c) => typeof c !== 'string' || !known.has(c))) throw httpError(400, 'reels que no son de esta cuenta');
+    if (!readAccount(u)?.followed) throw httpError(400, `@${u} no es una cuenta escaneada`);
+    setAccountError(u, null);
+    return void pipeline(u, {reanalyse, codes: [...new Set(o.codes as string[])]});
+  }
   if (o.limit == null) {
     setAccountError(u, null);
     return void pipeline(u, {reanalyse});

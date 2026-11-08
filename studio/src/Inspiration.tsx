@@ -13,9 +13,11 @@ import {Label} from '@/components/ui/label';
 import {Switch} from '@/components/ui/switch';
 import {Progress} from '@/components/ui/progress';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
+import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
 import {cn} from '@/lib/utils';
 import {fmtAgo, fmtTime, inspirationApi, useSocket, type InspirationAccount, type InspirationJob, type InspirationList, type InspirationReel, type InspirationStatus} from './api';
+import type {InspirationRow} from '../shared/types';
 import {BEAT_TAGS, MAX_ACCOUNT_REELS, MAX_ANALYSIS_SECONDS} from '../shared/types';
 import {md} from './Chat';
 import {useConfirm} from './confirm';
@@ -28,10 +30,13 @@ import {AnalysisSections, FramesSection, Section, StateBadge, TranscriptSection}
 // this machine and deletes the video; the agent analyses a video when asked from its card ("Analizar video"),
 // and every reel of a scanned account and the account on its own. A reel's metrics and
 // metadata are kept as of their download; "Actualizar métricas" reads them again. "Usar como referencia" attaches a reel to the general conversation.
-// Routes: #/inspiracion[/todos|/@account|/sueltos][/<code>] (the code opens the reel's card).
+// Two views: Explorar (the chips and the table) and Destacados (a card per scanned account with its best reels by Multiplicador).
+// Routes: #/inspiracion[/todos|/@account|/sueltos|/destacados][/<code>] (the code opens the reel's card).
 
 const LOOSE = 'sueltos';
 const ALL = 'todos'; // every reel of every account, from the index
+const HIGHLIGHTS = 'destacados'; // the Destacados view
+let lastExplore: string | null = null; // Explorar's tab, to go back to it from Destacados
 
 function useInspirationHash() {
   const [hash, setHash] = useState(location.hash);
@@ -63,6 +68,8 @@ export function Inspiration() {
   const looseCount = loose.reduce((n, a) => n + a.reels, 0);
   // The open tab: the one in the URL, else the first account.
   // A loose reel's link (#/inspiracion/@owner/<code>, from a reference in the chat) opens the loose tab.
+  const highlights = tab === HIGHLIGHTS;
+  if (!highlights) lastExplore = tab;
   const isLoose = tab === LOOSE || loose.some((a) => `@${a.username}` === tab);
   const total = followed.reduce((n, a) => n + a.reels, 0) + looseCount;
   const current = tab === ALL ? ALL : isLoose ? LOOSE : (followed.find((a) => `@${a.username}` === tab)?.username ?? (tab ? null : (followed[0]?.username ?? (looseCount ? LOOSE : null))));
@@ -71,7 +78,7 @@ export function Inspiration() {
   useEffect(() => {
     profilesRef.current?.querySelector('[data-active]')?.scrollIntoView({block: 'nearest', inline: 'nearest'});
   }, [current]);
-  uiRef.current = {page: 'inspiration', ...(current && current !== LOOSE && current !== ALL ? {inspiration: `@${current}${code ? `/${code}` : ''}`} : {})};
+  uiRef.current = {page: 'inspiration', ...(!highlights && current && current !== LOOSE && current !== ALL ? {inspiration: `@${current}${code ? `/${code}` : ''}`} : {})};
 
   if (err) return <p className="p-6 text-destructive">{err}</p>;
   if (!st) return <p className="p-6 text-muted-foreground">Cargando…</p>;
@@ -120,6 +127,19 @@ export function Inspiration() {
         </Alert>
       )}
 
+      {followed.length > 0 && (
+        <Tabs value={highlights ? HIGHLIGHTS : 'explore'} onValueChange={(v) => go(v === HIGHLIGHTS ? HIGHLIGHTS : lastExplore)} className="-mt-2">
+          <TabsList>
+            <TabsTrigger value="explore">Explorar</TabsTrigger>
+            <TabsTrigger value={HIGHLIGHTS}>Destacados</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      {highlights ? (
+        <Highlights accounts={followed} code={code} transcriber={st.transcriber} />
+      ) : (
+        <>
       {(followed.length > 0 || looseCount > 0 || st.loose.job || st.loose.error) && (
         <nav className="flex min-w-0 items-start gap-2">
           {total > 0 && (
@@ -159,6 +179,8 @@ export function Inspiration() {
           <p className="text-sm">Añade una cuenta que admires o el enlace de un reel que te haya funcionado como espectador.</p>
         </div>
       )}
+        </>
+      )}
     </main>
   );
 }
@@ -174,6 +196,191 @@ function TabChip({active, onClick, job, error, className, children}: {active: bo
       {job ? <Loader2 className="size-3.5 animate-spin" /> : error ? <AlertTriangle className="size-3.5 text-amber-500" /> : null}
       {children}
     </button>
+  );
+}
+
+/* ───── Destacados ───── */
+
+const TOP = 5; // destacados per account
+const OPEN_KEY = 'inspiration-highlights-closed'; // the cards he collapsed, per browser
+
+const readClosed = (): string[] => {
+  try {
+    return JSON.parse(localStorage.getItem(OPEN_KEY) ?? '[]') as string[];
+  } catch {
+    return [];
+  }
+};
+
+// A card per scanned account, best Multiplicador first, with its TOP reels above its median. A reel's click opens its card.
+function Highlights({accounts, code, transcriber}: {accounts: InspirationAccount[]; code: string | null; transcriber: boolean}) {
+  const [tops, setTops] = useState<Record<string, InspirationRow[]>>({});
+  const [closed, setClosed] = useState<string[]>(readClosed);
+  const names = accounts.map((a) => a.username).join(' ');
+  const load = useCallback(
+    () =>
+      void Promise.all(
+        names
+          .split(' ')
+          .filter(Boolean)
+          .map((u) => inspirationApi.list(u, {sort: 'ratio', desc: true, page: 0, size: TOP, minRatio: '1'}).then((l): [string, InspirationRow[]] => [u, l.rows], (): [string, InspirationRow[]] => [u, []])),
+      ).then((e) => setTops(Object.fromEntries(e))),
+    [names],
+  );
+  useEffect(() => load(), [load]);
+  useSocket((m) => m.type === 'inspiration' && load(), load);
+
+  const [open, setOpen] = useState<InspirationReel | null>(null);
+  const loadOpen = useCallback(() => {
+    if (!code) return setOpen(null);
+    inspirationApi.reel(code, null).then(setOpen, () => setOpen(null));
+  }, [code]);
+  useEffect(() => void loadOpen(), [loadOpen]);
+  useSocket((m) => m.type === 'inspiration' && void loadOpen(), loadOpen);
+  const {uiRef} = useStudio();
+  if (open) uiRef.current = {page: 'inspiration', inspiration: `@${open.account}/${open.code}`};
+
+  const toggle = (u: string, isOpen: boolean) => {
+    const next = isOpen ? closed.filter((x) => x !== u) : [...new Set([...closed, u])];
+    setClosed(next);
+    try {
+      localStorage.setItem(OPEN_KEY, JSON.stringify(next));
+    } catch {
+      /* private window: it just won't be remembered */
+    }
+  };
+  const best = (u: string) => tops[u]?.[0]?.ratio ?? 0;
+  const sorted = [...accounts].sort((a, b) => best(b.username) - best(a.username));
+
+  return (
+    <section className="flex flex-col gap-3">
+      <p className="text-sm text-muted-foreground">
+        Los {TOP} reels de cada cuenta que más superan su mediana de vistas (Multiplicador ≥ 1×). «Analizar» analiza los que falten y rehace el análisis general de la cuenta con ellos.
+      </p>
+      {sorted.map((a) => (
+        <HighlightCard key={a.username} account={a} rows={tops[a.username] ?? null} open={!closed.includes(a.username)} onOpenChange={(o) => toggle(a.username, o)} transcriber={transcriber} />
+      ))}
+      <ReelDialog r={open ?? undefined} onClose={() => go(HIGHLIGHTS)} />
+    </section>
+  );
+}
+
+function HighlightCard({account: a, rows, open, onOpenChange, transcriber}: {account: InspirationAccount; rows: InspirationRow[] | null; open: boolean; onOpenChange: (o: boolean) => void; transcriber: boolean}) {
+  const confirm = useConfirm();
+  const [err, setErr] = useState('');
+  const {busy, run, loadMore, rescan} = useAccountActions(setErr);
+  const job = a.job;
+  const inSummary = new Set(a.analysis?.codes ?? []);
+  // Missing: not analysed yet, or analysed after the general analysis (older analyses don't list their reels: only the first case).
+  const missing = (rows ?? []).filter((r) => r.state !== 'ready' || (a.analysis?.codes && !inSummary.has(r.code)));
+  const analysed = (rows ?? []).length - (rows ?? []).filter((r) => r.state !== 'ready').length;
+  const analyse = () =>
+    run(async () => {
+      const toAnalyse = missing.filter((r) => r.state !== 'ready').length;
+      const ok = await confirm({
+        title: `¿Analizar ${missing.length === 1 ? 'el destacado' : `${missing.length} destacados`} de @${a.username}?`,
+        description: `${toAnalyse ? `El agente analiza ${toAnalyse === 1 ? 'el que falta' : `los ${toAnalyse} que faltan`} con tu suscripción` : 'Ya están analizados'}; luego se rehace el análisis general de la cuenta para que entren. No se descarga nada ni se gasta saldo del scraper.`,
+        action: 'Analizar',
+      });
+      if (ok) await inspirationApi.process(a.username, {codes: missing.map((r) => r.code)});
+    });
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} asChild>
+      <Card className="group/hl gap-0 py-0">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-3 text-left">
+            <ChevronRight className="size-4 flex-none text-muted-foreground transition-transform group-data-[state=open]/hl:rotate-90" />
+            <Avatar account={a} />
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 font-semibold">
+                @{a.username}
+                {a.profile?.verified && <BadgeCheck className="size-4 text-sky-400" aria-label="Verificada" />}
+                {job && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+                {a.error && !job && <AlertTriangle className="size-3.5 text-amber-500" />}
+              </p>
+              <p className="truncate text-sm text-muted-foreground">
+                {[
+                  a.profile?.followers != null ? `${num(a.profile.followers)} seguidores` : null,
+                  a.median != null ? `mediana ${num(Math.round(a.median))} vistas` : null,
+                  rows?.[0]?.ratio != null ? `mejor ${rows[0].ratio.toFixed(1)}×` : null,
+                  rows?.length ? `${analysed} de ${rows.length} analizados` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </div>
+          </CollapsibleTrigger>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" disabled={busy || !!job} onClick={() => void rescan(a)} title="Vuelve a escanear la cuenta para actualizar vistas, likes y comentarios">
+              <RefreshCw /> Actualizar
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="sm" disabled={busy || !!job}>
+                  <Plus /> Cargar más
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Reels anteriores a los que tienes</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {[10, 30, 50].map((n) => (
+                  <DropdownMenuItem key={n} onSelect={() => void loadMore(a, n)}>
+                    {n} más
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={busy || !!job || !transcriber || !missing.length}
+              onClick={() => void analyse()}
+              title={!transcriber ? 'Instala la transcripción en Ajustes → Requisitos' : missing.length ? 'Analiza los destacados que faltan y los suma al análisis general' : 'Todos los destacados ya están en el análisis general'}
+            >
+              <Sparkles /> {missing.length ? `Analizar ${missing.length}` : 'Analizados'}
+            </Button>
+          </div>
+        </div>
+        <CollapsibleContent>
+          <div className="flex flex-col gap-3 border-t px-4 py-4">
+            {job && <JobLine job={job} onStop={() => inspirationApi.stop(a.username)} />}
+            {a.error && !job && <p className="text-sm text-destructive">{a.error}</p>}
+            {err && <p className="text-sm text-destructive">{err}</p>}
+            {!rows ? (
+              <p className="text-sm text-muted-foreground">Cargando…</p>
+            ) : !rows.length ? (
+              <p className="text-sm text-muted-foreground">{a.median == null ? 'Aún no hay mediana: faltan reels para comparar.' : 'Ningún reel supera su mediana todavía.'}</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                {rows.map((r) => (
+                  <button key={r.code} type="button" onClick={() => go(HIGHLIGHTS, r.code)} className="group/reel flex min-w-0 flex-col gap-1.5 text-left">
+                    <div className="relative aspect-[9/16] overflow-hidden rounded-lg bg-muted ring-foreground/40 group-hover/reel:ring-2">
+                      {r.thumb && <img src={inspirationApi.file(r, 'thumb.jpg')} alt="" loading="lazy" className="size-full object-cover" />}
+                      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/85 to-transparent px-2 pt-8 pb-2">
+                        <span className="text-lg font-semibold text-emerald-400 tabular-nums">{r.ratio != null ? `${r.ratio.toFixed(1)}×` : '—'}</span>
+                        <span className="flex items-center gap-1 text-xs text-white tabular-nums">
+                          <Eye className="size-3.5" /> {num(r.views)}
+                        </span>
+                      </div>
+                      <div className="absolute top-2 left-2">
+                        <StateBadge r={r} />
+                        {r.state === 'ready' && a.analysis?.codes && !inSummary.has(r.code) && (
+                          <Badge variant="secondary" title="Analizado después del análisis general">
+                            Fuera del análisis
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <p className="line-clamp-2 text-sm font-medium">{r.title}</p>
+                    {r.hook && <p className="line-clamp-2 text-xs text-muted-foreground">«{r.hook}»</p>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
 
@@ -436,6 +643,53 @@ const FILTERS: {key: Exclude<keyof Filters, 'q' | 'account'>; label: string; opt
   {key: 'state', label: 'Estado', options: [['any', 'Cualquiera'], ['ready', 'Analizados'], ['unanalysed', 'Sin analizar'], ['error', 'Con error']]},
 ];
 
+// An account's Actualizar and Cargar más (and run, for other actions): in its Explorar view and its Destacados card.
+function useAccountActions(setErr: (e: string) => void) {
+  const confirm = useConfirm();
+  const [busy, setBusy] = useState(false);
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setErr('');
+    try {
+      await fn();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  // "Cargar más": the scraper brings an account's reels newest first and can't skip any, so this asks for the ones
+  // already here plus n; those come back too (and their metrics are refreshed), and they're charged for.
+  const loadMore = (a: InspirationAccount, n: number) =>
+    run(async () => {
+      const limit = a.reels + n;
+      const e = await inspirationApi.estimate(`@${a.username}`, limit, 'account');
+      const ok = await confirm({
+        title: `¿Cargar ${n} reels más de @${a.username}?`,
+        description: `${e.source} trae los reels de una cuenta del más nuevo al más viejo y no deja saltarse los primeros: pide los ${a.reels} que ya tienes (de paso se actualizan sus métricas) y hasta ${n} anteriores, ${limit} en total. ${e.charge}. Luego el agente analiza los nuevos y otra vez la cuenta, con tu suscripción.`,
+        action: 'Cargar',
+      });
+      if (ok) await inspirationApi.add(`@${a.username}`, limit, 'account');
+    });
+
+  // "Actualizar": scan the account again for as many reels as it has, which refreshes their views, likes and
+  // comments (and the metadata and profile), without transcribing or analysing anything. The scraper brings the
+  // newest first: reels posted since come in (pending), and that many of the oldest keep their old metrics.
+  const rescan = (a: InspirationAccount) =>
+    run(async () => {
+      const limit = a.reels || 30;
+      const e = await inspirationApi.estimate(`@${a.username}`, limit, 'account');
+      const ok = await confirm({
+        title: `¿Actualizar @${a.username}?`,
+        description: `Se vuelve a escanear la cuenta: sus ${limit} reels más recientes, con sus vistas, likes, comentarios y metadatos de hoy, y su perfil (foto, seguidores y bio). No se transcribe ni se analiza nada: los análisis se conservan y, si publicó reels nuevos, quedan pendientes (Procesar, en el menú). ${e.charge}.`,
+        action: 'Actualizar',
+      });
+      if (ok) await inspirationApi.add(`@${a.username}`, limit, 'account', true);
+    });
+
+  return {busy, run, loadMore, rescan};
+}
+
 // The reels of one account, the loose videos, or every reel ("Todos", scope ALL), from the index: the server
 // filters, orders and pages; the card asks for the whole reel.
 function ReelsView({
@@ -456,7 +710,6 @@ function ReelsView({
   const confirm = useConfirm();
   const [data, setData] = useState<InspirationList | null>(null);
   const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
   const [sort, setSort] = useState<{key: SortKey; desc: boolean}>({key: account?.median ? 'ratio' : 'posted', desc: true});
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [q, setQ] = useState(''); // the search box; filters.q follows it after a pause
@@ -516,45 +769,7 @@ function ReelsView({
   const todo = (c.pending ?? 0) + (c.error ?? 0) + (account ? (c.processed ?? 0) : 0);
 
   const [analyzing, setAnalyzing] = useState(false);
-  const run = async (fn: () => Promise<unknown>) => {
-    setBusy(true);
-    setErr('');
-    try {
-      await fn();
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  // "Cargar más": the scraper brings an account's reels newest first and can't skip any, so this asks for the ones
-  // already here plus n; those come back too (and their metrics are refreshed), and they're charged for.
-  const loadMore = (a: InspirationAccount, n: number) =>
-    run(async () => {
-      const limit = a.reels + n;
-      const e = await inspirationApi.estimate(`@${a.username}`, limit, 'account');
-      const ok = await confirm({
-        title: `¿Cargar ${n} reels más de @${a.username}?`,
-        description: `${e.source} trae los reels de una cuenta del más nuevo al más viejo y no deja saltarse los primeros: pide los ${a.reels} que ya tienes (de paso se actualizan sus métricas) y hasta ${n} anteriores, ${limit} en total. ${e.charge}. Luego el agente analiza los nuevos y otra vez la cuenta, con tu suscripción.`,
-        action: 'Cargar',
-      });
-      if (ok) await inspirationApi.add(`@${a.username}`, limit, 'account');
-    });
-
-  // "Actualizar": scan the account again for as many reels as it has, which refreshes their views, likes and
-  // comments (and the metadata and profile), without transcribing or analysing anything. The scraper brings the
-  // newest first: reels posted since come in (pending), and that many of the oldest keep their old metrics.
-  const rescan = (a: InspirationAccount) =>
-    run(async () => {
-      const limit = a.reels || 30;
-      const e = await inspirationApi.estimate(`@${a.username}`, limit, 'account');
-      const ok = await confirm({
-        title: `¿Actualizar @${a.username}?`,
-        description: `Se vuelve a escanear la cuenta: sus ${limit} reels más recientes, con sus vistas, likes, comentarios y metadatos de hoy, y su perfil (foto, seguidores y bio). No se transcribe ni se analiza nada: los análisis se conservan y, si publicó reels nuevos, quedan pendientes (Procesar, en el menú). ${e.charge}.`,
-        action: 'Actualizar',
-      });
-      if (ok) await inspirationApi.add(`@${a.username}`, limit, 'account', true);
-    });
+  const {busy, run, loadMore, rescan} = useAccountActions(setErr);
 
   // The loose videos belong to several accounts: each one processes what it has pending.
   const processAll = () =>

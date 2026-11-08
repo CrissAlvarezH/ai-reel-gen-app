@@ -71,4 +71,7 @@ test('"Analizar…" picks like the step: the newest reels here, then those short
   assert.deepEqual(insp.newest('otra', 3, 180), ['CODE2AAAA', 'CODE1AAAA']);
   assert.throws(() => insp.processAccount('otra', {limit: 0, maxSeconds: 180}), /de 1 a/);
   assert.throws(() => insp.processAccount('otra', {limit: 2, maxSeconds: 181}), /duración máxima/);
+  // Destacados' "Analizar": only reels of that account.
+  assert.throws(() => insp.processAccount('otra', {codes: []}), /no son de esta cuenta/);
+  assert.throws(() => insp.processAccount('otra', {codes: ['NOPE1AAAA']}), /no son de esta cuenta/);
 });
