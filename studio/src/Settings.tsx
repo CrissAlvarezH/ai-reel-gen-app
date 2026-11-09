@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {AtSign, Bot, CheckCircle2, CircleUser, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, Puzzle, RefreshCw, SunMoon, Trash2, User, XCircle} from 'lucide-react';
+import {AtSign, Bot, CheckCircle2, CircleUser, Clapperboard, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, Puzzle, RefreshCw, SunMoon, Trash2, XCircle} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
@@ -23,7 +23,7 @@ import SettingsHeader from '@/components/settings/SettingsHeader';
 import SettingsNav from '@/components/settings/SettingsNav';
 import type {SettingsGroup} from '@/components/settings/SettingsNav/SettingsNav.types';
 
-// Ajustes (#/ajustes/<section>), in groups: General (Proyecto, Cuenta, Output de los videos, Apariencia), Creación de videos (Agente,
+// Ajustes (#/ajustes/<section>), in groups: General (Proyecto, Cuenta, Videos, Apariencia), Creación de videos (Agente,
 // Voz, Skills), Conexiones (Instagram, Extracción de datos, Claves y servicios) and Sistema (Requisitos). Skills reads the workspace's instructions and supporting files. Each service key is
 // asked for where it's used.
 
@@ -150,7 +150,7 @@ export function KeyRow({k, onChange, compact = false}: {k: KeyStatus; onChange: 
   );
 }
 
-/* ───── Output de los videos ───── */
+/* ───── Videos ───── */
 
 // The folder the studio works on. Changing it goes through the welcome page.
 function WorkspaceCard() {
@@ -895,8 +895,8 @@ const GROUPS: SettingsGroup[] = [
       {id: 'cuenta', label: 'Cuenta', icon: CircleUser, description: 'Tu cuenta de Reel Studio. Es opcional: desbloquea lo que vive en la nube.', subsections: []},
       {
         id: 'carpeta',
-        label: 'Output de los videos',
-        icon: User,
+        label: 'Videos',
+        icon: Clapperboard,
         description: 'Tu carpeta de trabajo y cómo salen los videos.',
         subsections: [
           {label: 'Carpeta de trabajo', anchor: 'ajustes-carpeta'},

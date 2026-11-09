@@ -9,7 +9,7 @@ import {AgentCard, ImagesCard, SocialCard, VoiceSection, useKeys} from './Settin
 import {ProfileCard, ProjectRulesCard} from './ProfileVoice';
 import {RequirementsCard} from './Requirements';
 
-// First run (and Ajustes → Output de los videos → Carpeta de trabajo → Cambiar): choose the workspace, then check the agent,
+// First run (and Ajustes → Videos → Carpeta de trabajo → Cambiar): choose the workspace, then check the agent,
 // what the machine needs, the profile, the voice and where pictures come from (each with its key, as in Ajustes). Only the folder is required; the rest can be done later in Ajustes.
 
 const STEPS = ['Carpeta', 'Agente', 'Requisitos', 'Perfil', 'Voz', 'Datos'] as const;
