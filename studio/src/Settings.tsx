@@ -17,7 +17,7 @@ import {ProfileCard, ProjectRulesCard, VoiceCard, VoiceCardSkeleton} from './Pro
 import {RequirementsCard} from './Requirements';
 import {ProjectAvatar, useProjects} from './ProjectPicker';
 import {SkillsSection} from './Skills';
-import {AccountSection, InstagramSection} from './CloudSettings';
+import {AccountSection, InstagramSection, ProjectsCloudCard} from './CloudSettings';
 import AppearanceSection from '@/components/settings/AppearanceSection';
 import SettingsHeader from '@/components/settings/SettingsHeader';
 import SettingsNav from '@/components/settings/SettingsNav';
@@ -815,6 +815,7 @@ function DeleteProject({project: p, onClose}: {project: Project; onClose: () => 
   const confirm = useConfirm();
   const [contents, setContents] = useState<ProjectContents | null>(null);
   const [typed, setTyped] = useState('');
+  const [alsoCloud, setAlsoCloud] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const input = useRef<HTMLInputElement>(null);
@@ -831,7 +832,7 @@ function DeleteProject({project: p, onClose}: {project: Project; onClose: () => 
     // changing project, so it lands in the library. The confirm() of the app says any error: this dialog unmounts.
     location.hash = '#/';
     try {
-      await projectsApi.remove(p.id, typed);
+      await projectsApi.remove(p.id, typed, alsoCloud);
     } catch (e) {
       confirm({title: 'No se pudo borrar el proyecto', description: (e as Error).message, action: 'Entendido'});
     }
@@ -857,6 +858,12 @@ function DeleteProject({project: p, onClose}: {project: Project; onClose: () => 
             </span>
             <Input ref={input} value={typed} onChange={(e) => setTyped(e.target.value)} disabled={busy} autoComplete="off" spellCheck={false} placeholder={p.name} />
           </label>
+          {p.cloud?.active && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4 accent-destructive" checked={alsoCloud} onChange={(e) => setAlsoCloud(e.target.checked)} disabled={busy} />
+              También eliminarlo de mi cuenta
+            </label>
+          )}
           {err && <p className="text-sm text-destructive">{err}</p>}
           <AlertDialogFooter>
             <AlertDialogCancel type="button" disabled={busy}>
@@ -986,6 +993,7 @@ export function Settings({section: wanted}: {section?: string | null}) {
             <div id="ajustes-reglas" className={ANCHOR}>
               <ProjectRulesCard />
             </div>
+            <ProjectsCloudCard />
             <div id="ajustes-peligro" className={ANCHOR}>
               <DangerZone />
             </div>

@@ -176,11 +176,14 @@ const videoCount = (root: string, id: string) => {
     return 0;
   }
 };
+// Its link to the account (server/cloud.ts reads it, from the project's own folder and without the network).
+let projectCloud: (dir: string) => ProjectInfo['cloud'] = () => null;
+export const setProjectCloudReader = (fn: typeof projectCloud) => void (projectCloud = fn);
 export const listProjects = (): ProjectInfo[] =>
   ROOT
     ? projectIds(ROOT).map((id) => {
         const pic = projectAvatar(id);
-        return {id, ...readProject(ROOT, id)!, videos: videoCount(ROOT, id), current: id === PROJECT, avatar: pic ? Math.round(fs.statSync(pic).mtimeMs) : null};
+        return {id, ...readProject(ROOT, id)!, videos: videoCount(ROOT, id), current: id === PROJECT, avatar: pic ? Math.round(fs.statSync(pic).mtimeMs) : null, cloud: projectCloud(projectDir(id))};
       })
     : [];
 
@@ -310,9 +313,12 @@ export function projectContents(id: string): ProjectContents {
 
 // Gone for good, with all it holds. Its name has to come typed again; if it's the open one, another opens first so
 // nothing is still reading or watching its folders.
-export function deleteProject(id: string, nameIn: unknown) {
+export function checkDeleteName(id: string, nameIn: unknown) {
   deletable(id);
   if (typeof nameIn !== 'string' || nameIn.trim() !== readProject(ROOT, id)!.name) throw bad('el nombre no coincide con el del proyecto');
+}
+export function deleteProject(id: string, nameIn: unknown) {
+  checkDeleteName(id, nameIn);
   if (id === PROJECT) openProject(projectIds(ROOT).find((x) => x !== id)!);
   fs.rmSync(projectDir(id), {recursive: true, force: true, maxRetries: 3});
   return listProjects();

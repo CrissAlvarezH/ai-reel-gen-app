@@ -75,8 +75,16 @@ app.post('/api/workspace/reveal', handle(() => {
 // Projects (server/workspace.ts): each channel's videos, profile, voice, account and conversations, in
 // projects/<id>/. Opening another one makes every page reload on it.
 app.get('/api/projects', handle(() => workspace.listProjects()));
-app.post('/api/projects', handle((req) => workspace.createProject(req.body?.name, req.body?.audience)));
-app.put('/api/projects/:id', handle((req) => projectsChanged(workspace.renameProject(req.params.id, req.body?.name))));
+app.post('/api/projects', handle((req) => {
+  const list = workspace.createProject(req.body?.name, req.body?.audience);
+  cloud.registerNew(workspace.PROJECT);
+  return list;
+}));
+app.put('/api/projects/:id', handle((req) => {
+  const list = workspace.renameProject(req.params.id, req.body?.name);
+  cloud.projectRenamed(req.params.id);
+  return projectsChanged(list);
+}));
 app.post('/api/projects/:id/open', handle((req) => workspace.openProject(req.params.id)));
 // Not while something is writing into its folders.
 const notBusy = (id: string) => {
@@ -92,9 +100,16 @@ app.get('/api/projects/:id/contents', handle((req) => {
   notBusy(req.params.id);
   return contents;
 }));
-app.delete('/api/projects/:id', handle((req) => {
+// The account's copy goes first and only when he asked for it: if it can't be deleted he hears it while the local
+// project is still there to try again.
+app.delete('/api/projects/:id', handle(async (req) => {
   workspace.projectContents(req.params.id);
   notBusy(req.params.id);
+  workspace.checkDeleteName(req.params.id, req.body?.name);
+  if (req.body?.alsoCloud === true) {
+    await cloud.deleteFromAccount(req.params.id);
+    notBusy(req.params.id); // something may have started during that call
+  }
   const list = workspace.deleteProject(req.params.id, req.body?.name);
   db.sync(true);
   return projectsChanged(list);
@@ -390,6 +405,10 @@ app.post('/api/cloud/code', handle((req) => cloud.sendCode(req.body?.email)));
 app.post('/api/cloud/verify', handle((req) => cloud.verify(req.body?.email, req.body?.code)));
 app.post('/api/cloud/logout', handle(() => cloud.logout()));
 app.put('/api/cloud/account', handle((req) => cloud.setAccount(req.body?.accountId ?? null, account.username())));
+app.get('/api/cloud/projects', handle(() => cloud.projects()));
+app.post('/api/cloud/projects/:localId/register', handle((req) => cloud.registerProject(req.params.localId, req.body?.fresh)));
+app.post('/api/cloud/projects/:localId/link', handle((req) => cloud.linkProject(req.params.localId, req.body?.cloudId)));
+app.post('/api/cloud/projects/:localId/local-only', handle((req) => cloud.setLocalOnly(req.params.localId, req.body?.value)));
 
 app.get('/api/account', handle(() => account.status()));
 app.put('/api/account', handle((req) => account.setUsername(req.body?.username)));
@@ -668,7 +687,8 @@ cloud.onCloudChange(() => send({type: 'cloud'}));
 
 // Another project: its videos, Mi cuenta and Inspiración are other folders. Agents working in the old one go on
 // (they write to its folders, and their events reach no page of this one); its downloads are left behind.
-workspace.onProjectChange(() => {
+workspace.onProjectChange((id) => {
+  void cloud.refreshProject(id);
   inspiration.reset();
   account.reset();
   watchVideos();

@@ -291,8 +291,8 @@ export const projectsApi = {
   open: (id: string) => post(`/api/projects/${id}/open`) as Promise<import('../shared/types').Project[]>,
   // What deleting it would take with it; it refuses if it can't be deleted now.
   contents: (id: string) => fetch(`/api/projects/${id}/contents`).then((r) => json<import('../shared/types').ProjectContents>(r)),
-  remove: (id: string, name: string) =>
-    fetch(`/api/projects/${id}`, {method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}).then((r) => json<import('../shared/types').Project[]>(r)),
+  remove: (id: string, name: string, alsoCloud = false) =>
+    fetch(`/api/projects/${id}`, {method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, alsoCloud})}).then((r) => json<import('../shared/types').Project[]>(r)),
   // Its picture: an image file, the profile photo of its Instagram account (Mi cuenta), or none.
   setAvatar: (id: string, file: File) =>
     fetch(`/api/projects/${id}/avatar`, {method: 'POST', headers: {'Content-Type': file.type}, body: file}).then((r) => json<import('../shared/types').Project[]>(r)),
@@ -304,6 +304,7 @@ export const projectsApi = {
 // Mi cuenta: the creator's own Instagram account (server/account.ts).
 // Reel Studio's account (server/cloud.ts): the session with the site, and this project's Instagram account.
 type CloudStatusT = import('../shared/types').CloudStatus;
+type CloudProjects = import('../shared/types').CloudProjects;
 export const cloudApi = {
   status: () => fetch('/api/cloud').then((r) => json<CloudStatusT>(r)),
   session: () => fetch('/api/cloud/session').then((r) => json<import('../shared/types').CloudSession>(r)),
@@ -311,6 +312,11 @@ export const cloudApi = {
   verify: (email: string, code: string) => post('/api/cloud/verify', {email, code}) as Promise<CloudStatusT>,
   logout: () => post('/api/cloud/logout', {}) as Promise<CloudStatusT>,
   setAccount: (accountId: number | null) => put('/api/cloud/account', {accountId}) as Promise<CloudStatusT>,
+  projects: () => fetch('/api/cloud/projects').then((r) => json<CloudProjects>(r)),
+  // fresh: under a new id, for a project the account deleted or that belonged to another one.
+  register: (id: string, fresh = false) => post(`/api/cloud/projects/${id}/register`, {fresh}) as Promise<CloudProjects>,
+  link: (id: string, cloudId: string) => post(`/api/cloud/projects/${id}/link`, {cloudId}) as Promise<CloudProjects>,
+  setLocalOnly: (id: string, value: boolean) => post(`/api/cloud/projects/${id}/local-only`, {value}) as Promise<CloudProjects>,
 };
 
 export const accountApi = {

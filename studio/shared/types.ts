@@ -588,7 +588,9 @@ export type AccountStatus = {
 // insights: false → it was connected before the metrics permission: connect it again in the panel.
 // tokenExpiresAt null: the token doesn't expire. renews false: reconnect it in the panel before tokenExpiresAt.
 export type CloudAccount = {id: number; username: string; name: string | null; pictureUrl: string | null; tokenExpiresAt: string | null; renews?: boolean; insights: boolean};
-// account: the one this project uses (picked, or the one with Mi cuenta's handle).
+// account: the one this project uses (the account's choice when it's registered; else picked, or the one with Mi
+// cuenta's handle). disconnected: the @ its account chose but that isn't connected now. projectGone: the account no
+// longer has this project.
 export type CloudStatus = {
   url: string;
   email: string | null;
@@ -598,17 +600,35 @@ export type CloudStatus = {
   accounts: CloudAccount[];
   panelUrl: string;
   account: CloudAccount | null;
+  disconnected: string | null;
+  projectGone: boolean;
   error: string | null;
 };
 // The indicator's view of it, known without the network. online: null until a signed-in call has tried.
 export type CloudSession = {signedIn: boolean; email: string | null; url: string; online: boolean | null; checkedAt: number | null};
+// A project as the account has it. instagramSetAt null: nobody chose; set with instagram null: "Ninguna".
+export type CloudProjectView = {
+  id: string;
+  slug: string;
+  name: string;
+  localCreated: number | null;
+  instagram: {accountId: number | null; username: string; connected: boolean} | null;
+  instagramSetAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sync: null;
+};
+export type CloudProjectState = 'none' | 'pending' | 'linked' | 'other-account' | 'local-only' | 'deleted';
+export type LocalCloudProject = {id: string; name: string; created: number; cloudId: string | null; state: CloudProjectState};
+export type CloudProjectMatch = {local: string; cloud: CloudProjectView};
+export type CloudProjects = {signedIn: boolean; local: LocalCloudProject[]; remoteOnly: CloudProjectView[]; matches: CloudProjectMatch[]; error: string | null};
 export type CloudReelMetrics = {views: number | null; reach: number | null; saves: number | null; shares: number | null; likes: number | null; comments: number | null; interactions: number | null; avgWatchMs: number | null; totalWatchMs: number | null; skipRate: number | null; reposts: number | null};
 export type CloudReelInsights = {code: string | null; mediaId: string; permalink: string | null; postedAt: string | null; metrics: CloudReelMetrics; error: string | null};
 
 /* ───── Projects: one per channel, in projects/<id>/ (server/workspace.ts) ───── */
 
 // avatar: when its picture (projects/<id>/avatar.*) last changed, for the image's URL; null: none (its initial shows).
-export type Project = {id: string; name: string; created: number; videos: number; current: boolean; avatar: number | null};
+export type Project = {id: string; name: string; created: number; videos: number; current: boolean; avatar: number | null; cloud: {id: string; active: boolean} | null};
 // What deleting a project would take with it. account: its Instagram handle; reels: those downloaded in Mi cuenta.
 export type ProjectContents = {videos: number; ideas: number; verticals: number; account: string | null; reels: number; inspiration: number; conversations: number};
 

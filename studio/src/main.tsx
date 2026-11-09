@@ -23,7 +23,7 @@ import {AgentPanel} from './Chat';
 import {Sidebar} from './Sidebar';
 import {StudioProvider, loadOpenProject, useStudio} from './studio';
 import {Welcome} from './Welcome';
-import {CloudIndicator} from './CloudSettings';
+import {CloudIndicator, CloudProjectsPrompt} from './CloudSettings';
 import {useSocket, workspaceApi, type WorkspaceStatus} from './api';
 import {ConfirmProvider} from './confirm';
 import './store/useThemeStore'; // follows the system theme while the preference is "system"
@@ -76,6 +76,7 @@ function App() {
           <ThemeToggle />
         </div>
       </header>
+      <CloudProjectsPrompt />
       {/* agents sidebar (lg+) · page · Claude panel */}
       <div
         className={cn(
