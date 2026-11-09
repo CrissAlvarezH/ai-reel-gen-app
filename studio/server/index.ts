@@ -389,7 +389,6 @@ app.get('/api/cloud/session', handle(() => cloud.session()));
 app.post('/api/cloud/code', handle((req) => cloud.sendCode(req.body?.email)));
 app.post('/api/cloud/verify', handle((req) => cloud.verify(req.body?.email, req.body?.code)));
 app.post('/api/cloud/logout', handle(() => cloud.logout()));
-app.put('/api/cloud/url', handle((req) => cloud.setUrl(req.body?.url)));
 app.put('/api/cloud/account', handle((req) => cloud.setAccount(req.body?.accountId ?? null, account.username())));
 
 app.get('/api/account', handle(() => account.status()));

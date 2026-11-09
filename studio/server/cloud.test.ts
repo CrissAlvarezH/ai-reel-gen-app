@@ -166,21 +166,17 @@ test('a late 401 for a previous session leaves the new one alone', async () => {
   assert.equal(cloud.session().signedIn, true);
 });
 
-test('the official server is the default; a saved one wins, and clearing it goes back', async () => {
+test('the official server is the default, and a url left in an old cloud.json is ignored', async () => {
   const cloud = await import('./cloud.ts');
   const env = process.env.REEL_STUDIO_CLOUD_URL;
   delete process.env.REEL_STUDIO_CLOUD_URL;
+  const file = path.join(process.env.REEL_STUDIO_CONFIG_DIR!, 'cloud.json');
+  const before = fs.readFileSync(file, 'utf8');
   try {
-    const official = 'https://ai-reel-gen.socialsannin.com';
-    assert.equal(cfg().url, undefined);
-    assert.equal(cloud.baseUrl(), official);
-    assert.equal((await cloud.setUrl('https://mio.example/')).url, 'https://mio.example');
-    assert.equal(cloud.baseUrl(), 'https://mio.example');
-    assert.equal(cfg().token, undefined); // each server has its own sessions
-    assert.ok(cfg().deviceId);
-    assert.equal((await cloud.setUrl('')).url, official);
-    assert.equal(cfg().url, undefined);
+    fs.writeFileSync(file, JSON.stringify({...JSON.parse(before), url: 'https://mio.example'}));
+    assert.equal(cloud.baseUrl(), 'https://ai-reel-gen.socialsannin.com');
   } finally {
+    fs.writeFileSync(file, before);
     process.env.REEL_STUDIO_CLOUD_URL = env;
   }
 });

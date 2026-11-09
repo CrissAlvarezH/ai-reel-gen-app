@@ -191,62 +191,8 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
           </form>
         )}
         {err && <p className="text-sm text-destructive">{err}</p>}
-        <ServerUrl s={s} onChange={onChange} />
       </CardContent>
     </Card>
-  );
-}
-
-// Which site it talks to: the official one, unless he's developing or hosting his own.
-function ServerUrl({s, onChange}: {s: CloudStatus; onChange: (s: CloudStatus) => void}) {
-  const [editing, setEditing] = useState(false);
-  const [url, setUrl] = useState(s.url);
-  const [err, setErr] = useState('');
-  const change = (v: string) =>
-    cloudApi.setUrl(v).then(
-      (n) => (onChange(n), setUrl(n.url), setEditing(false), setErr('')),
-      (x: Error) => setErr(x.message),
-    );
-  return (
-    <details className="text-xs text-muted-foreground">
-      <summary className="w-fit cursor-pointer hover:text-foreground">Avanzado</summary>
-      <div className="mt-2 flex flex-col gap-2">
-        {editing ? (
-          <form
-            className="flex flex-wrap items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void change(url);
-            }}
-          >
-            <Input value={url} onChange={(e) => setUrl(e.target.value)} className="h-8 max-w-xs font-mono text-xs" aria-label="Dirección del servidor" />
-            <Button type="submit" size="sm" variant="outline">
-              Guardar
-            </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => (setEditing(false), setUrl(s.url))}>
-              Cancelar
-            </Button>
-          </form>
-        ) : (
-          <p>
-            Servidor: <span className="font-mono">{s.url}</span>{' '}
-            <button type="button" className="underline hover:text-foreground" onClick={() => setEditing(true)}>
-              Cambiar
-            </button>
-            {s.url !== s.officialUrl && (
-              <>
-                {' · '}
-                <button type="button" className="underline hover:text-foreground" onClick={() => void change('')}>
-                  Usar el servidor oficial
-                </button>
-              </>
-            )}
-          </p>
-        )}
-        <span>Al cambiar de servidor se cierra la sesión: cada uno tiene las suyas.</span>
-        {err && <span className="text-destructive">{err}</span>}
-      </div>
-    </details>
   );
 }
 

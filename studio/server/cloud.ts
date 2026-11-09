@@ -13,21 +13,21 @@ import {readJson} from './platform.ts';
 import {httpError} from './reels.ts';
 import type {CloudAccount, CloudReelInsights, CloudSession, CloudStatus} from '../shared/types.ts';
 
-// REEL_STUDIO_CLOUD_URL and the one saved from Ajustes win over it.
+// REEL_STUDIO_CLOUD_URL wins over it, to develop against a local copy of the cloud.
 const DEFAULT_URL = 'https://ai-reel-gen.socialsannin.com';
 const PING_MS = 5 * 60_000;
 const FILE = () => path.join(CONFIG_DIR, 'cloud.json');
 const LINK = () => path.join(CONFIG, 'instagram.json');
 
 // deviceId identifies this computer and outlives the session; userId goes with it.
-type Saved = {url?: string; token?: string; email?: string; deviceId?: string; userId?: number};
+type Saved = {token?: string; email?: string; deviceId?: string; userId?: number};
 const saved = (): Saved => readJson<Saved>(FILE()) ?? {};
 function save(s: Saved) {
   fs.mkdirSync(CONFIG_DIR, {recursive: true});
   fs.writeFileSync(FILE(), JSON.stringify(s, null, 1) + '\n', {mode: 0o600});
   fs.chmodSync(FILE(), 0o600);
 }
-export const baseUrl = () => (process.env.REEL_STUDIO_CLOUD_URL || saved().url || DEFAULT_URL).replace(/\/+$/, '');
+export const baseUrl = () => (process.env.REEL_STUDIO_CLOUD_URL || DEFAULT_URL).replace(/\/+$/, '');
 export const signedIn = () => !!saved().token;
 
 const listeners: (() => void)[] = [];
@@ -45,9 +45,9 @@ function reached(ok: boolean) {
   if (flipped) changed();
 }
 
-function forget(extra: Partial<Saved> = {}) {
+function forget() {
   const {token: _gone, userId: _user, ...rest} = saved();
-  save({...rest, ...extra});
+  save(rest);
   online = checkedAt = null;
   changed();
 }
@@ -126,14 +126,6 @@ export async function logout() {
   return status();
 }
 
-// Another server (the deployed one, or a local one while developing it): its sessions are others, so it logs out.
-export function setUrl(raw: unknown) {
-  const v = typeof raw === 'string' ? raw.trim().replace(/\/+$/, '') : '';
-  if (v && !/^https?:\/\/[^\s/]+(:\d+)?$/.test(v)) throw httpError(400, 'la dirección es como https://reelstudio.app');
-  forget({url: v || undefined});
-  return status();
-}
-
 /* ───── The project's account ───── */
 
 type Me = {user: {id: number; email: string; name: string | null}; metaApp: boolean; accounts: CloudAccount[]; panelUrl: string};
@@ -170,7 +162,7 @@ function resolve(accounts: CloudAccount[], handle: string | null) {
 
 export async function status(handle: string | null = null): Promise<CloudStatus> {
   const s = saved();
-  const base = {url: baseUrl(), email: s.email ?? null, signedIn: !!s.token, user: null, metaApp: false, accounts: [], panelUrl: `${baseUrl()}/panel`, officialUrl: DEFAULT_URL, account: null, error: null};
+  const base = {url: baseUrl(), email: s.email ?? null, signedIn: !!s.token, user: null, metaApp: false, accounts: [], panelUrl: `${baseUrl()}/panel`, account: null, error: null};
   if (!s.token) return base;
   try {
     const me = await fetchMe(15_000);

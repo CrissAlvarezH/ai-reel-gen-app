@@ -310,7 +310,6 @@ export const cloudApi = {
   sendCode: (email: string) => post('/api/cloud/code', {email}) as Promise<{ok: true}>,
   verify: (email: string, code: string) => post('/api/cloud/verify', {email, code}) as Promise<CloudStatusT>,
   logout: () => post('/api/cloud/logout', {}) as Promise<CloudStatusT>,
-  setUrl: (url: string) => put('/api/cloud/url', {url}) as Promise<CloudStatusT>,
   setAccount: (accountId: number | null) => put('/api/cloud/account', {accountId}) as Promise<CloudStatusT>,
 };
 

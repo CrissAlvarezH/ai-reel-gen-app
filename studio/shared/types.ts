@@ -597,7 +597,6 @@ export type CloudStatus = {
   metaApp: boolean;
   accounts: CloudAccount[];
   panelUrl: string;
-  officialUrl: string;
   account: CloudAccount | null;
   error: string | null;
 };
