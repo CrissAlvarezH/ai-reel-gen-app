@@ -101,7 +101,7 @@ const commits = () => fake.log.filter((l) => l.url.endsWith('/commit')).length;
 /* ───── The list ───── */
 
 test('the allow-list: what goes and what never goes', () => {
-  for (const ok of ['ideas.json', 'config/profile.json', 'videos/a/audio/vo.mp3', 'videos/a/public/words.json', 'account/u/abc/reel.json', 'inspiration/u/abc/sheet_01.jpg', 'sources/items/x.md', 'avatar.png']) assert.ok(classify(ok, 'project'), ok);
+  for (const ok of ['ideas.json', 'config/profile.json', 'videos/a/audio/vo.mp3', 'videos/a/public/words.json', 'account/u/abc/reel.json', 'inspiration/u/abc/sheet_01.jpg', 'inspiration/u/abc/sheet_100.jpg', 'sources/items/x.md', 'avatar.png']) assert.ok(classify(ok, 'project'), ok);
   for (const no of ['.env', 'videos/a/.env', 'videos/a/.env.local', 'config/instagram.json', 'config/chrome.json', 'project.json', 'videos/a/node_modules/x/y.js', 'videos/a/out/v1.mp4', 'videos/a/footage/c.mp4', 'videos/a/public/mix.wav', 'videos/a/public/footage.mp4', 'videos/a/x.raw.mp4', 'videos/a/src/__pycache__/a.pyc', 'videos/a/x.tmp', 'inspiration/u/abc/video.mp4', 'inspiration/u/abc/audio.wav', '.reel-studio/chats/a.json', 'ideas.antes.json', '../fuera', 'videos/../../fuera', '/abs', 'videos/a\\b'])
     assert.equal(classify(no, 'project'), null, no);
   assert.equal(classify('styles/mio/style.json', 'shared', new Set())?.group, 'styles');
@@ -745,6 +745,61 @@ test('bringing a project over: it appears whole, or it does not appear', async (
   assert.equal(engine.loadState(path.join(root, 'projects/traido'), 'project', other.id).baseRev, other.rev);
   assert.equal(other.primaryDeviceId, null, 'a project brought over does not claim it');
   await assert.rejects(queue.clone(other.id), /ya está/);
+});
+
+test('scripts arrive runnable: the sync carries no permissions, and render.sh has to run', async () => {
+  write(A, 'videos/v/render.sh', '#!/bin/bash\necho hola\n');
+  write(A, 'videos/v/title.txt', 'x');
+  await sync(A);
+  await sync(B);
+  assert.ok(fs.statSync(path.join(B, 'videos/v/render.sh')).mode & 0o100, 'render.sh is executable');
+  assert.equal(fs.statSync(path.join(B, 'videos/v/title.txt')).mode & 0o111, 0, 'and nothing else becomes so');
+});
+
+test('a project brought over knows another computer runs its automations', async () => {
+  write(A, 'ideas.json', '{"i":1}');
+  await sync(A);
+  const other = fake.addProject(randomUUID(), 'con-principal', 'Con principal');
+  other.entries = new Map(cp.entries);
+  other.rev = cp.rev;
+  other.primaryDeviceId = 'el-otro-equipo';
+  await queue.clone(other.id);
+  await until(() => fs.existsSync(projectFile('con-principal')));
+  await until(() => !queue.partial(other.id));
+  assert.equal(cloud.runsElsewhere(path.join(root, 'projects/con-principal')), true);
+});
+
+test('changes in a video an agent is working on stay as pending, not as synced', async () => {
+  write(A, 'videos/v/a.txt', 'x');
+  queue.runNow(idA, {scope: 'full'});
+  await until(() => history(A)[0]?.state === 'done');
+  assert.equal((await queue.detail(idA, false)).status.up, 0);
+  queue.configure({videoBusy: (_d, s) => s === 'v'});
+  assert.equal((await queue.detail(idA, false)).status.up, 0, 'being worked on is not a change by itself');
+  write(A, 'videos/v/a.txt', 'cambiado');
+  const d = await queue.detail(idA, false);
+  assert.equal(d.status.up, 1);
+  assert.equal(d.status.state, 'changes');
+});
+
+test('the storage failing with a 5xx sends the job back to wait, and what failed goes up on the retry', async () => {
+  write(A, 'videos/v/a.txt', 'uno');
+  write(A, 'ideas.json', '{"i":1}');
+  fake.ctl.putStatus = 503;
+  const saved = queue.timing.retries;
+  queue.timing.retries = [60_000];
+  try {
+    queue.runNow(idA, {scope: 'full'});
+    await until(() => jobs(A)[0]?.waiting === 'Sin conexión: se reintenta');
+    assert.equal(cp.entries.has('ideas.json'), true, 'what could go up, went up');
+    assert.equal(cp.entries.has('videos/v/a.txt'), false);
+  } finally {
+    queue.timing.retries = saved;
+    fake.ctl.putStatus = 0;
+  }
+  queue.retry(idA, jobs(A)[0].id);
+  await until(() => history(A)[0]?.state === 'done');
+  assert.equal(cp.entries.has('videos/v/a.txt'), true);
 });
 
 test('the account name goes up trimmed and comes back', async () => {

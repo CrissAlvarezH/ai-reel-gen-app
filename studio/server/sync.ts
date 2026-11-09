@@ -124,18 +124,25 @@ const busy = (ctx: Context, rel: string) => {
   return !!slug && !!ctx.busyVideo?.(slug);
 };
 
-export type Review = {seen: Map<string, Local>; changed: Local[]; deletes: string[]; busy: number; warnings: string[]};
+// busy: videos an agent is working on, left out. busyChanged: files in them that differ, which stay as pending.
+export type Review = {seen: Map<string, Local>; changed: Local[]; deletes: string[]; busy: number; busyChanged: number; warnings: string[]};
 
 // What's different from the last time this computer and the account agreed. statOnly: without reading anything, to
 // count before asking (a changed date counts as a change).
 export async function review(ctx: Context, state: SyncState, statOnly = false): Promise<Review> {
-  const out: Review = {seen: new Map(), changed: [], deletes: [], busy: 0, warnings: []};
+  const out: Review = {seen: new Map(), changed: [], deletes: [], busy: 0, busyChanged: 0, warnings: []};
   const busySlugs = new Set<string>();
+  const busyFound = new Set<string>();
   const visit = async (rel: string, abs: string, st: fs.Stats) => {
     const c = allowed(ctx, rel);
     if (!c) return;
-    if (busy(ctx, rel)) return void busySlugs.add(videoOf(rel)!);
     const old = state.files[rel];
+    if (busy(ctx, rel)) {
+      busySlugs.add(videoOf(rel)!);
+      busyFound.add(rel);
+      if (!old || old.deleted || old.size !== st.size || old.mtime !== stamp(st)) out.busyChanged++;
+      return;
+    }
     const local: Local = {path: rel, abs, size: st.size, mtime: stamp(st), sha256: '', storage: c.storage};
     out.seen.set(rel, local);
     if (old && !old.deleted && old.size === st.size && old.mtime === local.mtime) return void (local.sha256 = old.sha256!);
@@ -177,8 +184,10 @@ export async function review(ctx: Context, state: SyncState, statOnly = false): 
   for (const start of startsOf(ctx.scope, ctx.channel)) await walk(ctx.dir, start, ctx.channel, visit);
   for (const [rel, st] of Object.entries(state.files)) {
     if (st.deleted || out.seen.has(rel) || !allowed(ctx, rel)) continue;
-    if (busy(ctx, rel)) busySlugs.add(videoOf(rel)!);
-    else out.deletes.push(rel);
+    if (busy(ctx, rel)) {
+      busySlugs.add(videoOf(rel)!);
+      if (!busyFound.has(rel)) out.busyChanged++;
+    } else out.deletes.push(rel);
   }
   out.busy = busySlugs.size;
   return out;
@@ -202,7 +211,7 @@ function changedSince(l: Local) {
   }
 }
 
-async function putBlobs(ctx: Context, blobs: Local[], tick: () => void, warn: (m: string) => void) {
+async function putBlobs(ctx: Context, blobs: Local[], tick: () => void, warn: (m: string) => void, storageTrouble: () => void) {
   const failed = new Set<string>();
   for (let i = 0; i < blobs.length; i += MAX_BATCH) {
     ctx.signal?.throwIfAborted();
@@ -228,7 +237,9 @@ async function putBlobs(ctx: Context, blobs: Local[], tick: () => void, warn: (m
         throw offline(e);
       }
       if (!res.ok) {
-        warn(`${file.path}: el almacenamiento respondió ${res.status}`);
+        // A 5xx is the storage having a bad moment, not this file's fault: the job comes back for it.
+        if (res.status >= 500) storageTrouble();
+        else warn(`${file.path}: el almacenamiento respondió ${res.status}`);
         return fail();
       }
       owners.forEach(tick);
@@ -252,9 +263,9 @@ async function commitAll(ctx: Context, state: SyncState, changes: {wire: SyncCha
       const c = byPath.get(res.path);
       if (!c) continue;
       tick();
-      if (res.status === 'lost') lost.set(res.path, {conflictId: res.conflictId ?? null, rev: res.rev});
+      if (res.status === 'lost') lost.set(res.path, {conflictId: res.conflictId ?? null, rev: res.rev ?? 0});
       else if (res.status === 'applied' || res.status === 'won' || res.status === 'same') {
-        state.files[res.path] = c.wire.deleted ? {sha256: null, size: 0, mtime: c.wire.mtime, rev: res.rev, deleted: true} : {sha256: c.wire.sha256!, size: c.local!.size, mtime: c.local!.mtime, rev: res.rev};
+        state.files[res.path] = c.wire.deleted ? {sha256: null, size: 0, mtime: c.wire.mtime, rev: res.rev ?? 0, deleted: true} : {sha256: c.wire.sha256!, size: c.local!.size, mtime: c.local!.mtime, rev: res.rev ?? 0};
         if (res.status !== 'same') c.wire.deleted ? stats.deleted++ : stats.uploaded++;
         if (res.status === 'won') stats.conflicts++;
       } else {
@@ -307,6 +318,7 @@ export async function land(abs: string, mtime: number, write: (tmp: string) => P
   const tmp = tmpOf(abs);
   try {
     await write(tmp);
+    if (abs.endsWith('.sh')) await fsp.chmod(tmp, 0o755); // the sync carries no permissions, and a video's render.sh has to run
     await fsp.utimes(tmp, mtime / 1000, mtime / 1000);
     await fsp.rename(tmp, abs);
   } finally {
@@ -394,7 +406,8 @@ async function cycle(ctx: Context): Promise<CycleResult> {
   const upSteps = blobs.length + r.changed.length + r.deletes.length;
   let finished = 0;
   const tick = () => ctx.onProgress?.({phase: 'upload', done: ++finished, total: upSteps});
-  const failed = await putBlobs(ctx, blobs, tick, warn);
+  let storageDown = false;
+  const failed = await putBlobs(ctx, blobs, tick, warn, () => void (storageDown = true));
   const changes: {wire: SyncChange; local: Local | null}[] = [];
   for (const l of r.changed) {
     if (failed.has(l.path) || changedSince(l) || busy(ctx, l.path)) {
@@ -578,5 +591,7 @@ async function cycle(ctx: Context): Promise<CycleResult> {
     if (ctx.scope.kind === 'group' && !Number.isFinite(held)) state.behind = state.behind.filter((x) => x !== g);
   }
   saveState(ctx.dir, ctx.channel, state);
+  // Everything that could happen, happened and is saved; the retry only has what the storage turned down left to do.
+  if (storageDown) throw offline(new Error('el almacenamiento falló'));
   return done();
 }

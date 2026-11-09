@@ -650,7 +650,8 @@ export type SyncEntry = {path: string; rev: number; sha256: string | null; size:
 export type SyncFetched = {path: string; rev: number; sha256: string; content?: string; url?: string};
 export type SyncUpload = {sha256: string; url: string; method: string; headers?: Record<string, string>};
 export type SyncChange = {path: string; baseRev: number; sha256?: string; size?: number; mtime: number; content?: string; deleted?: true};
-export type SyncResult = {path: string; status: 'applied' | 'same' | 'won' | 'lost' | 'rejected'; rev: number; conflictId?: string; error?: string};
+// rev: absent on 'rejected', which didn't change anything.
+export type SyncResult = {path: string; status: 'applied' | 'same' | 'won' | 'lost' | 'rejected'; rev?: number; conflictId?: string; error?: string};
 
 const syncBase = (id: string) => `/api/studio/projects/${id}/sync`;
 const LONG = 120_000;

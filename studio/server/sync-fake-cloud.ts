@@ -22,6 +22,7 @@ export function fakeCloud() {
     corrupt: new Set<string>(),
     extraEntries: [] as FakeEntry[],
     putHeaders: [] as Record<string, unknown>[],
+    putStatus: 0, // answer every PUT with this, when it isn't 0
     userName: null as string | null,
     onFetch: null as (() => void) | null,
   };
@@ -54,6 +55,7 @@ export function fakeCloud() {
       if (blob) {
         if (method === 'PUT') {
           ctl.putHeaders.push({...req.headers});
+          if (ctl.putStatus) return send(ctl.putStatus, {error: 'storage'});
           if (sha(raw) !== blob[1]) return send(400, {error: 'hash'});
           blobs.set(blob[1], raw);
           return send(200, {});

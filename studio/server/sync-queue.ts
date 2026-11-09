@@ -399,7 +399,7 @@ async function pendingUploads(id: string, dir: string, cloudId: string) {
   if (cached && Date.now() - cached.at < timing.statusCache) return cached.up;
   const state = loadState(dir, 'project', cloudId);
   const r = await review({dir, channel: 'project', cloudId, scope: {kind: 'full'}, active: cloud.syncGroups(dir), busyVideo: (s) => videoBusy(dir, s)}, state, true);
-  const up = r.changed.length + r.deletes.length;
+  const up = r.changed.length + r.deletes.length + r.busyChanged;
   statusCache.set(id, {at: Date.now(), up});
   return up;
 }
@@ -720,9 +720,10 @@ async function bringOver(dir: string, root: string, cloudId: string, folder: str
   await runCycle({dir, channel: 'project', cloudId, scope: {kind: 'full'}, active, onProgress});
   const {project: shared} = await cloud.syncApi.shared();
   await runCycle({dir: root, channel: 'shared', cloudId: shared.id, scope: {kind: 'full'}, active, builtin: sharedSeeds(), seedSha: lessonsSha(), onProgress});
-  await refreshRemote(dir, cloudId, false).catch(() => {});
   // Only now does the app see it: complete, or not at all.
   finishProject(folder, name, created);
+  // After project.json: without it the link won't save which computer runs the automations, and this one would run them too.
+  await refreshRemote(dir, cloudId, false).catch(() => {});
   clones.delete(cloudId);
   send({type: 'projects'});
   cloud.announceProjects();

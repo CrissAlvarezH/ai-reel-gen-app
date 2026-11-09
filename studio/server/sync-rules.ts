@@ -14,7 +14,7 @@ export type Storage = 'doc' | 'blob';
 export type Classified = {group: SyncGroupId; storage: Storage};
 
 const SETTINGS_DOCS = new Set(['profile', 'voice', 'audience', 'images', 'social', 'account', 'chat', 'checks'].map((n) => `config/${n}.json`));
-const REEL_FILE = /^(account\.json|avatar\.jpg|reel\.json|meta\.json|transcript\.json|analysis\.json|insights\.json|thumb\.jpg|hook\.jpg|sheet_\d\d\.jpg)$/;
+const REEL_FILE = /^(account\.json|avatar\.jpg|reel\.json|meta\.json|transcript\.json|analysis\.json|insights\.json|thumb\.jpg|hook\.jpg|sheet_\d+\.jpg)$/;
 const VIDEO = /^videos\/([a-z0-9][a-z0-9-]{0,60})\/(.+)$/;
 const JUNK_FILE = /(\.pyc|\.tmp)$/i;
 
