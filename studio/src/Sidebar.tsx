@@ -1,11 +1,12 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {AlertCircle, CalendarClock, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Newspaper, Palette, Plus, Settings as SettingsIcon, ShieldCheck, Sparkles, Target, UserRound} from 'lucide-react';
+import {AlertCircle, CalendarClock, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Newspaper, Palette, Plus, ShieldCheck, Sparkles, Target, UserRound} from 'lucide-react';
 import {cn} from '@/lib/utils';
 import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState, type ProgressStep, type ReelSummary} from './api';
 import {ReelProgressRing} from './ReelProgress';
 import {AgentLogo} from './AgentLogo';
 import {useStudio, type UiContext} from './studio';
 import {ProjectPicker} from './ProjectPicker';
+import {SidebarAccount} from './SidebarAccount';
 
 type Page = UiContext['page'];
 
@@ -274,7 +275,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
           </div>
         ))}
       <div className="mt-auto flex flex-none flex-col border-t pt-1 pb-2">
-        <NavLink href="#/ajustes" icon={SettingsIcon} label="Ajustes" active={page === 'settings'} compact={compact} />
+        <SidebarAccount onSettings={page === 'settings'} compact={compact} />
       </div>
     </nav>
   );
