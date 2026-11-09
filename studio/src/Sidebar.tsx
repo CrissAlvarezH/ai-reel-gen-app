@@ -256,9 +256,13 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
                       <StateIcon state={st} />
                       <AgentLogo agent={a.agent ?? inUse} />
                       <span className="min-w-0 flex-1 truncate font-medium">{a.title ?? a.slug}</span>
-                      {last(a) && st !== 'working' && <span className="flex-none text-[11px] text-muted-foreground">{fmtAgo(last(a)!)}</span>}
                     </span>
-                    {subtitle(a, st) && <span className="line-clamp-2 pl-6 text-xs text-muted-foreground">{subtitle(a, st)}</span>}
+                    {(subtitle(a, st) || (last(a) && st !== 'working')) && (
+                      <span className="flex items-start gap-2 pl-6 text-xs text-muted-foreground">
+                        <span className="line-clamp-2 min-w-0 flex-1">{subtitle(a, st)}</span>
+                        {last(a) && st !== 'working' && <span className="flex-none text-[11px] leading-4">{fmtAgo(last(a)!)}</span>}
+                      </span>
+                    )}
                   </button>
                   <div className="mr-1 flex flex-none flex-col items-center self-start pt-0.5">
                     {reels[a.slug!]?.progress.length ? <ReelProgressRing steps={reels[a.slug!].progress} className="m-1.5 mb-1" /> : null}
