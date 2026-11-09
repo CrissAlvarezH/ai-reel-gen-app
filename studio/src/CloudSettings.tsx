@@ -2,14 +2,13 @@
 // session, server/cloud.ts): the header's indicator, Ajustes → Cuenta, and Ajustes → Instagram, which of its
 // accounts this project uses for Instagram's own numbers in Mi cuenta and, later, publishing.
 import {useCallback, useEffect, useState} from 'react';
-import {AlertTriangle, AtSign, BarChart3, ExternalLink, FolderSync, KeyRound, Loader2, LogOut, Mail, RefreshCw, Send, type LucideIcon} from 'lucide-react';
+import {AlertTriangle, AtSign, BarChart3, CheckCircle2, ExternalLink, FolderSync, KeyRound, Loader2, LogOut, Mail, RefreshCw, Send, type LucideIcon} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
 import {Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Skeleton} from '@/components/ui/skeleton';
 import {cloudApi, useSocket, type CloudSession, type CloudStatus} from './api';
 import {useConfirm} from './confirm';
@@ -43,24 +42,60 @@ export function CloudIndicator() {
   );
 }
 
+// The last answer, so coming back to a section shows it at once while it refreshes. A page reload (changing
+// project does one) starts empty, so it can't show another project's account.
+let lastStatus: CloudStatus | null = null;
+
 // /api/cloud, reloaded whenever the session changes elsewhere (the panel closed it, or the other section did).
 function useCloudStatus() {
-  const [s, setS] = useState<CloudStatus | null>(null);
+  const [s, setState] = useState<CloudStatus | null>(lastStatus);
   const [err, setErr] = useState('');
-  const load = useCallback(() => void cloudApi.status().then(setS, (e: Error) => setErr(e.message)), []);
+  const setS = useCallback((v: CloudStatus) => {
+    lastStatus = v;
+    setState(v);
+  }, []);
+  const load = useCallback(() => void cloudApi.status().then(setS, (e: Error) => setErr(e.message)), [setS]);
   useEffect(load, [load]);
   useSocket((msg) => msg.type === 'cloud' && load());
   return {s, setS, err, load};
 }
 
-function Loading({err}: {err: string}) {
-  return err ? (
-    <p className="text-sm text-destructive">{err}</p>
-  ) : (
+// Each skeleton has the shape of the card that replaces it, so nothing jumps when it arrives.
+function AccountSkeleton({err}: {err: string}) {
+  if (err) return <p className="text-sm text-destructive">{err}</p>;
+  return (
     <Card>
+      <CardHeader>
+        <Skeleton className="h-5 w-44" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-2/3" />
+      </CardHeader>
+      <CardContent>
+        <Skeleton className="h-5 w-56" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function InstagramSkeleton({err}: {err: string}) {
+  if (err) return <p className="text-sm text-destructive">{err}</p>;
+  return (
+    <Card>
+      <CardHeader>
+        <Skeleton className="h-[22px] w-48" />
+        <div className="flex h-[60px] flex-col justify-between py-0.5">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <Skeleton className="h-5 w-48" />
-        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-[62px] w-full rounded-lg" />
+        <div className="flex gap-2">
+          <Skeleton className="h-7 w-28" />
+          <Skeleton className="h-7 w-32" />
+        </div>
+        <Skeleton className="h-5 w-44" />
       </CardContent>
     </Card>
   );
@@ -68,12 +103,12 @@ function Loading({err}: {err: string}) {
 
 export function AccountSection() {
   const {s, setS, err, load} = useCloudStatus();
-  return s ? <AccountCard s={s} onChange={setS} reload={load} /> : <Loading err={err} />;
+  return s ? <AccountCard s={s} onChange={setS} reload={load} /> : <AccountSkeleton err={err} />;
 }
 
 export function InstagramSection() {
   const {s, setS, err, load} = useCloudStatus();
-  if (!s) return <Loading err={err} />;
+  if (!s) return <InstagramSkeleton err={err} />;
   if (s.signedIn && !s.error) return <ProjectAccountCard s={s} onChange={setS} reload={load} />;
   return (
     <Card>
@@ -246,6 +281,13 @@ function AccountBenefits() {
   );
 }
 
+// Instagram's picture links expire: falls back to the icon.
+function AccountAvatar({url}: {url: string | null}) {
+  const [broken, setBroken] = useState(false);
+  if (!url || broken) return <AtSign className="size-9 shrink-0 rounded-full bg-muted p-2 text-muted-foreground" />;
+  return <img src={url} alt="" className="size-9 shrink-0 rounded-full object-cover" onError={() => setBroken(true)} />;
+}
+
 function ProjectAccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: CloudStatus) => void; reload: () => void}) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -294,22 +336,37 @@ function ProjectAccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-3">
-              <Select value={a ? String(a.id) : NONE} onValueChange={(v) => void pick(v)} disabled={busy}>
-                <SelectTrigger className="w-72" aria-label="Cuenta de Instagram de este proyecto">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {s.accounts.map((x) => (
-                    <SelectItem key={x.id} value={String(x.id)}>
-                      <AtSign className="size-3.5" /> {x.username}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value={NONE}>Ninguna</SelectItem>
-                </SelectContent>
-              </Select>
+            <div role="radiogroup" aria-label="Cuenta de Instagram de este proyecto" className="flex flex-col gap-2">
+              {s.accounts.map((x) => {
+                const on = a?.id === x.id;
+                return (
+                  <button
+                    key={x.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    disabled={busy}
+                    onClick={() => !on && void pick(String(x.id))}
+                    className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-colors disabled:opacity-70 ${on ? 'border-foreground/40 bg-muted/50' : 'hover:bg-muted/40'}`}
+                  >
+                    <AccountAvatar url={x.pictureUrl} />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm font-medium">@{x.username}</span>
+                      {x.name && <span className="truncate text-xs text-muted-foreground">{x.name}</span>}
+                    </span>
+                    {on && <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {panel('Configurar')}
+              {a && (
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void pick(NONE)}>
+                  No usar ninguna
+                </Button>
+              )}
               {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
-              {panel('Conectar otra')}
             </div>
             {s.disconnected && (
               <span className="flex items-center gap-1.5 text-xs text-amber-400">
