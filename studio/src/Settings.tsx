@@ -23,7 +23,7 @@ import SettingsHeader from '@/components/settings/SettingsHeader';
 import SettingsNav from '@/components/settings/SettingsNav';
 import type {SettingsGroup} from '@/components/settings/SettingsNav/SettingsNav.types';
 
-// Ajustes (#/ajustes/<section>), in groups: General (Proyecto, Cuenta, Carpeta y perfil, Apariencia), Creación de videos (Agente,
+// Ajustes (#/ajustes/<section>), in groups: General (Proyecto, Cuenta, Output de los videos, Apariencia), Creación de videos (Agente,
 // Voz, Skills), Conexiones (Instagram, Extracción de datos, Claves y servicios) and Sistema (Requisitos). Skills reads the workspace's instructions and supporting files. Each service key is
 // asked for where it's used.
 
@@ -150,7 +150,7 @@ export function KeyRow({k, onChange, compact = false}: {k: KeyStatus; onChange: 
   );
 }
 
-/* ───── Carpeta y perfil ───── */
+/* ───── Output de los videos ───── */
 
 // The folder the studio works on. Changing it goes through the welcome page.
 function WorkspaceCard() {
@@ -895,12 +895,12 @@ const GROUPS: SettingsGroup[] = [
       {id: 'cuenta', label: 'Cuenta', icon: CircleUser, description: 'Tu cuenta de Reel Studio. Es opcional: desbloquea lo que vive en la nube.', subsections: []},
       {
         id: 'carpeta',
-        label: 'Carpeta y perfil',
+        label: 'Output de los videos',
         icon: User,
-        description: 'Tu carpeta de trabajo y quién hace los videos.',
+        description: 'Tu carpeta de trabajo y cómo salen los videos.',
         subsections: [
           {label: 'Carpeta de trabajo', anchor: 'ajustes-carpeta'},
-          {label: 'Perfil', anchor: 'ajustes-perfil'},
+          {label: 'Configuración del output', anchor: 'ajustes-perfil'},
         ],
       },
       {id: 'apariencia', label: 'Apariencia', icon: SunMoon, description: 'Claro, oscuro o el que use tu equipo.', subsections: []},

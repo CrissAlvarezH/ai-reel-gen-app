@@ -13,14 +13,13 @@ import {Switch} from '@/components/ui/switch';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
 import ListSkeleton from '@/components/common/ListSkeleton';
-import {FPS_OPTIONS, PLATFORM_FORMATS, platformFormat, type Format} from '../shared/types';
+import {FPS_OPTIONS, platformFormat, type Format} from '../shared/types';
 import {profileApi, voiceApi, type Profile, type Voice, type VoiceModel, type VoiceOption, type VoiceSample} from './api';
 import {useStyles} from './StylePicker';
 
 // Ajustes → Perfil and Voz: who makes the videos and the voice that narrates them (config/*.json at the
 // workspace). The agent gets both with every message; tools/tts.py reads the voice.
 
-const PLATFORMS = Object.keys(PLATFORM_FORMATS);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 function Field({label, hint, children, className}: {label: string; hint?: string; children: React.ReactNode; className?: string}) {
@@ -99,33 +98,16 @@ export function ProfileCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Perfil</CardTitle>
-        <CardDescription>Quién hace los videos y cómo. El agente lo recibe en cada mensaje y manda sobre lo que digan las skills.</CardDescription>
+        <CardTitle>Configuración del output de los videos</CardTitle>
+        <CardDescription>Cómo salen los videos nuevos. El agente lo recibe en cada mensaje y manda sobre lo que digan las skills.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {!p && !f.err && <ListSkeleton variant="lines" count={6} />}
         {p && (
           <>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Tu nombre" hint="Así te llama el agente.">
-                <Input value={p.name} onChange={(e) => f.set({name: e.target.value})} placeholder="Tu nombre" />
-              </Field>
               <Field label="Idioma" hint="De los videos y de la conversación.">
                 <Input value={p.language} onChange={(e) => f.set({language: e.target.value})} placeholder="español" />
-              </Field>
-              <Field label="Plataforma">
-                <Select value={p.platform} onValueChange={(v) => f.set({platform: v, format: platformFormat(v)})}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[...new Set([...PLATFORMS, p.platform])].map((x) => (
-                      <SelectItem key={x} value={x}>
-                        {x}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </Field>
               <Field label="Duración objetivo" hint="Para escribir los guiones.">
                 <div className="flex items-center gap-2">
@@ -227,7 +209,7 @@ function FormatField({format, platform, onChange}: {format: Format; platform: st
     <Field
       label="Tamaño y calidad"
       className="sm:col-span-2"
-      hint={isPreset ? `El de ${platform}. Se aplica a los videos nuevos; cada video guarda el suyo.` : 'Personalizado. Se aplica a los videos nuevos; cada video guarda el suyo.'}
+      hint={isPreset ? 'Formato predeterminado. Se aplica a los videos nuevos; cada video guarda el suyo.' : 'Personalizado. Se aplica a los videos nuevos; cada video guarda el suyo.'}
     >
       <div className="flex flex-wrap items-center gap-2">
         <Input type="number" step={2} min={240} max={4096} value={format.width} onChange={n('width')} className="w-24" aria-label="Ancho" />
