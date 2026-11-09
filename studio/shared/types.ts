@@ -586,7 +586,8 @@ export type AccountStatus = {
 /* ───── Reel Studio's account (server/cloud.ts, the ai-reel-gen-cloud site) ───── */
 
 // insights: false → it was connected before the metrics permission: connect it again in the panel.
-export type CloudAccount = {id: number; username: string; name: string | null; pictureUrl: string | null; tokenExpiresAt: string; insights: boolean};
+// tokenExpiresAt null: the token doesn't expire. renews false: reconnect it in the panel before tokenExpiresAt.
+export type CloudAccount = {id: number; username: string; name: string | null; pictureUrl: string | null; tokenExpiresAt: string | null; renews?: boolean; insights: boolean};
 // account: the one this project uses (picked, or the one with Mi cuenta's handle).
 export type CloudStatus = {
   url: string;

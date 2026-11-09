@@ -240,7 +240,8 @@ function ProjectAccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s
             {a ? (
               <div className="flex flex-col gap-1 text-xs text-muted-foreground">
                 <span>
-                  Acceso válido hasta el {date(a.tokenExpiresAt)}, se renueva solo. {a.insights && <Badge variant="outline">Métricas</Badge>}
+                  {!a.tokenExpiresAt ? 'Acceso sin vencimiento.' : `Acceso válido hasta el ${date(a.tokenExpiresAt)}, ${a.renews === false ? 'vuelve a conectarla antes en tu panel' : 'se renueva solo'}.`}{' '}
+                  {a.insights && <Badge variant="outline">Métricas</Badge>}
                 </span>
                 {!a.insights && (
                   <span className="flex items-center gap-1.5 text-amber-400">
