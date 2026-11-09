@@ -436,7 +436,7 @@ export async function examples(): Promise<string[]> {
 function profileText() {
   const p = getProfile();
   return [
-    `Perfil del creador para este proyecto (${C()}/profile.json; el público y lo que quiere se cambian en Perfil de audiencia, las reglas del caption e indicaciones en Ajustes → Proyecto, lo demás en Ajustes → Cuenta → Perfil). Manda sobre lo que digan las skills en idioma, plataforma, público, duración, caption y estilo de los videos nuevos:`,
+    `Perfil del creador para este proyecto (${C()}/profile.json; el público y lo que quiere se cambian en Perfil de audiencia, las reglas del caption e indicaciones en Ajustes → Proyecto, lo demás en Ajustes → Carpeta y perfil → Perfil). Manda sobre lo que digan las skills en idioma, plataforma, público, duración, caption y estilo de los videos nuevos:`,
     `- Nombre: ${p.name || '(sin nombre)'}`,
     `- Idioma de los videos y de esta conversación: ${p.language}`,
     `- Plataforma: ${p.platform}`,

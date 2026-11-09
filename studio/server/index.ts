@@ -385,6 +385,7 @@ app.use('/api/account', (req: Req, res: Response, next: () => void) => {
 });
 // Reel Studio's account (server/cloud.ts): the session, and this project's Instagram account.
 app.get('/api/cloud', handle(() => cloud.status(account.username())));
+app.get('/api/cloud/session', handle(() => cloud.session()));
 app.post('/api/cloud/code', handle((req) => cloud.sendCode(req.body?.email)));
 app.post('/api/cloud/verify', handle((req) => cloud.verify(req.body?.email, req.body?.code)));
 app.post('/api/cloud/logout', handle(() => cloud.logout()));
@@ -664,6 +665,8 @@ workspace.onChange(() => {
   send({type: 'workspace'});
 });
 
+cloud.onCloudChange(() => send({type: 'cloud'}));
+
 // Another project: its videos, Mi cuenta and Inspiración are other folders. Agents working in the old one go on
 // (they write to its folders, and their events reach no page of this one); its downloads are left behind.
 workspace.onProjectChange(() => {
@@ -697,6 +700,7 @@ server.listen(PORT, HOST, () => {
   console.log(`Reel Studio → http://localhost:${PORT}`);
   automations.startScheduler(() => send({type: 'automations'}));
   factAudit.startScanner();
+  cloud.startPing();
   if (HOST === '0.0.0.0') {
     const ips = Object.values(os.networkInterfaces())
       .flat()

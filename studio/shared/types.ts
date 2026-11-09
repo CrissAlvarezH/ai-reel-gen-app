@@ -362,7 +362,7 @@ export type ChatEvent =
   | {op: 'chats'};
 
 // workspace: the studio now works on another folder (every page reloads).
-export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'automations'} | {type: 'audit'} | {type: 'styles'} | {type: 'formats'} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
+export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'automations'} | {type: 'audit'} | {type: 'styles'} | {type: 'formats'} | {type: 'cloud'} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
 
 /* ───── Profile and voice (config/, set in Ajustes) ───── */
 
@@ -593,13 +593,16 @@ export type CloudStatus = {
   url: string;
   email: string | null;
   signedIn: boolean;
-  user: {email: string; name: string | null} | null;
+  user: {id: number; email: string; name: string | null} | null;
   metaApp: boolean;
   accounts: CloudAccount[];
   panelUrl: string;
+  officialUrl: string;
   account: CloudAccount | null;
   error: string | null;
 };
+// The indicator's view of it, known without the network. online: null until a signed-in call has tried.
+export type CloudSession = {signedIn: boolean; email: string | null; url: string; online: boolean | null; checkedAt: number | null};
 export type CloudReelMetrics = {views: number | null; reach: number | null; saves: number | null; shares: number | null; likes: number | null; comments: number | null; interactions: number | null; avgWatchMs: number | null; totalWatchMs: number | null; skipRate: number | null; reposts: number | null};
 export type CloudReelInsights = {code: string | null; mediaId: string; permalink: string | null; postedAt: string | null; metrics: CloudReelMetrics; error: string | null};
 

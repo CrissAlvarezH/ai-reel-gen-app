@@ -1,6 +1,6 @@
-// Ajustes → Instagram: his Reel Studio account (the site that holds his Meta app and Instagram connections; the
-// studio only keeps its session, server/cloud.ts) and which of its Instagram accounts this project uses, for
-// Instagram's own numbers in Mi cuenta and, later, publishing.
+// His Reel Studio account (the site that holds his Meta app and Instagram connections; the studio only keeps its
+// session, server/cloud.ts): the header's indicator, Ajustes → Cuenta, and Ajustes → Instagram, which of its
+// accounts this project uses for Instagram's own numbers in Mi cuenta and, later, publishing.
 import {useCallback, useEffect, useState} from 'react';
 import {AlertTriangle, AtSign, ExternalLink, Loader2, LogOut, Mail, RefreshCw} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
@@ -10,32 +10,88 @@ import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Skeleton} from '@/components/ui/skeleton';
-import {cloudApi, type CloudStatus} from './api';
+import {cloudApi, useSocket, type CloudSession, type CloudStatus} from './api';
 
 const NONE = '__none';
 const date = (iso: string) => new Date(iso).toLocaleDateString('es', {day: 'numeric', month: 'short', year: 'numeric'});
 
-export function CloudSection() {
+// The header's indicator: who's signed in and whether the cloud answers. /api/cloud/session never waits on the
+// network, so it can't slow any page down.
+export function CloudIndicator() {
+  const [s, setS] = useState<CloudSession | null>(null);
+  const load = useCallback(() => void cloudApi.session().then(setS, () => {}), []);
+  useEffect(load, [load]);
+  useSocket((msg) => msg.type === 'cloud' && load(), load);
+  if (!s) return null;
+  const state = !s.signedIn
+    ? {label: 'Iniciar sesión', title: 'Trabajando en local. Inicia sesión para usar la nube', dot: null}
+    : s.online === false
+      ? {label: s.email, title: 'Sin conexión: sigues trabajando en local', dot: 'bg-amber-500'}
+      : s.online
+        ? {label: s.email, title: 'Conectado a tu cuenta', dot: 'bg-emerald-500'}
+        : {label: s.email, title: 'Comprobando la conexión…', dot: 'bg-muted-foreground'};
+  return (
+    <Button asChild variant="ghost" size="sm" className="min-w-0 font-normal">
+      <a href="#/ajustes/cuenta" title={state.title}>
+        {state.dot && <span aria-hidden className={`size-2 shrink-0 rounded-full ${state.dot}`} />}
+        <span className="max-w-28 truncate sm:max-w-52">{state.label}</span>
+      </a>
+    </Button>
+  );
+}
+
+// /api/cloud, reloaded whenever the session changes elsewhere (the panel closed it, or the other section did).
+function useCloudStatus() {
   const [s, setS] = useState<CloudStatus | null>(null);
   const [err, setErr] = useState('');
-  const load = useCallback(() => cloudApi.status().then(setS, (e: Error) => setErr(e.message)), []);
-  useEffect(() => void load(), [load]);
-  if (!s)
-    return err ? (
-      <p className="text-sm text-destructive">{err}</p>
-    ) : (
-      <Card>
-        <CardContent className="flex flex-col gap-3">
-          <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-9 w-full" />
-        </CardContent>
-      </Card>
-    );
+  const load = useCallback(() => void cloudApi.status().then(setS, (e: Error) => setErr(e.message)), []);
+  useEffect(load, [load]);
+  useSocket((msg) => msg.type === 'cloud' && load());
+  return {s, setS, err, load};
+}
+
+function Loading({err}: {err: string}) {
+  return err ? (
+    <p className="text-sm text-destructive">{err}</p>
+  ) : (
+    <Card>
+      <CardContent className="flex flex-col gap-3">
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-9 w-full" />
+      </CardContent>
+    </Card>
+  );
+}
+
+export function AccountSection() {
+  const {s, setS, err, load} = useCloudStatus();
+  return s ? <AccountCard s={s} onChange={setS} reload={load} /> : <Loading err={err} />;
+}
+
+export function InstagramSection() {
+  const {s, setS, err, load} = useCloudStatus();
+  if (!s) return <Loading err={err} />;
+  if (s.signedIn && !s.error) return <ProjectAccountCard s={s} onChange={setS} reload={load} />;
   return (
-    <>
-      <AccountCard s={s} onChange={setS} reload={load} />
-      {s.signedIn && !s.error && <ProjectAccountCard s={s} onChange={setS} reload={load} />}
-    </>
+    <Card>
+      <CardHeader>
+        <CardTitle>Instagram de este proyecto</CardTitle>
+        <CardDescription>
+          {s.signedIn ? s.error : 'Para conectar Instagram necesitas tu cuenta de Reel Studio. El resto de la app sigue funcionando sin ella.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {s.signedIn ? (
+          <Button variant="outline" size="sm" onClick={load}>
+            <RefreshCw /> Reintentar
+          </Button>
+        ) : (
+          <Button asChild size="sm">
+            <a href="#/ajustes/cuenta">Iniciar sesión</a>
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -62,7 +118,9 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
       <CardHeader>
         <CardTitle>Cuenta de Reel Studio</CardTitle>
         <CardDescription>
-          Tu app de Meta y tus cuentas de Instagram se conectan en tu panel web; aquí solo inicias sesión. Este equipo guarda la sesión, nunca las claves de Meta.
+          {s.signedIn
+            ? 'Tu app de Meta y tus cuentas de Instagram se conectan en tu panel web. Este equipo guarda la sesión, nunca las claves de Meta.'
+            : 'Es opcional. Sin cuenta, todo sigue funcionando en este equipo. Con ella: Instagram, tus proyectos en la nube, tus claves y la sincronización.'}
         </CardDescription>
         {s.signedIn && (
           <CardAction>
@@ -93,7 +151,12 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
             onSubmit={(e) => {
               e.preventDefault();
               if (!sent) void act(async () => (await cloudApi.sendCode(email), setSent(true)));
-              else void act(async () => onChange(await cloudApi.verify(email, code)));
+              else
+                void act(async () => {
+                  onChange(await cloudApi.verify(email, code));
+                  setSent(false); // so logging out comes back to the email step, not to a spent code
+                  setCode('');
+                });
             }}
           >
             <div className="flex flex-col gap-1.5">
@@ -134,41 +197,56 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
   );
 }
 
-// Which site it talks to: the deployed one, or a local one while it's being built.
+// Which site it talks to: the official one, unless he's developing or hosting his own.
 function ServerUrl({s, onChange}: {s: CloudStatus; onChange: (s: CloudStatus) => void}) {
   const [editing, setEditing] = useState(false);
   const [url, setUrl] = useState(s.url);
   const [err, setErr] = useState('');
-  if (!editing)
-    return (
-      <p className="text-xs text-muted-foreground">
-        Servidor: <span className="font-mono">{s.url}</span>{' '}
-        <button type="button" className="underline hover:text-foreground" onClick={() => setEditing(true)}>
-          Cambiar
-        </button>
-      </p>
+  const change = (v: string) =>
+    cloudApi.setUrl(v).then(
+      (n) => (onChange(n), setUrl(n.url), setEditing(false), setErr('')),
+      (x: Error) => setErr(x.message),
     );
   return (
-    <form
-      className="flex flex-wrap items-center gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        cloudApi.setUrl(url).then(
-          (n) => (onChange(n), setEditing(false), setErr('')),
-          (x: Error) => setErr(x.message),
-        );
-      }}
-    >
-      <Input value={url} onChange={(e) => setUrl(e.target.value)} className="h-8 max-w-xs font-mono text-xs" aria-label="Dirección del servidor" />
-      <Button type="submit" size="sm" variant="outline">
-        Guardar
-      </Button>
-      <Button type="button" size="sm" variant="ghost" onClick={() => (setEditing(false), setUrl(s.url))}>
-        Cancelar
-      </Button>
-      <span className="basis-full text-xs text-muted-foreground">Al cambiarlo se cierra la sesión: cada servidor tiene las suyas.</span>
-      {err && <span className="basis-full text-xs text-destructive">{err}</span>}
-    </form>
+    <details className="text-xs text-muted-foreground">
+      <summary className="w-fit cursor-pointer hover:text-foreground">Avanzado</summary>
+      <div className="mt-2 flex flex-col gap-2">
+        {editing ? (
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void change(url);
+            }}
+          >
+            <Input value={url} onChange={(e) => setUrl(e.target.value)} className="h-8 max-w-xs font-mono text-xs" aria-label="Dirección del servidor" />
+            <Button type="submit" size="sm" variant="outline">
+              Guardar
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => (setEditing(false), setUrl(s.url))}>
+              Cancelar
+            </Button>
+          </form>
+        ) : (
+          <p>
+            Servidor: <span className="font-mono">{s.url}</span>{' '}
+            <button type="button" className="underline hover:text-foreground" onClick={() => setEditing(true)}>
+              Cambiar
+            </button>
+            {s.url !== s.officialUrl && (
+              <>
+                {' · '}
+                <button type="button" className="underline hover:text-foreground" onClick={() => void change('')}>
+                  Usar el servidor oficial
+                </button>
+              </>
+            )}
+          </p>
+        )}
+        <span>Al cambiar de servidor se cierra la sesión: cada uno tiene las suyas.</span>
+        {err && <span className="text-destructive">{err}</span>}
+      </div>
+    </details>
   );
 }
 

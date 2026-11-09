@@ -306,6 +306,7 @@ export const projectsApi = {
 type CloudStatusT = import('../shared/types').CloudStatus;
 export const cloudApi = {
   status: () => fetch('/api/cloud').then((r) => json<CloudStatusT>(r)),
+  session: () => fetch('/api/cloud/session').then((r) => json<import('../shared/types').CloudSession>(r)),
   sendCode: (email: string) => post('/api/cloud/code', {email}) as Promise<{ok: true}>,
   verify: (email: string, code: string) => post('/api/cloud/verify', {email, code}) as Promise<CloudStatusT>,
   logout: () => post('/api/cloud/logout', {}) as Promise<CloudStatusT>,

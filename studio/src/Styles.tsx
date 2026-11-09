@@ -212,7 +212,7 @@ function DefaultButton({style: s, styles, setDefault}: {style: Style; styles: St
           {busy && <Loader2 className="animate-spin" />} Dejar de usar por defecto
         </Button>
       ) : (
-        <Button variant="outline" size="sm" onClick={run} disabled={busy} title="Los videos nuevos de este proyecto empezarán en este estilo (Ajustes → Cuenta → Perfil)">
+        <Button variant="outline" size="sm" onClick={run} disabled={busy} title="Los videos nuevos de este proyecto empezarán en este estilo (Ajustes → Carpeta y perfil → Perfil)">
           {busy ? <Loader2 className="animate-spin" /> : <Check />} Usar por defecto en este proyecto
         </Button>
       )}

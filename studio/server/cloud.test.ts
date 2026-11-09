@@ -19,7 +19,10 @@ const accounts = [
   {id: 7, username: 'entiende.finanzas.ya', name: null, pictureUrl: null, tokenExpiresAt: '2027-01-01T00:00:00Z', insights: true},
 ];
 let valid = 'tok-1';
+let down = false;
+let answerLate: (() => void) | null = null; // a request held open until a test lets it answer 401
 const seen: string[] = [];
+const verifications: Record<string, unknown>[] = [];
 const server = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c) => (body += c));
@@ -27,9 +30,15 @@ const server = http.createServer((req, res) => {
     seen.push(`${req.method} ${req.url} ${req.headers.authorization ?? ''}`);
     const send = (status: number, v: unknown) => (res.writeHead(status, {'content-type': 'application/json'}), res.end(JSON.stringify(v)));
     if (req.url === '/api/studio/auth/code') return send(200, {ok: true});
-    if (req.url === '/api/studio/auth/verify') return JSON.parse(body).code === '123456' ? send(200, {token: valid}) : send(400, {error: 'Código incorrecto'});
+    if (down) return req.socket.destroy();
+    if (req.url?.startsWith('/api/studio/accounts/')) return void (answerLate = () => send(401, {error: 'Inicia sesión primero'}));
+    if (req.url === '/api/studio/auth/verify') {
+      const b = JSON.parse(body);
+      verifications.push(b);
+      return b.code === '123456' ? send(200, {token: valid, user: {id: 42, email: b.email, name: null}}) : send(400, {error: 'Código incorrecto'});
+    }
     if (req.headers.authorization !== `Bearer ${valid}`) return send(401, {error: 'Inicia sesión primero'});
-    if (req.url === '/api/studio/me') return send(200, {user: {email: 'yo@x.co', name: null}, metaApp: true, accounts, panelUrl: 'http://cloud/panel'});
+    if (req.url === '/api/studio/me') return send(200, {user: {id: 42, email: 'yo@x.co', name: null}, metaApp: true, accounts, panelUrl: 'http://cloud/panel'});
     send(404, {error: 'no'});
   });
 });
@@ -69,4 +78,109 @@ test('a session the cloud rejects is forgotten', async () => {
   assert.match(st.error ?? '', /sesión de Reel Studio se cerró/);
   assert.equal(cloud.linkedAccount(), null);
   assert.ok(seen.some((x) => x.startsWith('GET /api/studio/me Bearer tok-1')));
+});
+
+const cfg = () => JSON.parse(fs.readFileSync(path.join(root, '.cfg/cloud.json'), 'utf8'));
+
+test('the deviceId is created once and survives logging out; the userId goes with the session', async () => {
+  const cloud = await import('./cloud.ts');
+  valid = 'tok-3';
+  await cloud.verify('yo@x.co', '123456');
+  const first = cfg();
+  assert.match(first.deviceId, /^[0-9a-f-]{36}$/);
+  assert.equal(first.userId, 42);
+  assert.equal(verifications.at(-1)?.deviceId, first.deviceId);
+
+  await cloud.logout();
+  assert.equal(cfg().deviceId, first.deviceId);
+  assert.equal(cfg().token, undefined);
+  assert.equal(cfg().userId, undefined);
+
+  await cloud.verify('yo@x.co', '123456');
+  assert.equal(verifications.at(-1)?.deviceId, first.deviceId);
+  assert.equal(cfg().deviceId, first.deviceId);
+});
+
+test('a session from before userId was kept gets it from /me', async () => {
+  const cloud = await import('./cloud.ts');
+  const {userId: _gone, ...older} = cfg();
+  fs.writeFileSync(path.join(root, '.cfg/cloud.json'), JSON.stringify(older));
+  await cloud.status(null);
+  assert.equal(cfg().userId, 42);
+});
+
+test('session() answers without the network and follows what signed-in calls found', async () => {
+  const cloud = await import('./cloud.ts');
+  let changes = 0;
+  cloud.onCloudChange(() => changes++);
+
+  await cloud.status(null);
+  const before = seen.length;
+  const up = cloud.session();
+  assert.equal(seen.length, before);
+  assert.deepEqual({signedIn: up.signedIn, email: up.email, online: up.online}, {signedIn: true, email: 'yo@x.co', online: true});
+  assert.equal(typeof up.checkedAt, 'number');
+  assert.equal(changes, 0); // still reachable: nothing to tell the pages
+
+  down = true;
+  const st = await cloud.status(null);
+  down = false;
+  assert.equal(st.signedIn, true); // no network doesn't end the session
+  assert.equal(cloud.session().online, false);
+  assert.equal(changes, 1);
+
+  await cloud.status(null);
+  assert.equal(cloud.session().online, true);
+  assert.equal(changes, 2);
+});
+
+test('a 401 forgets the session and announces it; signed out, nothing reaches the network', async () => {
+  const cloud = await import('./cloud.ts');
+  let changes = 0;
+  cloud.onCloudChange(() => changes++);
+  valid = 'tok-4';
+  await cloud.status(null);
+  assert.equal(changes, 1);
+  assert.deepEqual({signedIn: cloud.session().signedIn, online: cloud.session().online, checkedAt: cloud.session().checkedAt}, {signedIn: false, online: null, checkedAt: null});
+
+  const before = seen.length;
+  cloud.startPing();
+  await cloud.status(null);
+  assert.equal(seen.length, before);
+  await assert.rejects(cloud.reelInsights(7, 5), /Ajustes → Cuenta/);
+  assert.equal(seen.length, before);
+});
+
+test('a late 401 for a previous session leaves the new one alone', async () => {
+  const cloud = await import('./cloud.ts');
+  valid = 'tok-5';
+  await cloud.verify('yo@x.co', '123456');
+  const stale = cloud.reelInsights(7, 5).catch((e: Error) => e.message);
+  while (!answerLate) await new Promise((r) => setTimeout(r, 5));
+  await cloud.logout();
+  valid = 'tok-6';
+  await cloud.verify('yo@x.co', '123456');
+  answerLate();
+  assert.match(String(await stale), /se cerró/);
+  assert.equal(cfg().token, 'tok-6');
+  assert.equal(cloud.session().signedIn, true);
+});
+
+test('the official server is the default; a saved one wins, and clearing it goes back', async () => {
+  const cloud = await import('./cloud.ts');
+  const env = process.env.REEL_STUDIO_CLOUD_URL;
+  delete process.env.REEL_STUDIO_CLOUD_URL;
+  try {
+    const official = 'https://ai-reel-gen.socialsannin.com';
+    assert.equal(cfg().url, undefined);
+    assert.equal(cloud.baseUrl(), official);
+    assert.equal((await cloud.setUrl('https://mio.example/')).url, 'https://mio.example');
+    assert.equal(cloud.baseUrl(), 'https://mio.example');
+    assert.equal(cfg().token, undefined); // each server has its own sessions
+    assert.ok(cfg().deviceId);
+    assert.equal((await cloud.setUrl('')).url, official);
+    assert.equal(cfg().url, undefined);
+  } finally {
+    process.env.REEL_STUDIO_CLOUD_URL = env;
+  }
 });

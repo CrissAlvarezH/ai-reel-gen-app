@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {AtSign, Bot, CheckCircle2, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, Puzzle, RefreshCw, SunMoon, Trash2, User, XCircle} from 'lucide-react';
+import {AtSign, Bot, CheckCircle2, CircleUser, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, Puzzle, RefreshCw, SunMoon, Trash2, User, XCircle} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
@@ -17,13 +17,13 @@ import {ProfileCard, ProjectRulesCard, VoiceCard, VoiceCardSkeleton} from './Pro
 import {RequirementsCard} from './Requirements';
 import {ProjectAvatar, useProjects} from './ProjectPicker';
 import {SkillsSection} from './Skills';
-import {CloudSection} from './CloudSettings';
+import {AccountSection, InstagramSection} from './CloudSettings';
 import AppearanceSection from '@/components/settings/AppearanceSection';
 import SettingsHeader from '@/components/settings/SettingsHeader';
 import SettingsNav from '@/components/settings/SettingsNav';
 import type {SettingsGroup} from '@/components/settings/SettingsNav/SettingsNav.types';
 
-// Ajustes (#/ajustes/<section>), in groups: General (Proyecto, Cuenta, Apariencia), Creación de videos (Agente,
+// Ajustes (#/ajustes/<section>), in groups: General (Proyecto, Cuenta, Carpeta y perfil, Apariencia), Creación de videos (Agente,
 // Voz, Skills), Conexiones (Instagram, Extracción de datos, Claves y servicios) and Sistema (Requisitos). Skills reads the workspace's instructions and supporting files. Each service key is
 // asked for where it's used.
 
@@ -150,7 +150,7 @@ export function KeyRow({k, onChange, compact = false}: {k: KeyStatus; onChange: 
   );
 }
 
-/* ───── Cuenta ───── */
+/* ───── Carpeta y perfil ───── */
 
 // The folder the studio works on. Changing it goes through the welcome page.
 function WorkspaceCard() {
@@ -892,9 +892,10 @@ const GROUPS: SettingsGroup[] = [
           {label: 'Zona de peligro', anchor: 'ajustes-peligro'},
         ],
       },
+      {id: 'cuenta', label: 'Cuenta', icon: CircleUser, description: 'Tu cuenta de Reel Studio. Es opcional: desbloquea lo que vive en la nube.', subsections: []},
       {
-        id: 'cuenta',
-        label: 'Cuenta',
+        id: 'carpeta',
+        label: 'Carpeta y perfil',
         icon: User,
         description: 'Tu carpeta de trabajo y quién hace los videos.',
         subsections: [
@@ -931,11 +932,8 @@ const GROUPS: SettingsGroup[] = [
         id: 'instagram',
         label: 'Instagram',
         icon: AtSign,
-        description: 'Tu cuenta de Reel Studio y la cuenta de Instagram de este proyecto: sus números privados y, pronto, publicar.',
-        subsections: [
-          {label: 'Cuenta de Reel Studio', anchor: 'ajustes-instagram', child: 0},
-          {label: 'Instagram de este proyecto', anchor: 'ajustes-instagram', child: 1},
-        ],
+        description: 'La cuenta de Instagram de este proyecto: sus números privados y, pronto, publicar.',
+        subsections: [],
       },
       {
         id: 'datos',
@@ -993,12 +991,9 @@ export function Settings({section: wanted}: {section?: string | null}) {
             </div>
           </>
         )}
-        {section.id === 'instagram' && (
-          <div id="ajustes-instagram" className={ANCHOR}>
-            <CloudSection />
-          </div>
-        )}
-        {section.id === 'cuenta' && (
+        {section.id === 'cuenta' && <AccountSection />}
+        {section.id === 'instagram' && <InstagramSection />}
+        {section.id === 'carpeta' && (
           <>
             <div id="ajustes-carpeta" className={ANCHOR}>
               <WorkspaceCard />
