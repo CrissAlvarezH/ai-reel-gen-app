@@ -305,6 +305,8 @@ export const projectsApi = {
 // Reel Studio's account (server/cloud.ts): the session with the site, and this project's Instagram account.
 type CloudStatusT = import('../shared/types').CloudStatus;
 type CloudProjects = import('../shared/types').CloudProjects;
+type CloudKeys = import('../shared/types').CloudKeys;
+type CloudKeysMoved = import('../shared/types').CloudKeysMoved;
 export const cloudApi = {
   status: () => fetch('/api/cloud').then((r) => json<CloudStatusT>(r)),
   session: () => fetch('/api/cloud/session').then((r) => json<import('../shared/types').CloudSession>(r)),
@@ -317,6 +319,11 @@ export const cloudApi = {
   register: (id: string, fresh = false) => post(`/api/cloud/projects/${id}/register`, {fresh}) as Promise<CloudProjects>,
   link: (id: string, cloudId: string) => post(`/api/cloud/projects/${id}/link`, {cloudId}) as Promise<CloudProjects>,
   setLocalOnly: (id: string, value: boolean) => post(`/api/cloud/projects/${id}/local-only`, {value}) as Promise<CloudProjects>,
+  keys: () => fetch('/api/cloud/keys').then((r) => json<CloudKeys>(r)),
+  uploadKey: (name: string) => post(`/api/cloud/keys/${name}/upload`) as Promise<CloudKeys>,
+  downloadKey: (name: string) => post(`/api/cloud/keys/${name}/download`) as Promise<CloudKeys>,
+  removeKey: (name: string) => fetch(`/api/cloud/keys/${name}`, {method: 'DELETE'}).then((r) => json<CloudKeys>(r)),
+  moveMissingKeys: (direction: 'upload' | 'download') => post('/api/cloud/keys/missing', {direction}) as Promise<CloudKeysMoved>,
 };
 
 export const accountApi = {

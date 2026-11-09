@@ -26,6 +26,7 @@ import {Welcome} from './Welcome';
 import {CloudIndicator, CloudProjectsPrompt} from './CloudSettings';
 import {useSocket, workspaceApi, type WorkspaceStatus} from './api';
 import {ConfirmProvider} from './confirm';
+import {CloudKeysOffer} from './CloudKeys';
 import './store/useThemeStore'; // follows the system theme while the preference is "system"
 import './index.css';
 
@@ -191,6 +192,7 @@ void loadOpenProject().then(() => createRoot(document.getElementById('root')!).r
     <TooltipProvider>
       <ConfirmProvider>
         <Root />
+        <CloudKeysOffer />
       </ConfirmProvider>
     </TooltipProvider>
   </StrictMode>,

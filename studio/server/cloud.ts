@@ -5,14 +5,15 @@
 // credentials. Each project uses one of those accounts: once registered in the account (its .reel-studio/cloud.json,
 // see below) the account decides which; config/instagram.json is what's used without a network, and by default it's
 // the one with Mi cuenta's handle.
-import {randomUUID} from 'node:crypto';
+import {createHash, randomBytes, randomUUID} from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {CONFIG, CONFIG_DIR, PROJECT_DIR, listProjects, projectDir, setProjectCloudReader} from './workspace.ts';
 import {readJson, writeJson} from './platform.ts';
 import {httpError} from './reels.ts';
-import type {CloudAccount, CloudProjectMatch, CloudProjectState, CloudProjectView, CloudProjects, CloudReelInsights, CloudSession, CloudStatus, LocalCloudProject} from '../shared/types.ts';
+import {KEYS, getKey, setKey} from './settings.ts';
+import type {CloudAccount, CloudKey, CloudKeyState, CloudKeys, CloudKeysMoved, CloudProjectMatch, CloudProjectState, CloudProjectView, CloudProjects, CloudReelInsights, CloudSession, CloudStatus, LocalCloudProject} from '../shared/types.ts';
 
 // REEL_STUDIO_CLOUD_URL wins over it, to develop against a local copy of the cloud.
 const DEFAULT_URL = 'https://ai-reel-gen.socialsannin.com';
@@ -52,11 +53,13 @@ function forget() {
   changed();
 }
 
+const SIGNED_OUT = 'inicia sesión con tu cuenta de Reel Studio en Ajustes → Cuenta';
+
 // routeIsNew: a 404 that isn't the API's own JSON means a server of his from before this function existed.
 type Init = {method?: string; body?: unknown; auth?: boolean; timeout?: number; routeIsNew?: boolean};
 async function call<T>(p: string, {method, body, auth = true, timeout = 60_000, routeIsNew = false}: Init = {}): Promise<T> {
   const token = saved().token;
-  if (auth && !token) throw httpError(401, 'inicia sesión con tu cuenta de Reel Studio en Ajustes → Cuenta');
+  if (auth && !token) throw httpError(401, SIGNED_OUT);
   // A reply can arrive after he logged out or back in: it says nothing about the session he has now.
   const current = () => auth && saved().token === token;
   let r: Response;
@@ -470,4 +473,117 @@ export async function deleteFromAccount(localId: string) {
     const {status: code, oldServer} = e as {status?: number; oldServer?: boolean};
     if (!(code === 404 && !oldServer) && code !== 410) throw e;
   });
+}
+
+/* ───── The keys in the account ───── */
+
+// The account keeps an encrypted copy; what runs is always the workspace's .env, and nothing moves on its own. A value
+// only passes through here between that file and the cloud: never to the browser, a log, an error or any other file.
+
+const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const LOOPBACK_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+function isLoopbackName(url: string) {
+  try {
+    return LOOPBACK_NAMES.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+// The server also listens on the network (HOST is 0.0.0.0 by default). The address alone isn't enough: a web page open
+// in this computer's browser also comes from loopback, so its Host (DNS rebinding) and Origin have to be this computer too.
+export function isLoopback({remoteAddress, host, origin}: {remoteAddress?: string; host?: string; origin?: string}) {
+  return LOOPBACK_IPS.has(remoteAddress ?? '') && !!host && isLoopbackName(`http://${host}`) && (!origin || isLoopbackName(origin));
+}
+
+type RemoteKey = {name: string; last4: string | null; updatedAt: string; updatedBy: string | null; unreadable?: boolean; digest?: string | null};
+
+const keyDigest = (nonce: string, value: string) => createHash('sha256').update(`${nonce}:${value}`).digest('hex');
+
+export function keyState(local: string | null, cloud: Pick<RemoteKey, 'digest'> | null, nonce: string): CloudKeyState {
+  if (!cloud) return local ? 'local' : 'none';
+  if (!local) return 'cloud';
+  return cloud.digest === keyDigest(nonce, local) ? 'same' : 'different';
+}
+
+// Only the keys this version of the app knows. Never fails for the network: the local side is still worth showing.
+export async function keysStatus(): Promise<CloudKeys> {
+  const describe = (name: string, state: CloudKeyState, cloud: RemoteKey | null): CloudKey => {
+    const local = getKey(name);
+    return {name, label: KEYS[name].label, state, localLast4: local ? local.slice(-4) : null, cloudLast4: cloud?.last4 ?? null, updatedAt: cloud?.updatedAt ?? null, updatedBy: cloud?.updatedBy ?? null, unreadable: !!cloud?.unreadable};
+  };
+  const localOnly = (error: string | null): CloudKeys => ({signedIn: signedIn(), keys: Object.keys(KEYS).map((n) => describe(n, keyState(getKey(n), null, ''), null)), error});
+  if (!signedIn()) return localOnly(null);
+  // New on every call, so a digest is useless for any other one.
+  const nonce = randomBytes(16).toString('hex');
+  let remote: RemoteKey[];
+  try {
+    ({keys: remote} = await call<{keys: RemoteKey[]}>(`/api/studio/keys?nonce=${nonce}`, {timeout: 20_000, routeIsNew: true}));
+  } catch (e) {
+    return localOnly((e as Error).message);
+  }
+  return {
+    signedIn: true,
+    keys: Object.keys(KEYS).map((n) => {
+      const cloud = remote.find((k) => k.name === n) ?? null;
+      return describe(n, keyState(getKey(n), cloud, nonce), cloud);
+    }),
+    error: null,
+  };
+}
+
+function knownKey(name: string) {
+  if (!Object.hasOwn(KEYS, name)) throw httpError(400, 'clave desconocida');
+  return KEYS[name];
+}
+
+async function pushKey(name: string) {
+  const k = knownKey(name);
+  const value = getKey(name);
+  if (!value) throw httpError(400, `${k.label}: no hay clave guardada en este equipo`);
+  await call(`/api/studio/keys/${name}`, {method: 'PUT', body: {value}, timeout: 20_000, routeIsNew: true});
+}
+
+// setKey also checks it against the service, as when it's typed in. An empty answer must not reach it: that erases the key.
+async function pullKey(name: string) {
+  knownKey(name);
+  const {value} = await call<{value?: unknown}>(`/api/studio/keys/${name}`, {timeout: 20_000, routeIsNew: true});
+  if (typeof value !== 'string' || !value) throw httpError(502, 'tu cuenta no devolvió esa clave');
+  await setKey(name, value);
+}
+
+export async function uploadKey(name: string) {
+  await pushKey(name);
+  return keysStatus();
+}
+
+export async function downloadKey(name: string) {
+  await pullKey(name);
+  return keysStatus();
+}
+
+export async function removeCloudKey(name: string) {
+  knownKey(name);
+  await call(`/api/studio/keys/${name}`, {method: 'DELETE', timeout: 20_000, routeIsNew: true});
+  return keysStatus();
+}
+
+// "Subir las que faltan" and "Traer las que faltan". Only what's missing on the other side: a key in both, even a
+// different one, is never replaced without being asked about it. One that fails doesn't stop the rest.
+export async function moveMissingKeys(direction: unknown): Promise<CloudKeysMoved> {
+  if (direction !== 'upload' && direction !== 'download') throw httpError(400, 'dirección no válida');
+  const before = await keysStatus();
+  if (!before.signedIn) throw httpError(401, SIGNED_OUT);
+  if (before.error) throw httpError(502, before.error);
+  const pending = before.keys.filter((k) => (direction === 'upload' ? k.state === 'local' : k.state === 'cloud' && !k.unreadable));
+  const moved: string[] = [];
+  const failed: CloudKeysMoved['failed'] = [];
+  for (const k of pending) {
+    try {
+      await (direction === 'upload' ? pushKey(k.name) : pullKey(k.name));
+      moved.push(k.name);
+    } catch (e) {
+      failed.push({name: k.name, label: k.label, error: (e as Error).message});
+    }
+  }
+  return {...(await keysStatus()), moved, failed};
 }

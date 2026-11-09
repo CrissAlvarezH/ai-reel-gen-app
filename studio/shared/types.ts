@@ -622,6 +622,12 @@ export type CloudProjectState = 'none' | 'pending' | 'linked' | 'other-account' 
 export type LocalCloudProject = {id: string; name: string; created: number; cloudId: string | null; state: CloudProjectState};
 export type CloudProjectMatch = {local: string; cloud: CloudProjectView};
 export type CloudProjects = {signedIn: boolean; local: LocalCloudProject[]; remoteOnly: CloudProjectView[]; matches: CloudProjectMatch[]; error: string | null};
+// A service key here and in the account. Never its value: the last characters, and whether the two copies match.
+export type CloudKeyState = 'none' | 'local' | 'cloud' | 'same' | 'different';
+export type CloudKey = {name: string; label: string; state: CloudKeyState; localLast4: string | null; cloudLast4: string | null; updatedAt: string | null; updatedBy: string | null; unreadable: boolean};
+// error: the account couldn't be asked, so state only says what's on this computer.
+export type CloudKeys = {signedIn: boolean; keys: CloudKey[]; error: string | null};
+export type CloudKeysMoved = CloudKeys & {moved: string[]; failed: {name: string; label: string; error: string}[]};
 export type CloudReelMetrics = {views: number | null; reach: number | null; saves: number | null; shares: number | null; likes: number | null; comments: number | null; interactions: number | null; avgWatchMs: number | null; totalWatchMs: number | null; skipRate: number | null; reposts: number | null};
 export type CloudReelInsights = {code: string | null; mediaId: string; permalink: string | null; postedAt: string | null; metrics: CloudReelMetrics; error: string | null};
 

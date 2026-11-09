@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {AtSign, Bot, CheckCircle2, CircleUser, Clapperboard, Cloud, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Monitor, Pencil, Puzzle, RefreshCw, SunMoon, Trash2, XCircle} from 'lucide-react';
+import {AtSign, Bot, CheckCircle2, CircleUser, Clapperboard, Database, FolderKanban, FolderOpen, ImageUp, KeyRound, UserRound, ListChecks, Loader2, Mic, Pencil, Puzzle, RefreshCw, SunMoon, Trash2, XCircle} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
@@ -18,6 +18,7 @@ import {RequirementsCard} from './Requirements';
 import {ProjectAvatar, useProjects} from './ProjectPicker';
 import {SkillsSection} from './Skills';
 import {AccountSection, InstagramSection, ProjectsCloudCard} from './CloudSettings';
+import {CloudKeysCard} from './CloudKeys';
 import AppearanceSection from '@/components/settings/AppearanceSection';
 import SettingsHeader from '@/components/settings/SettingsHeader';
 import SettingsNav from '@/components/settings/SettingsNav';
@@ -174,33 +175,6 @@ function WorkspaceCard() {
           <Button variant="ghost" asChild>
             <a href="#/bienvenida">Cambiar…</a>
           </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ───── Modo ───── */
-
-function ModeCard() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Dónde se guardan tus claves</CardTitle>
-        <CardDescription>Cada clave se pide donde se usa (Voz, Extracción de datos…); aquí eliges dónde viven.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-1 rounded-lg border border-foreground/40 bg-muted/40 p-4">
-          <span className="flex items-center gap-2 font-medium">
-            <Monitor className="size-4" /> Local <Badge>Activo</Badge>
-          </span>
-          <span className="text-sm text-muted-foreground">Tus propias claves, guardadas en este equipo (.env de la carpeta de trabajo).</span>
-        </div>
-        <div className="flex flex-col gap-1 rounded-lg border border-dashed p-4 opacity-60">
-          <span className="flex items-center gap-2 font-medium">
-            <Cloud className="size-4" /> Cuenta <Badge variant="outline">Próximamente</Badge>
-          </span>
-          <span className="text-sm text-muted-foreground">Inicias sesión y usas Apify desde tu cuenta, sin clave propia. ElevenLabs sigue siendo local.</span>
         </div>
       </CardContent>
     </Card>
@@ -953,7 +927,7 @@ const GROUPS: SettingsGroup[] = [
         ],
       },
       // Its id stays 'modo' (old links).
-      {id: 'modo', label: 'Claves y servicios', icon: KeyRound, description: 'Dónde se guardan las claves de los servicios externos (ElevenLabs, Apify, Pexels…).', subsections: []},
+      {id: 'modo', label: 'Claves y servicios', icon: KeyRound, description: 'Tus claves de los servicios externos (ElevenLabs, Apify, Pexels…): en este equipo y en tu cuenta.', subsections: []},
     ],
   },
   {
@@ -1012,7 +986,7 @@ export function Settings({section: wanted}: {section?: string | null}) {
           </>
         )}
         {section.id === 'apariencia' && <AppearanceSection />}
-        {section.id === 'modo' && <ModeCard />}
+        {section.id === 'modo' && <CloudKeysCard />}
         {section.id === 'agente' && <AgentCard chrome />}
         {section.id === 'skills' && <SkillsSection />}
         {section.id === 'voz' && (

@@ -409,6 +409,16 @@ app.get('/api/cloud/projects', handle(() => cloud.projects()));
 app.post('/api/cloud/projects/:localId/register', handle((req) => cloud.registerProject(req.params.localId, req.body?.fresh)));
 app.post('/api/cloud/projects/:localId/link', handle((req) => cloud.linkProject(req.params.localId, req.body?.cloudId)));
 app.post('/api/cloud/projects/:localId/local-only', handle((req) => cloud.setLocalOnly(req.params.localId, req.body?.value)));
+// The keys in the account, from this computer only: the rest of the API is also on the local network.
+app.use('/api/cloud/keys', (req: Req, res: Response, next: NextFunction) => {
+  if (cloud.isLoopback({remoteAddress: req.socket.remoteAddress, host: req.get('host'), origin: req.get('origin')})) return next();
+  res.status(403).json({error: 'las claves solo se pueden gestionar desde el computador donde corre Reel Studio'});
+});
+app.get('/api/cloud/keys', handle(() => cloud.keysStatus()));
+app.post('/api/cloud/keys/missing', handle((req) => cloud.moveMissingKeys(req.body?.direction)));
+app.post('/api/cloud/keys/:name/upload', handle((req) => cloud.uploadKey(req.params.name)));
+app.post('/api/cloud/keys/:name/download', handle((req) => cloud.downloadKey(req.params.name)));
+app.delete('/api/cloud/keys/:name', handle((req) => cloud.removeCloudKey(req.params.name)));
 
 app.get('/api/account', handle(() => account.status()));
 app.put('/api/account', handle((req) => account.setUsername(req.body?.username)));
