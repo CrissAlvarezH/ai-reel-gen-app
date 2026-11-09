@@ -23,7 +23,7 @@ import SettingsHeader from '@/components/settings/SettingsHeader';
 import SettingsNav from '@/components/settings/SettingsNav';
 import type {SettingsGroup} from '@/components/settings/SettingsNav/SettingsNav.types';
 
-// Ajustes (#/ajustes/<section>), in groups: General (Proyecto, Cuenta, Videos, Apariencia), Creación de videos (Agente,
+// Ajustes (#/ajustes/<section>), in groups: General (Cuenta, Proyecto, Videos, Apariencia), Creación de videos (Agente,
 // Voz, Skills), Conexiones (Instagram, Extracción de datos, Claves y servicios) and Sistema (Requisitos). Skills reads the workspace's instructions and supporting files. Each service key is
 // asked for where it's used.
 
@@ -881,6 +881,7 @@ const GROUPS: SettingsGroup[] = [
     id: 'general',
     label: 'General',
     sections: [
+      {id: 'cuenta', label: 'Cuenta', icon: CircleUser, description: 'Tu cuenta de Reel Studio. Es opcional: desbloquea lo que vive en la nube.', subsections: []},
       {
         id: 'proyecto',
         label: 'Proyecto',
@@ -892,7 +893,6 @@ const GROUPS: SettingsGroup[] = [
           {label: 'Zona de peligro', anchor: 'ajustes-peligro'},
         ],
       },
-      {id: 'cuenta', label: 'Cuenta', icon: CircleUser, description: 'Tu cuenta de Reel Studio. Es opcional: desbloquea lo que vive en la nube.', subsections: []},
       {
         id: 'carpeta',
         label: 'Videos',
