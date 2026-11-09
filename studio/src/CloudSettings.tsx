@@ -102,6 +102,7 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
   const [email, setEmail] = useState(s.email ?? '');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
+  const confirm = useConfirm();
   const [signingIn, setSigningIn] = useState(false); // the big button first; then the email
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -117,23 +118,23 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
     }
   };
 
+  const signOut = async () => {
+    if (await confirm({title: '¿Cerrar sesión?', description: 'Este equipo se desconecta de tu cuenta. Tus proyectos locales no se borran.', action: 'Cerrar sesión', destructive: true})) await act(async () => onChange(await cloudApi.logout()));
+  };
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Cuenta de Reel Studio</CardTitle>
-        <CardDescription>
-          {s.signedIn
-            ? 'Tu app de Meta y tus cuentas de Instagram se conectan en tu panel web. Este equipo guarda la sesión, nunca las claves de Meta.'
-            : 'Es opcional. Sin cuenta, todo sigue funcionando en este equipo. Con ella: Instagram, tus proyectos en la nube, tus claves y la sincronización.'}
-        </CardDescription>
-        {s.signedIn && (
+      {s.signedIn && (
+        <CardHeader>
+          <CardTitle>Cuenta de Reel Studio</CardTitle>
+          <CardDescription>Tu app de Meta y tus cuentas de Instagram se conectan en tu panel web. Este equipo guarda la sesión, nunca las claves de Meta.</CardDescription>
           <CardAction>
-            <Button variant="ghost" size="sm" disabled={busy} onClick={() => void act(async () => onChange(await cloudApi.logout()))}>
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => void signOut()}>
               <LogOut /> Cerrar sesión
             </Button>
           </CardAction>
-        )}
-      </CardHeader>
+        </CardHeader>
+      )}
       <CardContent className="flex flex-col gap-3">
         {s.signedIn ? (
           <div className="flex flex-col gap-1">

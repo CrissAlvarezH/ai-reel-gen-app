@@ -14,7 +14,7 @@ export default function SettingsHeader({group, title, description}: SettingsHead
         <span>{group}</span>
       </nav>
       <h2 className={s.title}>{title}</h2>
-      <p className={s.description}>{description}</p>
+      {description && <p className={s.description}>{description}</p>}
     </header>
   );
 }

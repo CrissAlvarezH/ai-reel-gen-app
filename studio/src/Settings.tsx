@@ -881,7 +881,7 @@ const GROUPS: SettingsGroup[] = [
     id: 'general',
     label: 'General',
     sections: [
-      {id: 'cuenta', label: 'Cuenta', icon: CircleUser, description: 'Tu cuenta de Reel Studio. Es opcional: desbloquea lo que vive en la nube.', subsections: []},
+      {id: 'cuenta', label: 'Cuenta', icon: CircleUser, description: '', subsections: []},
       {
         id: 'proyecto',
         label: 'Proyecto',
