@@ -12,6 +12,7 @@ import {Label} from '@/components/ui/label';
 import {Skeleton} from '@/components/ui/skeleton';
 import {cloudApi, useSocket, type CloudSession, type CloudStatus} from './api';
 import {useConfirm} from './confirm';
+import {SyncCard} from './SyncCard';
 import type {CloudProjectState, CloudProjectView, CloudProjects, LocalCloudProject} from '../shared/types';
 
 const NONE = '__none';
@@ -61,14 +62,24 @@ function useCloudStatus() {
 }
 
 // Each skeleton has the shape of the card that replaces it, so nothing jumps when it arrives.
+const ACCOUNT_TITLE = 'Cuenta de Reel Studio';
+const ACCOUNT_TEXT = 'Tu app de Meta y tus cuentas de Instagram se conectan en tu panel web. Este equipo guarda la sesión, nunca las claves de Meta.';
+
 function AccountSkeleton({err}: {err: string}) {
   if (err) return <p className="text-sm text-destructive">{err}</p>;
   return (
     <Card>
       <CardHeader>
-        <Skeleton className="h-5 w-44" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-2/3" />
+        {/* The real texts, hidden: they wrap like the card that replaces this one. */}
+        <CardTitle>
+          <Skeleton className="w-fit max-w-full text-transparent">{ACCOUNT_TITLE}</Skeleton>
+        </CardTitle>
+        <CardDescription>
+          <Skeleton className="w-fit max-w-full text-transparent">{ACCOUNT_TEXT}</Skeleton>
+        </CardDescription>
+        <CardAction>
+          <Skeleton className="h-7 w-28" />
+        </CardAction>
       </CardHeader>
       <CardContent>
         <Skeleton className="h-5 w-56" />
@@ -103,7 +114,19 @@ function InstagramSkeleton({err}: {err: string}) {
 
 export function AccountSection() {
   const {s, setS, err, load} = useCloudStatus();
-  return s ? <AccountCard s={s} onChange={setS} reload={load} /> : <AccountSkeleton err={err} />;
+  if (!s)
+    return (
+      <>
+        <AccountSkeleton err={err} />
+        {!err && <SyncCard loading />}
+      </>
+    );
+  return (
+    <>
+      <AccountCard s={s} onChange={setS} reload={load} />
+      {s.signedIn && <SyncCard />}
+    </>
+  );
 }
 
 export function InstagramSection() {
@@ -161,8 +184,8 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
     <Card>
       {s.signedIn && (
         <CardHeader>
-          <CardTitle>Cuenta de Reel Studio</CardTitle>
-          <CardDescription>Tu app de Meta y tus cuentas de Instagram se conectan en tu panel web. Este equipo guarda la sesión, nunca las claves de Meta.</CardDescription>
+          <CardTitle>{ACCOUNT_TITLE}</CardTitle>
+          <CardDescription>{ACCOUNT_TEXT}</CardDescription>
           <CardAction>
             <Button variant="ghost" size="sm" disabled={busy} onClick={() => void signOut()}>
               <LogOut /> Cerrar sesión
@@ -252,7 +275,7 @@ const BENEFITS: {icon: LucideIcon; title: string; text: string; soon?: boolean}[
   {icon: BarChart3, title: 'Tus métricas reales', text: 'Guardados, compartidos, alcance y retención de tus reels, directo de Instagram, en Mi cuenta.'},
   {icon: Send, title: 'Publica sin salir de la app', text: 'Sube tus reels a Instagram desde Reel Studio, cada proyecto con su cuenta.', soon: true},
   {icon: FolderSync, title: 'Tus proyectos en cualquier equipo', text: 'Ideas, guiones e inspiración sincronizados entre tus computadores.', soon: true},
-  {icon: KeyRound, title: 'Tus claves siempre contigo', text: 'Guárdalas cifradas en tu cuenta y tráelas a un equipo nuevo con solo iniciar sesión.', soon: true},
+  {icon: KeyRound, title: 'Tus claves siempre contigo', text: 'Guárdalas cifradas en tu cuenta y tráelas a un equipo nuevo con solo iniciar sesión.'},
 ];
 
 function AccountBenefits() {
