@@ -102,6 +102,7 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
   const [email, setEmail] = useState(s.email ?? '');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
+  const [signingIn, setSigningIn] = useState(false); // the big button first; then the email
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const act = async (fn: () => Promise<unknown>) => {
@@ -151,6 +152,11 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
         ) : (
           <>
           <AccountBenefits />
+          {!signingIn ? (
+            <Button size="lg" className="h-12 w-full text-base" onClick={() => setSigningIn(true)}>
+              Iniciar sesión
+            </Button>
+          ) : (
           <form
             className="flex flex-col gap-3"
             onSubmit={(e) => {
@@ -160,13 +166,14 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
                 void act(async () => {
                   onChange(await cloudApi.verify(email, code));
                   setSent(false); // so logging out comes back to the email step, not to a spent code
+                  setSigningIn(false);
                   setCode('');
                 });
             }}
           >
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cloud-email">Correo</Label>
-              <Input id="cloud-email" type="email" autoComplete="email" value={email} disabled={busy || sent} onChange={(e) => setEmail(e.target.value)} placeholder="tu@correo.com" />
+              <Input id="cloud-email" type="email" autoComplete="email" autoFocus value={email} disabled={busy || sent} onChange={(e) => setEmail(e.target.value)} placeholder="tu@correo.com" />
             </div>
             {sent && (
               <div className="flex flex-col gap-1.5">
@@ -195,6 +202,7 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
             </Button>
             <span className="text-xs text-muted-foreground">Sin contraseña: te enviamos un código a tu correo.</span>
           </form>
+          )}
           </>
         )}
         {err && <p className="text-sm text-destructive">{err}</p>}
