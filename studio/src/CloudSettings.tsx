@@ -2,15 +2,18 @@
 // session, server/cloud.ts): the header's indicator, Ajustes → Cuenta, and Ajustes → Instagram, which of its
 // accounts this project uses for Instagram's own numbers in Mi cuenta and, later, publishing.
 import {useCallback, useEffect, useState} from 'react';
-import {AlertTriangle, AtSign, ExternalLink, Loader2, LogOut, Mail, RefreshCw} from 'lucide-react';
+import {AlertTriangle, AtSign, BarChart3, ExternalLink, FolderSync, KeyRound, Loader2, LogOut, Mail, RefreshCw, Send, type LucideIcon} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
+import {AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
 import {Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Skeleton} from '@/components/ui/skeleton';
 import {cloudApi, useSocket, type CloudSession, type CloudStatus} from './api';
+import {useConfirm} from './confirm';
+import type {CloudProjectState, CloudProjectView, CloudProjects, LocalCloudProject} from '../shared/types';
 
 const NONE = '__none';
 const date = (iso: string) => new Date(iso).toLocaleDateString('es', {day: 'numeric', month: 'short', year: 'numeric'});
@@ -146,6 +149,8 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
             )}
           </div>
         ) : (
+          <>
+          <AccountBenefits />
           <form
             className="flex flex-col gap-3"
             onSubmit={(e) => {
@@ -188,11 +193,47 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
             <Button type="submit" className="self-start" disabled={busy || (sent ? code.length !== 6 : !email.includes('@'))}>
               {busy && <Loader2 className="animate-spin" />} {sent ? 'Entrar' : 'Enviarme un código'}
             </Button>
+            <span className="text-xs text-muted-foreground">Sin contraseña: te enviamos un código a tu correo.</span>
           </form>
+          </>
         )}
         {err && <p className="text-sm text-destructive">{err}</p>}
       </CardContent>
     </Card>
+  );
+}
+
+// What signing in adds; the app works the same without it. soon: not in the app yet.
+const BENEFITS: {icon: LucideIcon; title: string; text: string; soon?: boolean}[] = [
+  {icon: BarChart3, title: 'Tus métricas reales', text: 'Guardados, compartidos, alcance y retención de tus reels, directo de Instagram, en Mi cuenta.'},
+  {icon: Send, title: 'Publica sin salir de la app', text: 'Sube tus reels a Instagram desde Reel Studio, cada proyecto con su cuenta.', soon: true},
+  {icon: FolderSync, title: 'Tus proyectos en cualquier equipo', text: 'Ideas, guiones e inspiración sincronizados entre tus computadores.', soon: true},
+  {icon: KeyRound, title: 'Tus claves siempre contigo', text: 'Guárdalas cifradas en tu cuenta y tráelas a un equipo nuevo con solo iniciar sesión.', soon: true},
+];
+
+function AccountBenefits() {
+  return (
+    <section className="flex flex-col gap-4 rounded-xl border bg-gradient-to-br from-primary/10 via-muted/30 to-transparent p-5">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-base font-semibold">Lleva Reel Studio más lejos</h3>
+        <p className="text-sm text-muted-foreground">Esto se suma a lo que ya haces en tu computador:</p>
+      </div>
+      <ul className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-4">
+        {BENEFITS.map(({icon: Icon, title, text, soon}) => (
+          <li key={title} className="flex gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Icon className="size-4" />
+            </span>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                {title} {soon && <Badge variant="outline">Próximamente</Badge>}
+              </span>
+              <span className="text-sm text-muted-foreground">{text}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -261,6 +302,11 @@ function ProjectAccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s
               {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
               {panel('Conectar otra')}
             </div>
+            {s.disconnected && (
+              <span className="flex items-center gap-1.5 text-xs text-amber-400">
+                <AlertTriangle className="size-3.5" /> @{s.disconnected} se desconectó: vuelve a conectarla en tu panel.
+              </span>
+            )}
             {a ? (
               <div className="flex flex-col gap-1 text-xs text-muted-foreground">
                 <span>
@@ -278,8 +324,206 @@ function ProjectAccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s
             )}
           </>
         )}
+        {s.projectGone && (
+          <span className="text-xs text-amber-400">
+            Este proyecto se eliminó de tu cuenta. Decide qué hacer en <a href="#/ajustes/proyecto" className="underline">Ajustes → Proyecto</a>.
+          </span>
+        )}
         {err && <p className="text-sm text-destructive">{err}</p>}
       </CardContent>
+    </Card>
+  );
+}
+
+/* ───── This computer's projects in the account ───── */
+
+const STATE_LABEL: Record<CloudProjectState, string> = {
+  none: 'Sin registrar',
+  pending: 'Pendiente de registrar',
+  linked: 'En tu cuenta',
+  'other-account': 'Registrado en otra cuenta',
+  'local-only': 'Solo en este equipo',
+  deleted: 'Se eliminó de tu cuenta',
+};
+
+// Reloaded whenever the session or a link changes (logging in registers the projects in the background).
+function useCloudProjects() {
+  const [data, setData] = useState<CloudProjects | null>(null);
+  const load = useCallback(() => void cloudApi.projects().then(setData, () => {}), []);
+  useEffect(load, [load]);
+  useSocket((msg) => msg.type === 'cloud' && load(), load);
+  return {data, setData, load};
+}
+
+// A project without a link that looks like one in the account: they're never merged without asking.
+function ProjectMatchDialog({local, matches, onResult, onLater}: {local: LocalCloudProject; matches: CloudProjectView[]; onResult: (d: CloudProjects) => void; onLater: () => void}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const act = async (fn: () => Promise<CloudProjects>) => {
+    setBusy(true);
+    setErr('');
+    try {
+      onResult(await fn());
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const one = matches.length === 1 ? matches[0] : null;
+  return (
+    <AlertDialog open onOpenChange={(o) => !o && !busy && onLater()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{one ? `Ya tienes “${one.name}” en tu cuenta. ¿Es el mismo proyecto?` : 'Ya tienes proyectos parecidos en tu cuenta. ¿Alguno es este?'}</AlertDialogTitle>
+          <AlertDialogDescription>
+            En este equipo se llama «{local.name}» (carpeta {local.id}). Solo se comparten su nombre y su cuenta de Instagram; ningún archivo sale de este equipo.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="flex flex-col gap-2">
+          {matches.map((c) => (
+            <div key={c.id} className="flex items-center gap-3 rounded-lg border p-3 text-sm">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate font-medium">{c.name}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  Carpeta {c.slug}
+                  {c.instagram ? ` · @${c.instagram.username}` : ''}
+                </span>
+              </div>
+              <Button size="sm" disabled={busy} onClick={() => void act(() => cloudApi.link(local.id, c.id))}>
+                Vincular
+              </Button>
+            </div>
+          ))}
+        </div>
+        {err && <p className="text-sm text-destructive">{err}</p>}
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" size="sm" disabled={busy} onClick={onLater}>
+            Ahora no
+          </Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void act(() => cloudApi.setLocalOnly(local.id, true))}>
+            Mantener solo en este equipo
+          </Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void act(() => cloudApi.register(local.id, true))}>
+            Crear aparte
+          </Button>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+const matchesOf = (d: CloudProjects, id: string) => d.matches.filter((m) => m.local === id).map((m) => m.cloud);
+
+// "Ahora no" lasts until the app reloads: he can still answer from Ajustes → Proyecto.
+const later = new Set<string>();
+
+// Wherever he is when logging in finds a project that looks like one in the account.
+export function CloudProjectsPrompt() {
+  const {data, setData} = useCloudProjects();
+  const [, rerender] = useState(0);
+  const local = data?.local.find((p) => !later.has(p.id) && matchesOf(data, p.id).length > 0);
+  if (!data || !local) return null;
+  return (
+    <ProjectMatchDialog
+      key={local.id}
+      local={local}
+      matches={matchesOf(data, local.id)}
+      onResult={setData}
+      onLater={() => {
+        later.add(local.id);
+        rerender((n) => n + 1);
+      }}
+    />
+  );
+}
+
+// Ajustes → Proyecto. Signed out there's nothing to show: everything keeps working locally.
+export function ProjectsCloudCard() {
+  const {data, setData, load} = useCloudProjects();
+  const confirm = useConfirm();
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  const [asking, setAsking] = useState<string | null>(null);
+  if (!data?.signedIn) return null;
+
+  const act = async (id: string, fn: () => Promise<CloudProjects>) => {
+    setBusy(id);
+    setErr('');
+    try {
+      setData(await fn());
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  };
+  const asked = asking ? data.local.find((p) => p.id === asking) : null;
+  const button = (p: LocalCloudProject, label: string, fn: () => Promise<CloudProjects>, variant: 'outline' | 'ghost' = 'outline') => (
+    <Button variant={variant} size="sm" disabled={!!busy} onClick={() => void act(p.id, fn)}>
+      {busy === p.id && <Loader2 className="animate-spin" />} {label}
+    </Button>
+  );
+  const elsewhere = async (p: LocalCloudProject) => {
+    const yes = await confirm({title: `¿Registrar «${p.name}» en esta cuenta?`, description: 'Quedará como un proyecto nuevo en la cuenta con la que iniciaste sesión. La otra cuenta no se toca.', action: 'Registrar'});
+    if (yes) void act(p.id, () => cloudApi.register(p.id, true));
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Proyectos en tu cuenta</CardTitle>
+        <CardDescription>Registrar un proyecto solo guarda su nombre y su cuenta de Instagram. Ningún archivo sale de este equipo.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        {data.local.map((p) => {
+          const similar = p.state === 'none' ? matchesOf(data, p.id) : [];
+          return (
+            <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm">
+              <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+              <Badge variant="outline">{STATE_LABEL[p.state]}</Badge>
+              {similar.length > 0 && (
+                <Button variant="outline" size="sm" disabled={!!busy} onClick={() => setAsking(p.id)}>
+                  ¿Es el mismo proyecto?
+                </Button>
+              )}
+              {(p.state === 'pending' || (p.state === 'none' && !similar.length) || p.state === 'local-only') && button(p, 'Registrar en mi cuenta', () => cloudApi.register(p.id))}
+              {(p.state === 'none' || p.state === 'pending') && !similar.length && button(p, 'Mantener solo en este equipo', () => cloudApi.setLocalOnly(p.id, true), 'ghost')}
+              {p.state === 'other-account' && (
+                <Button variant="outline" size="sm" disabled={!!busy} onClick={() => void elsewhere(p)}>
+                  Registrar en esta cuenta
+                </Button>
+              )}
+              {p.state === 'deleted' && (
+                <>
+                  {button(p, 'Volver a registrar', () => cloudApi.register(p.id, true))}
+                  {button(p, 'Dejar solo local', () => cloudApi.setLocalOnly(p.id, true), 'ghost')}
+                </>
+              )}
+            </div>
+          );
+        })}
+        {data.error && (
+          <span className="flex items-center gap-2 text-sm text-destructive">
+            {data.error}
+            <Button variant="ghost" size="sm" onClick={load}>
+              <RefreshCw /> Reintentar
+            </Button>
+          </span>
+        )}
+        {err && <p className="text-sm text-destructive">{err}</p>}
+      </CardContent>
+      {asked && (
+        <ProjectMatchDialog
+          local={asked}
+          matches={matchesOf(data, asked.id)}
+          onResult={(d) => {
+            setData(d);
+            setAsking(null);
+          }}
+          onLater={() => setAsking(null)}
+        />
+      )}
     </Card>
   );
 }
