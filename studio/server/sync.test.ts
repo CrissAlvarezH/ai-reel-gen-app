@@ -101,8 +101,8 @@ const commits = () => fake.log.filter((l) => l.url.endsWith('/commit')).length;
 /* ───── The list ───── */
 
 test('the allow-list: what goes and what never goes', () => {
-  for (const ok of ['ideas.json', 'config/profile.json', 'videos/a/audio/vo.mp3', 'videos/a/public/words.json', 'account/u/abc/reel.json', 'inspiration/u/abc/sheet_01.jpg', 'inspiration/u/abc/sheet_100.jpg', 'sources/items/x.md', 'avatar.png']) assert.ok(classify(ok, 'project'), ok);
-  for (const no of ['.env', 'videos/a/.env', 'videos/a/.env.local', 'config/instagram.json', 'config/chrome.json', 'project.json', 'videos/a/node_modules/x/y.js', 'videos/a/out/v1.mp4', 'videos/a/footage/c.mp4', 'videos/a/public/mix.wav', 'videos/a/public/footage.mp4', 'videos/a/x.raw.mp4', 'videos/a/src/__pycache__/a.pyc', 'videos/a/x.tmp', 'inspiration/u/abc/video.mp4', 'inspiration/u/abc/audio.wav', '.reel-studio/chats/a.json', 'ideas.antes.json', '../fuera', 'videos/../../fuera', '/abs', 'videos/a\\b'])
+  for (const ok of ['ideas.json', 'config/profile.json', 'videos/a/audio/vo.mp3', 'videos/a/public/words.json', 'videos/a/public/mix.wav', 'account/u/abc/reel.json', 'inspiration/u/abc/sheet_01.jpg', 'inspiration/u/abc/sheet_100.jpg', 'sources/items/x.md', 'avatar.png']) assert.ok(classify(ok, 'project'), ok);
+  for (const no of ['.env', 'videos/a/.env', 'videos/a/.env.local', 'config/instagram.json', 'config/chrome.json', 'project.json', 'videos/a/node_modules/x/y.js', 'videos/a/out/v1.mp4', 'videos/a/footage/c.mp4', 'videos/a/public/vo.wav', 'videos/a/public/mix.raw.wav', 'videos/a/public/footage.mp4', 'videos/a/x.raw.mp4', 'videos/a/src/__pycache__/a.pyc', 'videos/a/x.tmp', 'inspiration/u/abc/video.mp4', 'inspiration/u/abc/audio.wav', '.reel-studio/chats/a.json', 'ideas.antes.json', '../fuera', 'videos/../../fuera', '/abs', 'videos/a\\b'])
     assert.equal(classify(no, 'project'), null, no);
   assert.equal(classify('styles/mio/style.json', 'shared', new Set())?.group, 'styles');
   assert.equal(classify('styles/plano/style.json', 'shared', new Set(['styles/plano'])), null);

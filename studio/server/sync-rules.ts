@@ -32,7 +32,8 @@ function videoFile(rest: string) {
   if (parts[0] === 'out' || parts[0] === 'footage') return false;
   const name = parts.at(-1)!;
   if (JUNK_FILE.test(name) || /\.raw\.mp4$/i.test(name)) return false;
-  return !(parts[0] === 'public' && parts.length === 2 && (/\.wav$/i.test(name) || name === 'footage.mp4'));
+  // mix.wav is what the render plays: without it a video brought to another computer doesn't render.
+  return !(parts[0] === 'public' && parts.length === 2 && ((/\.wav$/i.test(name) && name !== 'mix.wav') || name === 'footage.mp4'));
 }
 
 function projectFile(rel: string): Classified | null {
