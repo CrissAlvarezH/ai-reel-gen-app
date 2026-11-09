@@ -742,7 +742,11 @@ export type SyncRemoteState = {
   primaryDeviceId: string | null;
   openConflicts: number;
 };
-export type SyncJobState = 'pending' | 'running' | 'done' | 'error' | 'confirm';
+// partial: it finished, but some files stayed out.
+export type SyncJobState = 'pending' | 'running' | 'done' | 'partial' | 'error' | 'confirm';
+// What actually went wrong, to be able to diagnose it. Never a presigned URL or a token.
+export type SyncCause = {where: 'cloud' | 'storage'; kind: 'network' | 'server'; code?: string; message?: string; status?: number; path?: string};
+export type SyncFailures = {total: number; groups: {reason: string; count: number; sample: string[]}[]};
 export type SyncJobStats = {uploaded: number; downloaded: number; deleted: number; skipped: number; conflicts: number};
 export type SyncJob = {
   id: string;
@@ -762,6 +766,8 @@ export type SyncJob = {
   total: number;
   stats: SyncJobStats | null;
   warnings: string[];
+  cause?: SyncCause | null;
+  failures?: SyncFailures | null;
 };
 export type SyncQueue = {jobs: SyncJob[]; history: SyncJob[]};
 export type ProjectSyncState = 'local' | 'cloud' | 'synced' | 'changes' | 'conflict' | 'syncing' | 'error';

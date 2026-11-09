@@ -10,11 +10,12 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import {Readable, Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
+import {setTimeout as delay} from 'node:timers/promises';
 import {DOC_LIMIT, FILE_LIMIT, classify, inScope, pruned, startsOf, validPath, videoOf, type Channel, type Scope, type Storage} from './sync-rules.ts';
 import {readJson, writeJson} from './platform.ts';
 import {httpError} from './reels.ts';
-import {syncApi, type SyncChange, type SyncEntry, type SyncResult} from './cloud.ts';
-import type {SyncGroupId, SyncJobStats, SyncRemoteState} from '../shared/types.ts';
+import {syncApi, type SyncChange, type SyncEntry, type SyncResult, type SyncUpload} from './cloud.ts';
+import type {SyncCause, SyncGroupId, SyncJobStats, SyncRemoteState} from '../shared/types.ts';
 
 export type FileState = {sha256: string | null; size: number; mtime: number; rev: number; deleted?: boolean};
 // baseRev only moves with a full cycle. behind: groups that were off while it moved, so what happened in them since
@@ -46,14 +47,19 @@ export type Context = {
   busyVideo?: (slug: string) => boolean;
   onProgress?: (p: Progress) => void;
 };
-export type CycleResult = SyncJobStats & {paths: string[]; warnings: string[]; needsConfirm: number | null};
+// A file this cycle left out. retry: the network or the storage's fault, so the job comes back for it by itself.
+export type Failure = {path: string; reason: string; retry: boolean; cause?: SyncCause};
+export type CycleResult = SyncJobStats & {paths: string[]; warnings: string[]; needsConfirm: number | null; failed: Failure[]};
 
+export const tuning = {putRetries: [1_000, 4_000, 12_000]};
 const MAX_BATCH = 200;
 const MAX_BODY = 2_500_000; // the API's limit is 3 MB; JSON escaping and the rest of the body fit in the difference
 const PUT_AT_ONCE = 8;
 const GET_AT_ONCE = 4;
 const MASS_DELETES = 50;
 const MASS_SHARE = 0.2;
+const STORAGE_DOWN = PUT_AT_ONCE * 2; // files in a row out of tries: it's the storage, not them
+const LOGGED_CAUSES = 20;
 
 // held: it differs from the account and didn't go up (too big, unreadable, still changing), so nothing may overwrite it.
 // seed: the app's own unedited copy, which anything from the account may replace.
@@ -125,12 +131,13 @@ const busy = (ctx: Context, rel: string) => {
 };
 
 // busy: videos an agent is working on, left out. busyChanged: files in them that differ, which stay as pending.
-export type Review = {seen: Map<string, Local>; changed: Local[]; deletes: string[]; busy: number; busyChanged: number; warnings: string[]};
+// refused: changed files that can't go at all (too big, not text).
+export type Review = {seen: Map<string, Local>; changed: Local[]; deletes: string[]; busy: number; busyChanged: number; warnings: string[]; refused: {path: string; reason: string}[]};
 
 // What's different from the last time this computer and the account agreed. statOnly: without reading anything, to
 // count before asking (a changed date counts as a change).
 export async function review(ctx: Context, state: SyncState, statOnly = false): Promise<Review> {
-  const out: Review = {seen: new Map(), changed: [], deletes: [], busy: 0, busyChanged: 0, warnings: []};
+  const out: Review = {seen: new Map(), changed: [], deletes: [], busy: 0, busyChanged: 0, warnings: [], refused: []};
   const busySlugs = new Set<string>();
   const busyFound = new Set<string>();
   const visit = async (rel: string, abs: string, st: fs.Stats) => {
@@ -147,28 +154,30 @@ export async function review(ctx: Context, state: SyncState, statOnly = false): 
     out.seen.set(rel, local);
     if (old && !old.deleted && old.size === st.size && old.mtime === local.mtime) return void (local.sha256 = old.sha256!);
     if (statOnly) return void out.changed.push(local);
+    const refuse = (reason: string) => {
+      out.warnings.push(`${rel} ${reason} y no se sincronizó`);
+      out.refused.push({path: rel, reason});
+      local.held = true;
+    };
     try {
       if (c.storage === 'doc') {
         const buf = await fsp.readFile(abs);
         const content = buf.length <= DOC_LIMIT ? docContent(rel, buf) : null;
         if (content === null) {
-          out.warnings.push(buf.length > DOC_LIMIT ? `${rel} pasa de 512 KB y no se sincronizó` : `${rel} no se puede leer como texto y no se sincronizó`);
-          return void (local.held = true);
+          return refuse(buf.length > DOC_LIMIT ? 'pasa de 512 KB' : 'no se puede leer como texto');
         }
         local.content = content;
         local.sha256 = sha(content);
       } else {
         if (st.size > FILE_LIMIT) {
-          out.warnings.push(`${rel} pasa de 100 MB y no se sincronizó`);
-          return void (local.held = true);
+          return refuse('pasa de 100 MB');
         }
         local.sha256 = await hashFile(abs);
       }
     } catch (e) {
       if (isEnoent(e)) return void out.seen.delete(rel);
       if (e instanceof SyntaxError) {
-        out.warnings.push(`${rel} no es un JSON válido y no se sincronizó`);
-        return void (local.held = true);
+        return refuse('no es un JSON válido');
       }
       throw e;
     }
@@ -200,7 +209,14 @@ async function pool<T>(items: T[], at: number, fn: (x: T) => Promise<void>) {
   }));
 }
 
-const offline = (e: unknown) => Object.assign(httpError(502, 'se cortó la conexión con el almacenamiento'), {offline: true, cause: e});
+// What goes into a log or the job: a presigned URL carries its signature, so nothing that looks like one gets through.
+const scrub = (m: string) => m.replace(/\w+:\/\/\S+/g, '[url]').replace(/\bBearer\s+\S+/gi, '[token]').replace(/[?&][\w-]+=\S+/g, '').slice(0, 200);
+export function netCause(e: unknown): Pick<SyncCause, 'code' | 'message'> {
+  const c = ((e as {cause?: unknown}).cause ?? e) as {code?: unknown; name?: string; message?: string};
+  return {code: typeof c.code === 'string' ? c.code : c.name, message: scrub(String(c.message ?? e))};
+}
+const storageTrouble = (cause: SyncCause) => (cause.kind === 'network' ? `se cortó la conexión con el almacenamiento${cause.code ? ` (${cause.code})` : ''}` : `el almacenamiento respondió ${cause.status}`);
+const storageError = (cause: SyncCause) => Object.assign(httpError(502, storageTrouble(cause)), {offline: cause.kind === 'network', cause, syncCause: cause});
 
 function changedSince(l: Local) {
   try {
@@ -211,46 +227,87 @@ function changedSince(l: Local) {
   }
 }
 
-async function putBlobs(ctx: Context, blobs: Local[], tick: () => void, warn: (m: string) => void, storageTrouble: () => void) {
-  const failed = new Set<string>();
-  for (let i = 0; i < blobs.length; i += MAX_BATCH) {
-    ctx.signal?.throwIfAborted();
-    const batch = blobs.slice(i, i + MAX_BATCH);
-    const r = await syncApi.prepare(ctx.cloudId, batch.map((b) => ({path: b.path, sha256: b.sha256, size: b.size})));
-    for (const x of r.rejected ?? []) {
-      warn(`${x.path}: ${x.error}`);
-      failed.add(x.path);
+// changing: he's still editing it, so the next cycle takes it. Anything else that isn't 'ok' stays out of this cycle.
+type PutOutcome = 'ok' | 'changing' | Omit<Failure, 'path'>;
+
+async function putFile(ctx: Context, u: SyncUpload, file: Local): Promise<PutOutcome> {
+  for (let attempt = 0; ; attempt++) {
+    if (changedSince(file)) return 'changing';
+    let body: Blob;
+    try {
+      // A Blob and not a stream: S3 needs the length up front, and this doesn't load the file in memory.
+      body = await fs.openAsBlob(file.abs);
+    } catch (e) {
+      // This disk's trouble, not the network's.
+      return changedSince(file) ? 'changing' : {reason: `no se pudo leer el archivo (${(e as NodeJS.ErrnoException).code ?? 'error'})`, retry: false};
     }
-    await pool(r.uploads ?? [], PUT_AT_ONCE, async (u) => {
-      ctx.signal?.throwIfAborted();
-      const owners = batch.filter((b) => b.sha256 === u.sha256);
-      const file = owners.find((b) => !changedSince(b));
-      const fail = () => owners.forEach((b) => failed.add(b.path));
-      if (!file) return fail(); // he's still editing it: the next cycle takes it
-      let res: Response;
-      try {
-        // A Blob and not a stream: S3 needs the length up front, and this doesn't load the file in memory.
-        res = await fetch(u.url, {method: u.method, headers: u.headers, body: await fs.openAsBlob(file.abs), signal: ctx.signal});
-      } catch (e) {
-        if ((e as Error).name === 'AbortError') throw e;
-        if ((e as Error).name === 'NotReadableError') return fail();
-        throw offline(e);
-      }
-      if (!res.ok) {
-        // A 5xx is the storage having a bad moment, not this file's fault: the job comes back for it.
-        if (res.status >= 500) storageTrouble();
-        else warn(`${file.path}: el almacenamiento respondió ${res.status}`);
-        return fail();
-      }
-      owners.forEach(tick);
-    });
+    let cause: SyncCause;
+    try {
+      const res = await fetch(u.url, {method: u.method, headers: u.headers, body, signal: ctx.signal});
+      // Read to the end, so the connection goes back to the pool. S3's error body quotes the signed request: only its code is kept.
+      const reply = await res.text().catch(() => '');
+      if (res.ok) return 'ok';
+      cause = {where: 'storage', kind: 'server', status: res.status, code: /<Code>([\w.-]{1,64})<\/Code>/.exec(reply)?.[1], path: file.path};
+      if (res.status < 500) return {reason: storageTrouble(cause), retry: false, cause};
+    } catch (e) {
+      const err = e as Error & {cause?: Error};
+      if (err.name === 'AbortError') throw e;
+      if (err.name === 'NotReadableError' || err.cause?.name === 'NotReadableError' || changedSince(file)) return 'changing';
+      cause = {where: 'storage', kind: 'network', ...netCause(e), path: file.path};
+    }
+    if (attempt >= tuning.putRetries.length) return {reason: storageTrouble(cause), retry: true, cause};
+    await delay(tuning.putRetries[attempt], undefined, {signal: ctx.signal});
   }
+}
+
+type Health = {streak: number; down: Omit<Failure, 'path'> | null};
+
+// One batch up to the storage. Returns the paths that didn't make it; every blob here gets exactly one tick, whatever happened to it.
+async function putBatch(ctx: Context, batch: Local[], health: Health, tick: () => void, fail: (f: Failure) => void) {
+  const failed = new Set<string>();
+  const settled = new Set<string>();
+  const settle = (b: Local) => {
+    if (settled.has(b.path)) return;
+    settled.add(b.path);
+    tick();
+  };
+  const drop = (owners: Local[], why?: Omit<Failure, 'path'>) => {
+    for (const b of owners) {
+      failed.add(b.path);
+      // Each one in its own name, or the log would blame the first file for all of them.
+      if (why) fail({...why, path: b.path, ...(why.cause ? {cause: {...why.cause, path: b.path}} : {})});
+      settle(b);
+    }
+  };
+  if (health.down) {
+    drop(batch, health.down);
+    return failed;
+  }
+  const r = await syncApi.prepare(ctx.cloudId, batch.map((b) => ({path: b.path, sha256: b.sha256, size: b.size})));
+  for (const x of r.rejected ?? []) drop(batch.filter((b) => b.path === x.path), {reason: x.error, retry: false});
+  await pool(r.uploads ?? [], PUT_AT_ONCE, async (u) => {
+    ctx.signal?.throwIfAborted();
+    const owners = batch.filter((b) => b.sha256 === u.sha256 && !failed.has(b.path));
+    if (health.down) return drop(owners, health.down);
+    const file = owners.find((b) => !changedSince(b));
+    if (!file) return drop(owners);
+    const out = await putFile(ctx, u, file);
+    if (out === 'changing') return drop(owners);
+    if (out === 'ok') {
+      health.streak = 0;
+      return owners.forEach(settle);
+    }
+    if (out.retry && ++health.streak >= STORAGE_DOWN) health.down = out;
+    drop(owners, out);
+  });
+  // The storage already had these.
+  batch.forEach(settle);
   return failed;
 }
 
 type Lost = Map<string, {conflictId: string | null; rev: number}>;
 
-async function commitAll(ctx: Context, state: SyncState, changes: {wire: SyncChange; local: Local | null}[], stats: SyncJobStats, lost: Lost, tick: () => void, warn: (m: string) => void) {
+async function commitAll(ctx: Context, state: SyncState, changes: {wire: SyncChange; local: Local | null}[], stats: SyncJobStats, lost: Lost, tick: () => void, fail: (f: Failure) => void) {
   const size = (c: {wire: SyncChange}) => Buffer.byteLength(JSON.stringify(c.wire));
   let batch: typeof changes = [];
   let bytes = 0;
@@ -259,21 +316,27 @@ async function commitAll(ctx: Context, state: SyncState, changes: {wire: SyncCha
     ctx.signal?.throwIfAborted();
     const r = await syncApi.commit(ctx.cloudId, batch.map((c) => c.wire));
     const byPath = new Map(batch.map((c) => [c.wire.path, c]));
+    const refused = (c: (typeof batch)[number], reason: string) => {
+      // Its file didn't arrive, or the cloud won't take that path: it stays here as a local change for another try.
+      fail({path: c.wire.path, reason, retry: false});
+      stats.skipped++;
+      if (c.local) c.local.held = true;
+    };
     for (const res of r.results as SyncResult[]) {
       const c = byPath.get(res.path);
       if (!c) continue;
+      byPath.delete(res.path);
       tick();
       if (res.status === 'lost') lost.set(res.path, {conflictId: res.conflictId ?? null, rev: res.rev ?? 0});
       else if (res.status === 'applied' || res.status === 'won' || res.status === 'same') {
         state.files[res.path] = c.wire.deleted ? {sha256: null, size: 0, mtime: c.wire.mtime, rev: res.rev ?? 0, deleted: true} : {sha256: c.wire.sha256!, size: c.local!.size, mtime: c.local!.mtime, rev: res.rev ?? 0};
         if (res.status !== 'same') c.wire.deleted ? stats.deleted++ : stats.uploaded++;
         if (res.status === 'won') stats.conflicts++;
-      } else {
-        // Its file didn't arrive, or the cloud won't take that path: it stays here as a local change for another try.
-        warn(`${res.path}: ${res.error ?? 'tu cuenta no lo aceptó'}`);
-        stats.skipped++;
-        if (c.local) c.local.held = true;
-      }
+      } else refused(c, res.error ?? 'tu cuenta no lo aceptó');
+    }
+    for (const c of byPath.values()) {
+      tick();
+      refused(c, 'tu cuenta no respondió por este archivo');
     }
     saveState(ctx.dir, ctx.channel, state);
     batch = [];
@@ -340,9 +403,9 @@ export async function download(url: string, tmp: string, signal?: AbortSignal) {
     res = await fetch(url, {signal});
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
-    throw offline(e);
+    throw storageError({where: 'storage', kind: 'network', ...netCause(e)});
   }
-  if (!res.ok || !res.body) throw httpError(502, `el almacenamiento respondió ${res.status}`);
+  if (!res.ok || !res.body) throw storageError({where: 'storage', kind: 'server', status: res.status});
   const h = createHash('sha256');
   await pipeline(
     Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]),
@@ -390,9 +453,15 @@ async function cycle(ctx: Context): Promise<CycleResult> {
   ctx.onProgress?.({phase: 'review', done: 0, total: 0});
   const r = await review(ctx, state);
   const warnings = r.warnings;
-  const warn = (m: string) => void warnings.push(m);
+  const failed: Failure[] = r.refused.map((x) => ({...x, retry: false}));
+  let logged = 0;
+  const fail = (f: Failure) => {
+    failed.push(f);
+    warnings.push(`${f.path}: ${f.reason}`);
+    if (f.cause && logged++ < LOGGED_CAUSES) console.warn('[sync] archivo sin subir:', JSON.stringify(f.cause));
+  };
   stats.skipped += r.busy;
-  const done = (needsConfirm: number | null = null): CycleResult => ({...stats, paths, warnings, needsConfirm});
+  const done = (needsConfirm: number | null = null): CycleResult => ({...stats, paths, warnings, needsConfirm, failed});
 
   // 2. A disk that isn't mounted, or a folder half-copied, looks exactly like having deleted everything.
   const live = Object.entries(state.files).filter(([p, s]) => !s.deleted && allowed(ctx, p)).length;
@@ -401,26 +470,37 @@ async function cycle(ctx: Context): Promise<CycleResult> {
     return done(r.deletes.length);
   }
 
-  // 3. Upload.
-  const blobs = r.changed.filter((l) => l.storage === 'blob');
-  const upSteps = blobs.length + r.changed.length + r.deletes.length;
+  // 3. Upload, a batch at a time up to its commit: what's confirmed is saved, so a cut only repeats the batch it hit.
+  const upSteps = r.changed.filter((l) => l.storage === 'blob').length + r.changed.length + r.deletes.length;
   let finished = 0;
   const tick = () => ctx.onProgress?.({phase: 'upload', done: ++finished, total: upSteps});
-  let storageDown = false;
-  const failed = await putBlobs(ctx, blobs, tick, warn, () => void (storageDown = true));
-  const changes: {wire: SyncChange; local: Local | null}[] = [];
-  for (const l of r.changed) {
-    if (failed.has(l.path) || changedSince(l) || busy(ctx, l.path)) {
-      stats.skipped++;
-      l.held = true;
-      continue;
-    }
-    changes.push({wire: {path: l.path, baseRev: state.files[l.path]?.rev ?? 0, sha256: l.sha256, size: l.content === undefined ? l.size : Buffer.byteLength(l.content), mtime: l.mtime, ...(l.content === undefined ? {} : {content: l.content})}, local: l});
-  }
-  for (const p of r.deletes) if (!busy(ctx, p)) changes.push({wire: {path: p, baseRev: state.files[p].rev, deleted: true, mtime: Date.now()}, local: null});
+  const health: Health = {streak: 0, down: null};
   const lost: Lost = new Map();
-  await commitAll(ctx, state, changes, stats, lost, tick, warn);
-  saveState(ctx.dir, ctx.channel, state);
+  const work: (Local | string)[] = [...r.changed, ...r.deletes];
+  for (let i = 0; i < work.length; i += MAX_BATCH) {
+    ctx.signal?.throwIfAborted();
+    const part = work.slice(i, i + MAX_BATCH);
+    const files = part.filter((x): x is Local => typeof x !== 'string');
+    const blobs = files.filter((l) => l.storage === 'blob');
+    const notUp = blobs.length ? await putBatch(ctx, blobs, health, tick, fail) : new Set<string>();
+    const changes: {wire: SyncChange; local: Local | null}[] = [];
+    for (const l of files) {
+      if (notUp.has(l.path) || changedSince(l) || busy(ctx, l.path)) {
+        stats.skipped++;
+        l.held = true;
+        tick();
+        continue;
+      }
+      changes.push({wire: {path: l.path, baseRev: state.files[l.path]?.rev ?? 0, sha256: l.sha256, size: l.content === undefined ? l.size : Buffer.byteLength(l.content), mtime: l.mtime, ...(l.content === undefined ? {} : {content: l.content})}, local: l});
+    }
+    for (const p of part) {
+      if (typeof p !== 'string') continue;
+      if (busy(ctx, p)) tick();
+      else changes.push({wire: {path: p, baseRev: state.files[p].rev, deleted: true, mtime: Date.now()}, local: null});
+    }
+    await commitAll(ctx, state, changes, stats, lost, tick, fail);
+    saveState(ctx.dir, ctx.channel, state);
+  }
 
   // 4. Read what's new, now that our own changes are in.
   const catching = ctx.scope.kind === 'full' ? state.behind.some((g) => ctx.active.has(g)) : ctx.scope.kind === 'group' ? state.behind.includes(ctx.scope.group) : state.behind.includes('videos');
@@ -531,7 +611,7 @@ async function cycle(ctx: Context): Promise<CycleResult> {
         let wrote = true;
         if (typeof item.content === 'string') {
           if (sha(item.content) !== e.sha256) {
-            warn(`${e.path}: no coincide con su verificación y no se aplicó`);
+            fail({path: e.path, reason: 'no coincide con su verificación y no se aplicó', retry: false});
             return skip();
           }
           if (lost.has(e.path)) await keepLoser(ctx, e.path, lost.get(e.path)!.conflictId, local);
@@ -539,7 +619,7 @@ async function cycle(ctx: Context): Promise<CycleResult> {
           try {
             body = docOnDisk(e.path, abs, item.content);
           } catch {
-            warn(`${e.path}: llegó con un formato inválido y no se aplicó`);
+            fail({path: e.path, reason: 'llegó con un formato inválido y no se aplicó', retry: false});
             return skip();
           }
           await land(abs, e.mtime, (tmp) => fsp.writeFile(tmp, body));
@@ -552,11 +632,13 @@ async function cycle(ctx: Context): Promise<CycleResult> {
               throw Object.assign(new Error('mismatch'), {mismatch: true});
             }
           }).catch((err) => {
-            if (!(err as {mismatch?: boolean}).mismatch) throw err;
+            const {mismatch, syncCause} = err as {mismatch?: boolean; syncCause?: SyncCause};
+            if (syncCause) syncCause.path = e.path;
+            if (!mismatch) throw err;
           });
         } else wrote = false;
         if (!wrote) {
-          warn(`${e.path}: no coincide con su verificación y no se aplicó`);
+          fail({path: e.path, reason: 'no coincide con su verificación y no se aplicó', retry: false});
           return skip();
         }
         const st = await fsp.lstat(abs);
@@ -591,7 +673,5 @@ async function cycle(ctx: Context): Promise<CycleResult> {
     if (ctx.scope.kind === 'group' && !Number.isFinite(held)) state.behind = state.behind.filter((x) => x !== g);
   }
   saveState(ctx.dir, ctx.channel, state);
-  // Everything that could happen, happened and is saved; the retry only has what the storage turned down left to do.
-  if (storageDown) throw offline(new Error('el almacenamiento falló'));
   return done();
 }

@@ -13,6 +13,8 @@ const DOCS = /^(config\/(profile|voice|audience|images|social|account|chat|check
 export function fakeCloud() {
   const projects = new Map<string, FakeProject>();
   const blobs = new Map<string, Buffer>();
+  const puts = new Map<string, number>();
+  let commitsDone = 0;
   const log: {method: string; url: string; body: Record<string, unknown> | null}[] = [];
   const ctl = {
     down: false,
@@ -23,6 +25,10 @@ export function fakeCloud() {
     extraEntries: [] as FakeEntry[],
     putHeaders: [] as Record<string, unknown>[],
     putStatus: 0, // answer every PUT with this, when it isn't 0
+    onPut: null as ((sha: string, nth: number) => number | 'cut') | null, // per PUT: a status to answer, 0 for none, 'cut' to drop the connection
+    apiStatus: 0, // answer prepare and commit with this, when it isn't 0
+    commitReject: new Map<string, string>(), // path -> why the commit turns it down
+    downAfterCommits: 0, // the network goes when this many commits have been answered
     userName: null as string | null,
     onFetch: null as (() => void) | null,
   };
@@ -55,6 +61,11 @@ export function fakeCloud() {
       if (blob) {
         if (method === 'PUT') {
           ctl.putHeaders.push({...req.headers});
+          const nth = puts.get(blob[1]) ?? 0;
+          puts.set(blob[1], nth + 1);
+          const planned = ctl.onPut?.(blob[1], nth) ?? 0;
+          if (planned === 'cut') return req.socket.destroy();
+          if (planned) return send(planned, {error: 'storage'});
           if (ctl.putStatus) return send(ctl.putStatus, {error: 'storage'});
           if (sha(raw) !== blob[1]) return send(400, {error: 'hash'});
           blobs.set(blob[1], raw);
@@ -118,13 +129,16 @@ export function fakeCloud() {
         }
         return send(200, {items, omitted});
       }
+      if ((action === 'prepare' || action === 'commit') && ctl.apiStatus) return send(ctl.apiStatus, {});
       if (action === 'prepare') {
         if (ctl.quotaFull) return send(413, {error: 'Superaste tu espacio'});
         const uploads: unknown[] = [];
         const present: string[] = [];
+        // Like the real one: an upload nobody committed yet doesn't count as being there.
+        const committed = new Set([...p.entries.values()].map((e) => e.sha256));
         for (const f of body.files as {sha256: string}[]) {
-          if (blobs.has(f.sha256)) present.push(f.sha256);
-          else uploads.push({sha256: f.sha256, url: `${base}/s3/${f.sha256}`, method: 'PUT', headers: {'Content-Type': 'application/octet-stream'}});
+          if (committed.has(f.sha256)) present.push(f.sha256);
+          else uploads.push({sha256: f.sha256, url: `${base}/s3/${f.sha256}?X-Amz-Signature=SECRETO`, method: 'PUT', headers: {'Content-Type': 'application/octet-stream'}});
         }
         return send(200, {uploads, present, rejected: []});
       }
@@ -132,6 +146,11 @@ export function fakeCloud() {
         const results: unknown[] = [];
         p.rev++;
         for (const c of body.changes as {path: string; baseRev: number; sha256?: string; size?: number; mtime: number; content?: string; deleted?: boolean}[]) {
+          const refusal = ctl.commitReject.get(c.path);
+          if (refusal) {
+            results.push({path: c.path, status: 'rejected', error: refusal});
+            continue;
+          }
           const cur = p.entries.get(c.path);
           const deleted = !!c.deleted;
           const next = (): FakeEntry => ({path: c.path, rev: p.rev, sha256: deleted ? null : c.sha256!, size: deleted ? 0 : c.size!, mtime: c.mtime, deleted, storage: DOCS.test(c.path) ? 'doc' : 'blob', content: c.content});
@@ -155,6 +174,10 @@ export function fakeCloud() {
             p.conflicts.push(conflict({device: 'este', mtime: c.mtime, deleted, storage: cur.storage, sha: c.sha256 ?? null, content: c.content}, {device: 'otro', mtime: cur.mtime}));
             results.push({path: c.path, status: 'lost', rev: cur.rev, conflictId: id});
           }
+        }
+        if (ctl.downAfterCommits && ++commitsDone >= ctl.downAfterCommits) {
+          ctl.down = true;
+          commitsDone = 0;
         }
         return send(200, {rev: p.rev, results});
       }
@@ -181,6 +204,7 @@ export function fakeCloud() {
     log,
     ctl,
     addProject,
+    resetPuts: () => puts.clear(),
     listen: () =>
       new Promise<string>((resolve) =>
         server.listen(0, '127.0.0.1', () => {

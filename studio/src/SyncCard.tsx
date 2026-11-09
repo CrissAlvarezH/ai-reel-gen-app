@@ -89,7 +89,7 @@ function statusLabel(d: SyncDetail) {
     case 'conflict':
       return `Conflicto (${s.conflicts})`;
     case 'changes':
-      return `Con cambios (↑${s.up} ↓${s.down})`;
+      return s.error ?? `Con cambios (↑${s.up} ↓${s.down})`;
     case 'error':
       return 'Error';
     case 'synced':
@@ -110,6 +110,7 @@ function jobState(j: SyncJob) {
   if (j.state === 'pending') return j.waiting ?? 'En cola';
   if (j.state === 'done') return j.ended ? `Hecho · ${fmtAgo(j.ended)}` : 'Hecho';
   if (j.state === 'error') return j.error ?? 'Error';
+  if (j.state === 'partial') return `${j.error ?? 'Incompleto'}${j.ended ? ` · ${fmtAgo(j.ended)}` : ''}`;
   return `Se borrarían ${j.deletes} archivos en tu cuenta`;
 }
 
@@ -362,14 +363,20 @@ export function SyncCard({loading: outerLoading}: {loading?: boolean}) {
                 <li key={j.id} className="flex items-center gap-2 py-2">
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-sm">{scopeLabel(j.scope)}</span>
-                    <span className={`truncate text-xs ${j.state === 'error' ? 'text-destructive' : j.state === 'confirm' ? 'text-amber-500' : 'text-muted-foreground'}`}>{jobState(j)}</span>
+                    <span className={`truncate text-xs ${j.state === 'error' ? 'text-destructive' : j.state === 'confirm' || j.state === 'partial' ? 'text-amber-500' : 'text-muted-foreground'}`}>{jobState(j)}</span>
+                    {j.state === 'partial' &&
+                      j.failures?.groups.slice(0, 3).map((g) => (
+                        <span key={g.reason} className="truncate text-xs text-muted-foreground" title={g.sample.join('\n')}>
+                          {g.count} · {g.reason}
+                        </span>
+                      ))}
                   </span>
                   {j.state === 'confirm' && (
                     <Button variant="outline" size="sm" disabled={busy} onClick={() => void confirmDeletes(j)}>
                       Revisar
                     </Button>
                   )}
-                  {j.state === 'error' && (
+                  {(j.state === 'error' || j.state === 'partial') && (
                     <Button variant="outline" size="sm" disabled={busy} onClick={() => project && void act(() => syncApi.retry(project, j.id)).then(() => load(false))}>
                       <RotateCcw /> Reintentar
                     </Button>

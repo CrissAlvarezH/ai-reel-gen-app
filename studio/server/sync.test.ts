@@ -30,6 +30,7 @@ queue.timing.maxWait = 2000;
 queue.timing.renderWait = 100;
 queue.timing.retries = [120, 240, 480];
 queue.timing.statusCache = 0;
+engine.tuning.putRetries = [5, 10, 20];
 
 after(async () => {
   queue.stopSync();
@@ -83,6 +84,12 @@ beforeEach(() => {
   fake.ctl.corrupt.clear();
   fake.ctl.extraEntries.length = 0;
   fake.ctl.putHeaders.length = 0;
+  fake.ctl.putStatus = 0;
+  fake.ctl.onPut = null;
+  fake.ctl.apiStatus = 0;
+  fake.ctl.commitReject.clear();
+  fake.ctl.downAfterCommits = 0;
+  fake.resetPuts();
   const cloudId = randomUUID();
   cp = fake.addProject(cloudId, 'canal', 'Canal');
   idA = `a${n}`;
@@ -790,7 +797,8 @@ test('the storage failing with a 5xx sends the job back to wait, and what failed
   queue.timing.retries = [60_000];
   try {
     queue.runNow(idA, {scope: 'full'});
-    await until(() => jobs(A)[0]?.waiting === 'Sin conexión: se reintenta');
+    await until(() => jobs(A)[0]?.attempts === 1);
+    assert.match(jobs(A)[0].waiting!, /almacenamiento falló \(503\)/);
     assert.equal(cp.entries.has('ideas.json'), true, 'what could go up, went up');
     assert.equal(cp.entries.has('videos/v/a.txt'), false);
   } finally {
@@ -823,3 +831,248 @@ test('a cycle that fails halfway keeps what it did', async () => {
   assert.equal(cp.entries.size, 2);
 });
 
+
+/* ───── After the first real sync: telling what happened, and not starting over ───── */
+
+const quietly = async <T,>(fn: (lines: string[]) => Promise<T>) => {
+  const lines: string[] = [];
+  const original = console.warn;
+  console.warn = (...a: unknown[]) => void lines.push(a.map(String).join(' '));
+  try {
+    return await fn(lines);
+  } finally {
+    console.warn = original;
+  }
+};
+const parkedRetries = async (fn: () => Promise<void>) => {
+  const saved = queue.timing.retries;
+  queue.timing.retries = [60_000];
+  try {
+    await fn();
+  } finally {
+    queue.timing.retries = saved;
+  }
+};
+
+test('a storage 5xx says the storage failed, keeps the cause and never the presigned URL', () =>
+  quietly((lines) =>
+    parkedRetries(async () => {
+      write(A, 'videos/v/a.txt', 'uno');
+      fake.ctl.putStatus = 503;
+      queue.runNow(idA, {scope: 'full'});
+      await until(() => jobs(A)[0]?.attempts === 1);
+      const j = jobs(A)[0];
+      assert.match(j.waiting!, /almacenamiento falló \(503\)/);
+      assert.doesNotMatch(j.waiting!, /Sin conexión/);
+      assert.deepEqual({where: j.cause?.where, kind: j.cause?.kind, status: j.cause?.status, path: j.cause?.path}, {where: 'storage', kind: 'server', status: 503, path: 'videos/v/a.txt'});
+      assert.ok(lines.some((l) => l.includes('503') && l.includes('videos/v/a.txt')), 'it is in the log');
+      assert.equal([...lines, read(A, '.reel-studio/sync-queue.json')].some((l) => l.includes('SECRETO') || l.includes('X-Amz')), false);
+    }),
+  ));
+
+test('a cut on the way to the storage says so, with the real code', () =>
+  quietly(() =>
+    parkedRetries(async () => {
+      write(A, 'videos/v/a.txt', 'uno');
+      fake.ctl.onPut = () => 'cut';
+      queue.runNow(idA, {scope: 'full'});
+      await until(() => jobs(A)[0]?.attempts === 1);
+      const j = jobs(A)[0];
+      assert.match(j.waiting!, /Sin conexión con el almacenamiento/);
+      assert.equal(j.cause?.kind, 'network');
+      assert.equal(j.cause?.path, 'videos/v/a.txt');
+      assert.ok(j.cause?.code, 'cause.code is kept');
+    }),
+  ));
+
+test('the cloud not answering says no connection; the cloud failing says the server failed', () =>
+  quietly(() =>
+    parkedRetries(async () => {
+      write(A, 'videos/v/a.txt', 'uno');
+      fake.ctl.down = true;
+      queue.runNow(idA, {scope: 'full'});
+      await until(() => jobs(A)[0]?.attempts === 1);
+      assert.match(jobs(A)[0].waiting!, /^Sin conexión con tu cuenta/);
+      assert.equal(jobs(A)[0].cause?.where, 'cloud');
+      assert.ok(jobs(A)[0].cause?.code, 'cause.code travels through cloud.ts');
+      fake.ctl.down = false;
+      fake.ctl.apiStatus = 503;
+      queue.retry(idA, jobs(A)[0].id);
+      await until(() => jobs(A)[0]?.attempts === 1 && /servidor/.test(jobs(A)[0].waiting ?? ''));
+      assert.doesNotMatch(jobs(A)[0].waiting!, /Sin conexión/);
+      assert.equal(jobs(A)[0].cause?.kind, 'server');
+    }),
+  ));
+
+test('nothing that looks like a URL or a token survives in a cause', () => {
+  const c = engine.netCause(new TypeError('fetch failed', {cause: Object.assign(new Error('bad https://s3.x/a?X-Amz-Signature=SECRETO y Bearer SECRETO'), {code: 'EPIPE'})}));
+  assert.equal(c.code, 'EPIPE');
+  assert.equal(c.message!.includes('SECRETO'), false);
+});
+
+test('a PUT that fails is retried on the spot and the job does not notice', async () => {
+  const body = 'a veces falla';
+  write(A, 'videos/v/a.txt', body);
+  fake.ctl.onPut = (s, nth) => (s === sha(body) && nth < 2 ? (nth ? 'cut' : 503) : 0);
+  queue.runNow(idA, {scope: 'full'});
+  await until(() => history(A)[0]?.state === 'done');
+  assert.equal(history(A)[0].attempts, 0, 'never went back to the queue');
+  assert.equal(fake.ctl.putHeaders.length, 3, 'a 503, a cut, and the one that worked');
+  assert.equal(cp.entries.has('videos/v/a.txt'), true);
+});
+
+test('a file that runs out of tries is left out, the others go up, and the job comes back for it', () =>
+  quietly(() =>
+    parkedRetries(async () => {
+      const bad = 'este no sube';
+      write(A, 'videos/v/malo.txt', bad);
+      write(A, 'videos/v/bueno.txt', 'este sí');
+      write(A, 'ideas.json', '{"i":1}');
+      fake.ctl.onPut = (s) => (s === sha(bad) ? 502 : 0);
+      queue.runNow(idA, {scope: 'full'});
+      await until(() => jobs(A)[0]?.attempts === 1);
+      assert.equal(fake.ctl.putHeaders.length, 5, 'one try and three retries, plus the good one');
+      assert.equal(cp.entries.has('videos/v/bueno.txt'), true);
+      assert.equal(cp.entries.has('ideas.json'), true);
+      assert.equal(cp.entries.has('videos/v/malo.txt'), false);
+      assert.equal(jobs(A)[0].state, 'pending');
+      fake.ctl.onPut = null;
+      queue.retry(idA, jobs(A)[0].id);
+      await until(() => history(A)[0]?.state === 'done');
+      assert.equal(cp.entries.has('videos/v/malo.txt'), true);
+    }),
+  ));
+
+test('when the storage is gone it stops trying file after file', () =>
+  quietly(() =>
+    parkedRetries(async () => {
+      for (let i = 0; i < 300; i++) write(A, `videos/v/f${i}.txt`, `x${i}`);
+      write(A, 'ideas.json', '{"i":1}');
+      fake.ctl.putStatus = 503;
+      queue.runNow(idA, {scope: 'full'});
+      await until(() => jobs(A)[0]?.attempts === 1, 8000);
+      assert.ok(fake.ctl.putHeaders.length < 300, `tried ${fake.ctl.putHeaders.length} PUTs`);
+      assert.equal(cp.entries.has('ideas.json'), true, 'what needs no storage still goes');
+    }),
+  ));
+
+test('a cut between batches does not repeat what was already confirmed, and progress adds up', async () => {
+  for (let i = 0; i < 450; i++) write(A, `videos/v/f${i}.txt`, `x${i}`);
+  // The network goes in the middle of the second batch's uploads.
+  let put = 0;
+  fake.ctl.onPut = () => {
+    if (++put === 260) fake.ctl.down = true;
+    return 0;
+  };
+  await quietly(() => assert.rejects(sync(A)));
+  assert.equal(cp.entries.size, 200, 'the first batch is confirmed');
+  assert.equal(Object.keys(stateOf(A).files).length, 200, 'and saved');
+  fake.ctl.down = false;
+  fake.ctl.onPut = null;
+  fake.ctl.putHeaders.length = 0;
+  const seen: {done: number; total: number}[] = [];
+  const r = await sync(A, {onProgress: (p) => void (p.phase === 'upload' && seen.push(p))});
+  assert.equal(r.uploaded, 250);
+  assert.equal(fake.ctl.putHeaders.length, 250, 'only what was not confirmed goes up');
+  assert.equal(cp.entries.size, 450);
+  assert.equal(seen.at(-1)!.done, seen.at(-1)!.total, 'it ends at x/x');
+  assert.equal(seen.at(-1)!.total, 250 * 2);
+  assert.ok(seen.every((p, i) => !i || p.done === seen[i - 1].done + 1), 'one step at a time');
+});
+
+test('documents and deletes are confirmed batch by batch too', async () => {
+  for (let i = 0; i < 300; i++) write(A, `videos/v/f${i}.txt`, `x${i}`);
+  await sync(A);
+  for (let i = 0; i < 260; i++) fs.rmSync(path.join(A, `videos/v/f${i}.txt`));
+  write(A, 'ideas.json', '{"i":1}');
+  fake.ctl.downAfterCommits = 1;
+  await assert.rejects(sync(A, {confirmDeletes: true}));
+  assert.equal(cp.entries.get('ideas.json')?.content, '{"i":1}');
+  const gone = [...cp.entries.values()].filter((e) => e.deleted).length;
+  assert.equal(gone, 199, 'the document and 199 deletes made the first batch');
+  fake.ctl.down = false;
+  fake.ctl.downAfterCommits = 0;
+  const r = await sync(A, {confirmDeletes: true});
+  assert.equal(r.deleted, 61);
+});
+
+test('progress adds up when the storage already has some and others fail', async () => {
+  write(A, 'videos/v/ya.txt', 'ya estaba');
+  await sync(A);
+  write(A, 'videos/w/ya.txt', 'ya estaba');
+  write(A, 'videos/v/nuevo.txt', 'nuevo');
+  write(A, 'videos/v/rechazado.txt', 'rechazado');
+  fake.ctl.onPut = (s) => (s === sha('rechazado') ? 403 : 0);
+  const seen: {done: number; total: number}[] = [];
+  const r = await quietly(() => sync(A, {onProgress: (p) => void (p.phase === 'upload' && seen.push(p))}));
+  assert.equal(seen.at(-1)!.total, 6);
+  assert.equal(seen.at(-1)!.done, 6);
+  assert.equal(r.failed.length, 1);
+  assert.equal(r.failed[0].retry, false);
+});
+
+test('files the account turned down do not read as done: grouped, capped, with Reintentar', () =>
+  quietly(async (lines) => {
+    for (let i = 0; i < 60; i++) {
+      write(A, `videos/v/f${i}.txt`, `x${i}`);
+      fake.ctl.commitReject.set(`videos/v/f${i}.txt`, 'Este archivo no se preparó');
+    }
+    write(A, 'videos/v/otro.txt', 'otro');
+    fake.ctl.commitReject.set('videos/v/otro.txt', 'Ruta no válida');
+    write(A, 'videos/v/bien.txt', 'bien');
+    queue.runNow(idA, {scope: 'full'});
+    await until(() => history(A)[0]?.state === 'partial');
+    const j = history(A)[0];
+    assert.equal(j.error, '61 archivos no se sincronizaron');
+    assert.deepEqual(j.failures!.groups.map((g) => [g.reason, g.count]), [['Este archivo no se preparó', 60], ['Ruta no válida', 1]]);
+    assert.ok(j.failures!.groups[0].sample.length <= 5);
+    assert.ok(j.warnings.length <= 50, 'the list does not flood the job');
+    assert.equal(j.failures!.total, 61);
+    assert.equal(cp.entries.has('videos/v/bien.txt'), true);
+    assert.ok(lines.length < 20, 'nor the log');
+    const d = await queue.detail(idA, false);
+    assert.equal(d.status.error, '61 archivos no se sincronizaron', 'the project says so, not "synced"');
+    assert.notEqual(d.status.state, 'synced');
+    fake.ctl.commitReject.clear();
+    queue.retry(idA, j.id);
+    await until(() => history(A)[0]?.state === 'done');
+    assert.equal(cp.entries.size, 62);
+    assert.equal(history(A)[0].failures ?? null, null);
+    assert.equal((await queue.detail(idA, false)).status.state, 'synced');
+  }));
+
+test('a file too big to go is reported too, not hidden behind done', async () => {
+  write(A, 'ideas.json', JSON.stringify({x: 'y'.repeat(600 * 1024)}));
+  queue.runNow(idA, {scope: 'full'});
+  await until(() => history(A)[0]?.state === 'partial');
+  assert.equal(history(A)[0].error, '1 archivo no se sincronizó');
+  assert.equal(history(A)[0].failures!.groups[0].reason, 'pasa de 512 KB');
+});
+
+test('a file edited during its upload is pending work, not a failure', async () => {
+  write(A, 'videos/v/a.txt', 'antes');
+  fake.ctl.onPut = () => (write(A, 'videos/v/a.txt', 'después de empezar', Date.now() + 5000), 0);
+  queue.runNow(idA, {scope: 'full'});
+  await until(() => history(A)[0]?.state === 'done');
+  assert.equal(cp.entries.has('videos/v/a.txt'), false);
+  fake.ctl.onPut = null;
+  assert.equal((await queue.detail(idA, false)).status.up, 1);
+});
+
+test('cancelling while a PUT waits for its next try stops right there', () =>
+  quietly(async () => {
+    const saved = engine.tuning.putRetries;
+    engine.tuning.putRetries = [60_000];
+    try {
+      write(A, 'videos/v/a.txt', 'uno');
+      fake.ctl.putStatus = 503;
+      const j = queue.runNow(idA, {scope: 'full'});
+      await until(() => fake.ctl.putHeaders.length === 1);
+      await sleep(30);
+      queue.cancel(idA, j.id);
+      await until(() => !jobs(A).length);
+      assert.equal(history(A).length, 0);
+    } finally {
+      engine.tuning.putRetries = saved;
+    }
+  }));

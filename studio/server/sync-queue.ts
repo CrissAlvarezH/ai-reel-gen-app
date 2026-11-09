@@ -8,13 +8,16 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import * as cloud from './cloud.ts';
 import {GROUPS, classify, covers, isGroup, parseScope, scopeKey, type Channel, type Scope} from './sync-rules.ts';
-import {download, docOnDisk, land, loadState, peekState, review, runCycle, saveState, target, type Context, type CycleResult} from './sync.ts';
+import {download, docOnDisk, land, loadState, netCause, peekState, review, runCycle, saveState, target, type Context, type CycleResult, type Failure} from './sync.ts';
 import {readJson, writeJson} from './platform.ts';
 import {httpError} from './reels.ts';
 import {ROOT, finishProject, isProjectId, lessonsSeed, listProjects, projectDir, seedPaths} from './workspace.ts';
-import type {ServerEvent, SyncActivity, SyncClone, SyncConflict, SyncDetail, SyncGroupId, SyncJob, SyncJobStats, SyncOverview, SyncPreview, SyncProjectStatus, SyncQueue} from '../shared/types.ts';
+import type {ServerEvent, SyncActivity, SyncCause, SyncClone, SyncConflict, SyncDetail, SyncFailures, SyncGroupId, SyncJob, SyncJobStats, SyncOverview, SyncPreview, SyncProjectStatus, SyncQueue} from '../shared/types.ts';
 
 const HISTORY = 20;
+const KEPT_WARNINGS = 50; // the rest is in the failures' groups: a job with thousands of lines would weigh on every read
+const FAILURE_GROUPS = 10;
+const FAILURE_SAMPLE = 5;
 export const timing = {groupWait: 30_000, maxWait: 5 * 60_000, renderWait: 3_000, retries: [60_000, 5 * 60_000, 15 * 60_000], statusCache: 15_000};
 
 let send: (e: ServerEvent) => void = () => {};
@@ -130,6 +133,28 @@ const hasNetworkProblem = (e: unknown) => {
   const {offline, status} = e as {offline?: boolean; status?: number};
   return !!offline || (status ?? 0) >= 500;
 };
+// Why it's waiting, as it was: not having a connection is one thing, a server failing is another.
+function waitingText(c: SyncCause, files: number) {
+  const what = c.where === 'storage' ? 'el almacenamiento' : 'el servidor de tu cuenta';
+  const text = c.kind === 'network' ? `Sin conexión con ${c.where === 'storage' ? 'el almacenamiento' : 'tu cuenta'}` : `${what[0].toUpperCase()}${what.slice(1)} falló${c.where === 'storage' && c.status ? ` (${c.status})` : ''}`;
+  return `${files ? `${files} ${files === 1 ? 'archivo pendiente' : 'archivos pendientes'}. ` : ''}${text}: se reintenta`;
+}
+function causeOf(e: unknown): SyncCause {
+  const err = e as Error & {offline?: boolean; status?: number; syncCause?: SyncCause};
+  if (err.syncCause) return err.syncCause;
+  return {where: 'cloud', kind: err.offline ? 'network' : 'server', ...netCause(e), ...(err.offline ? {} : {status: err.status})};
+}
+function summarize(failed: Failure[]): SyncFailures {
+  const by = new Map<string, {reason: string; count: number; sample: string[]}>();
+  for (const f of failed) {
+    const g = by.get(f.reason) ?? {reason: f.reason, count: 0, sample: []};
+    by.set(f.reason, g);
+    g.count++;
+    if (g.sample.length < FAILURE_SAMPLE) g.sample.push(f.path);
+  }
+  return {total: failed.length, groups: [...by.values()].sort((a, b) => b.count - a.count).slice(0, FAILURE_GROUPS)};
+}
+const leftOut = (n: number) => (n === 1 ? '1 archivo no se sincronizó' : `${n} archivos no se sincronizaron`);
 const sharedSeeds = () => new Set([...seedPaths()].filter((p) => /^(styles|formats)\//.test(p)));
 function lessonsSha() {
   try {
@@ -164,16 +189,28 @@ async function run(project: string, dir: string, jobId: string) {
     });
   try {
     const out = await execute(project, dir, job, ctl.signal, progress);
+    const failures = out.failed.length ? summarize(out.failed) : null;
+    const retrying = out.failed.filter((f) => f.retry);
+    const cause = retrying[0]?.cause ?? out.failed.find((f) => f.cause)?.cause ?? null;
+    for (const g of failures?.groups ?? []) console.warn(`[sync] ${g.count} sin sincronizar: ${g.reason} (p. ej. ${g.sample[0]})`);
+    const back = out.confirm === null && !!retrying.length;
     finish((q, j) => {
-      Object.assign(j, {stats: out.stats, warnings: out.warnings, attempts: 0, nextAt: 0, error: null});
+      Object.assign(j, {stats: out.stats, warnings: out.warnings.slice(0, KEPT_WARNINGS), error: null, cause, failures});
+      if (back) {
+        const wait = timing.retries[Math.min(j.attempts, timing.retries.length - 1)];
+        Object.assign(j, {state: 'pending', started: null, attempts: j.attempts + 1, nextAt: Date.now() + wait, waiting: cause ? waitingText(cause, retrying.length) : 'Se reintenta', done: 0, total: 0});
+        return;
+      }
+      Object.assign(j, {attempts: 0, nextAt: 0});
       if (out.confirm !== null) Object.assign(j, {state: 'confirm', deletes: out.confirm, started: null});
       else {
-        Object.assign(j, {state: 'done', ended: Date.now()});
+        if (failures) Object.assign(j, {state: 'partial', ended: Date.now(), error: leftOut(failures.total)});
+        else Object.assign(j, {state: 'done', ended: Date.now()});
         archive(q, j);
       }
     });
     if (out.paths.length) announce(project, out.paths);
-    emit(project, out.confirm !== null ? 'confirm' : 'done');
+    emit(project, back ? 'waiting' : out.confirm !== null ? 'confirm' : 'done');
   } catch (e) {
     const err = e as Error & {status?: number};
     if (err.name === 'AbortError' || ctl.signal.aborted) {
@@ -184,9 +221,11 @@ async function run(project: string, dir: string, jobId: string) {
       finish((_q, j) => Object.assign(j, {state: 'pending', started: null, waiting: 'Sin sesión'}));
       emit(project, 'waiting');
     } else if (hasNetworkProblem(e)) {
+      const cause = causeOf(e);
+      console.warn('[sync] se reintentará:', JSON.stringify(cause));
       finish((_q, j) => {
         const wait = timing.retries[Math.min(j.attempts, timing.retries.length - 1)];
-        Object.assign(j, {state: 'pending', started: null, attempts: j.attempts + 1, nextAt: Date.now() + wait, waiting: 'Sin conexión: se reintenta'});
+        Object.assign(j, {state: 'pending', started: null, attempts: j.attempts + 1, nextAt: Date.now() + wait, waiting: waitingText(cause, 0), cause});
       });
       emit(project, 'waiting');
     } else {
@@ -204,7 +243,7 @@ async function run(project: string, dir: string, jobId: string) {
   }
 }
 
-type Done = {stats: SyncJobStats; warnings: string[]; paths: string[]; confirm: number | null};
+type Done = {stats: SyncJobStats; warnings: string[]; paths: string[]; failed: Failure[]; confirm: number | null};
 
 async function execute(project: string, dir: string, job: SyncJob, signal: AbortSignal, progress: (d: number, t: number) => void): Promise<Done> {
   const scope = parseScope(job.scope);
@@ -213,7 +252,7 @@ async function execute(project: string, dir: string, job: SyncJob, signal: Abort
   if (!link) throw httpError(409, 'este proyecto ya no está vinculado a tu cuenta');
   const cloudId = link.cloudId!;
   const active = cloud.syncGroups(dir);
-  const out: Done = {stats: emptyStats(), warnings: [], paths: [], confirm: null};
+  const out: Done = {stats: emptyStats(), warnings: [], paths: [], failed: [], confirm: null};
   const group = scope.kind === 'video' ? 'videos' : scope.kind === 'group' ? scope.group : null;
   if (group && !active.has(group)) return out; // switched off after it was queued
   if (scope.kind === 'full' && job.trigger === 'manual') {
@@ -249,6 +288,7 @@ function merge(out: Done, r: CycleResult) {
   for (const k of Object.keys(out.stats) as (keyof SyncJobStats)[]) out.stats[k] += r[k];
   out.warnings.push(...r.warnings);
   out.paths.push(...r.paths);
+  out.failed.push(...r.failed);
   if (r.needsConfirm !== null) out.confirm = r.needsConfirm;
 }
 
@@ -420,6 +460,8 @@ async function statusOf(id: string): Promise<SyncProjectStatus> {
   if (running?.project === id) return {...common, state: 'syncing', done: running.done, total: running.total};
   const err = q.history[0]?.state === 'error' ? q.history[0].error : null;
   if (err) return {...common, state: 'error', error: err};
+  // Not 'synced', even if nothing shows as pending: what stayed out may be something that came down.
+  if (q.history[0]?.state === 'partial') return {...common, state: 'changes', error: q.history[0].error};
   if (conflicts) return {...common, state: 'conflict'};
   return {...common, state: up || down ? 'changes' : 'synced'};
 }
@@ -537,10 +579,10 @@ export function cancel(project: string, id: string) {
 export function retry(project: string, id: string) {
   const dir = known(project);
   const q = change(dir, (x) => {
-    const old = x.history.find((j) => j.id === id && j.state === 'error');
+    const old = x.history.find((j) => j.id === id && (j.state === 'error' || j.state === 'partial'));
     if (old) {
       x.history = x.history.filter((j) => j !== old);
-      if (!x.jobs.some((j) => waitingJob(j) && covers(j.scope, old.scope))) x.jobs.push({...old, state: 'pending', error: null, attempts: 0, nextAt: 0, started: null, ended: null, waiting: null, done: 0, total: 0});
+      if (!x.jobs.some((j) => waitingJob(j) && covers(j.scope, old.scope))) x.jobs.push({...old, state: 'pending', error: null, attempts: 0, nextAt: 0, started: null, ended: null, waiting: null, done: 0, total: 0, cause: null, failures: null});
     }
     for (const j of x.jobs) if (j.id === id && j.state === 'pending') Object.assign(j, {nextAt: 0, attempts: 0});
     return x;
@@ -717,9 +759,14 @@ async function bringOver(dir: string, root: string, cloudId: string, folder: str
     entry.total = p.total;
     emit(folder, 'cloning', p.done, p.total);
   };
-  await runCycle({dir, channel: 'project', cloudId, scope: {kind: 'full'}, active, onProgress});
+  // Complete or not at all: what the storage turned down leaves it for the next try.
+  const whole = (r: CycleResult) => {
+    const f = r.failed.find((x) => x.retry);
+    if (f) throw httpError(502, f.reason);
+  };
+  whole(await runCycle({dir, channel: 'project', cloudId, scope: {kind: 'full'}, active, onProgress}));
   const {project: shared} = await cloud.syncApi.shared();
-  await runCycle({dir: root, channel: 'shared', cloudId: shared.id, scope: {kind: 'full'}, active, builtin: sharedSeeds(), seedSha: lessonsSha(), onProgress});
+  whole(await runCycle({dir: root, channel: 'shared', cloudId: shared.id, scope: {kind: 'full'}, active, builtin: sharedSeeds(), seedSha: lessonsSha(), onProgress}));
   // Only now does the app see it: complete, or not at all.
   finishProject(folder, name, created);
   // After project.json: without it the link won't save which computer runs the automations, and this one would run them too.

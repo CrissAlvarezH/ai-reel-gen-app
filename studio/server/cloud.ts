@@ -70,9 +70,9 @@ async function call<T>(p: string, {method, body, auth = true, timeout = 60_000, 
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(timeout),
     });
-  } catch {
+  } catch (e) {
     if (current()) reached(false);
-    throw Object.assign(httpError(502, `no hay conexión con tu cuenta de Reel Studio (${baseUrl()})`), {offline: true});
+    throw Object.assign(httpError(502, `no hay conexión con tu cuenta de Reel Studio (${baseUrl()})`), {offline: true, cause: e});
   }
   const j = (await r.json().catch(() => null)) as {error?: string} | null;
   if (auth && r.status === 401) {
