@@ -13,7 +13,7 @@ import {CONFIG, CONFIG_DIR, PROJECT_DIR, listProjects, projectDir, setProjectClo
 import {readJson, writeJson} from './platform.ts';
 import {httpError} from './reels.ts';
 import {KEYS, getKey, setKey} from './settings.ts';
-import type {CloudAccount, CloudKey, CloudKeyState, CloudKeys, CloudKeysMoved, CloudProjectMatch, CloudProjectState, CloudProjectView, CloudProjects, CloudReelInsights, CloudSession, CloudStatus, LocalCloudProject} from '../shared/types.ts';
+import type {CloudAccount, CloudKey, CloudKeyState, CloudKeys, CloudKeysMoved, CloudProjectMatch, CloudProjectState, CloudProjectView, CloudProjects, CloudReelInsights, CloudSession, CloudStatus, LocalCloudProject, SyncGroupId, SyncRemoteState} from '../shared/types.ts';
 
 // REEL_STUDIO_CLOUD_URL wins over it, to develop against a local copy of the cloud.
 const DEFAULT_URL = 'https://ai-reel-gen.socialsannin.com';
@@ -72,7 +72,7 @@ async function call<T>(p: string, {method, body, auth = true, timeout = 60_000, 
     });
   } catch {
     if (current()) reached(false);
-    throw httpError(502, `no hay conexión con tu cuenta de Reel Studio (${baseUrl()})`);
+    throw Object.assign(httpError(502, `no hay conexión con tu cuenta de Reel Studio (${baseUrl()})`), {offline: true});
   }
   const j = (await r.json().catch(() => null)) as {error?: string} | null;
   if (auth && r.status === 401) {
@@ -257,7 +257,9 @@ export const reelInsights = (accountId: number, limit: number) =>
 // projects/<id>/.reel-studio/cloud.json. Not in project.json because renaming rewrites that one, also in versions
 // already installed. linkedAt stays null until the account confirmed it: the id is written first, so a response lost
 // on the way retries with the same id instead of registering the project twice.
-type ProjectLink = {cloudId: string | null; userId: number | null; server: string | null; linkedAt: number | null; localOnly: boolean};
+// groups: the Ajustes switches that are off stay false; a group that isn't here is on. primaryDeviceId: the computer
+// that runs its automations and audits, kept here so that holds without a network.
+type ProjectLink = {cloudId: string | null; userId: number | null; server: string | null; linkedAt: number | null; localOnly: boolean; groups?: Partial<Record<SyncGroupId, boolean>>; primaryDeviceId?: string | null};
 const projectLinkFile = (dir: string) => path.join(dir, '.reel-studio', 'cloud.json');
 const readProjectLink = (dir: string) => readJson<ProjectLink>(projectLinkFile(dir));
 // A folder deleted while a call was on its way stays deleted.
@@ -265,7 +267,10 @@ const stillThere = (dir: string) => fs.existsSync(path.join(dir, 'project.json')
 function writeProjectLink(dir: string, l: ProjectLink) {
   if (!stillThere(dir)) return;
   fs.mkdirSync(path.dirname(projectLinkFile(dir)), {recursive: true});
-  writeJson(projectLinkFile(dir), l, 1);
+  // What's about the link itself is rewritten here; the switches and the primary computer belong to that same project in the account.
+  const old = readProjectLink(dir);
+  const keep = old && old.cloudId === l.cloudId ? {groups: old.groups, primaryDeviceId: old.primaryDeviceId} : {};
+  writeJson(projectLinkFile(dir), {...keep, ...l}, 1);
 }
 
 // Only this server and this user: a project linked by someone else's session is left alone.
@@ -587,3 +592,95 @@ export async function moveMissingKeys(direction: unknown): Promise<CloudKeysMove
   }
   return {...(await keysStatus()), moved, failed};
 }
+
+/* ───── Name ───── */
+
+// Trimmed, up to 120 characters; empty clears it.
+export async function setName(nameIn: unknown) {
+  if (nameIn !== null && typeof nameIn !== 'string') throw httpError(400, 'escribe un nombre válido');
+  const name = (nameIn ?? '').trim().slice(0, 120) || null;
+  const r = await call<{user: {id: number; email: string; name: string | null}}>('/api/studio/me', {method: 'PATCH', body: {name}, timeout: 20_000, routeIsNew: true});
+  changed();
+  return r;
+}
+
+/* ───── What the sync engine needs ───── */
+
+// Always from the project's folder: a job finishes in the project it started in, whichever one is open by then.
+export const syncLink = (dir: string) => activeLink(dir);
+export const linkOf = (dir: string) => readProjectLink(dir);
+
+export function syncGroups(dir: string) {
+  const off = readProjectLink(dir)?.groups ?? {};
+  return new Set((['videos', 'ideas', 'settings', 'sources', 'reels', 'automations', 'audit', 'styles'] as const).filter((g) => off[g] !== false));
+}
+
+export function setSyncGroups(dir: string, groups: Partial<Record<SyncGroupId, boolean>>) {
+  const l = readProjectLink(dir);
+  if (!l) throw httpError(409, 'este proyecto aún no está en tu cuenta');
+  writeProjectLink(dir, {...l, groups: {...l.groups, ...groups}});
+}
+
+function savePrimary(dir: string, primaryDeviceId: string | null) {
+  const l = readProjectLink(dir);
+  if (l) writeProjectLink(dir, {...l, primaryDeviceId});
+}
+
+// A linked project whose automations and audits belong to another computer. Nobody claimed it yet: they run here, as ever.
+export function runsElsewhere(dir: string) {
+  const l = activeLink(dir);
+  return !!l?.primaryDeviceId && l.primaryDeviceId !== deviceId();
+}
+
+// After a full sync: the first computer to sync claims the project, and everyone keeps the account's answer for when there's no network.
+export async function settlePrimary(dir: string, cloudId: string, primary: string | null, claim: boolean) {
+  if (primary || !claim) return savePrimary(dir, primary);
+  await patchProject(cloudId, {primaryDeviceId: deviceId()});
+  savePrimary(dir, deviceId());
+}
+
+export async function makePrimary(dir: string) {
+  const l = activeLink(dir);
+  if (!l) throw httpError(409, 'este proyecto aún no está en tu cuenta');
+  await patchProject(l.cloudId!, {primaryDeviceId: deviceId()});
+  savePrimary(dir, deviceId());
+}
+
+export type SyncEntry = {path: string; rev: number; sha256: string | null; size: number; mtime: number; deleted: boolean; storage: 'doc' | 'blob'};
+export type SyncFetched = {path: string; rev: number; sha256: string; content?: string; url?: string};
+export type SyncUpload = {sha256: string; url: string; method: string; headers?: Record<string, string>};
+export type SyncChange = {path: string; baseRev: number; sha256?: string; size?: number; mtime: number; content?: string; deleted?: true};
+export type SyncResult = {path: string; status: 'applied' | 'same' | 'won' | 'lost' | 'rejected'; rev: number; conflictId?: string; error?: string};
+
+const syncBase = (id: string) => `/api/studio/projects/${id}/sync`;
+const LONG = 120_000;
+export const syncApi = {
+  state: (id: string) => call<SyncRemoteState>(`${syncBase(id)}/state`, {timeout: 20_000, routeIsNew: true}),
+  changes: (id: string, since: number, cursor: string | null) =>
+    call<{rev: number; entries: SyncEntry[]; next: string | null}>(`${syncBase(id)}/changes?since=${since}&limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, {timeout: LONG, routeIsNew: true}),
+  fetch: (id: string, paths: string[]) => call<{items: SyncFetched[]; omitted: string[]}>(`${syncBase(id)}/fetch`, {body: {paths}, timeout: LONG, routeIsNew: true}),
+  prepare: (id: string, files: {path: string; sha256: string; size: number}[]) =>
+    call<{uploads: SyncUpload[]; present: string[]; rejected: {path: string; error: string}[]}>(`${syncBase(id)}/prepare`, {body: {files}, timeout: LONG, routeIsNew: true}),
+  commit: (id: string, changes: SyncChange[]) => call<{rev: number; results: SyncResult[]}>(`${syncBase(id)}/commit`, {body: {changes}, timeout: LONG, routeIsNew: true}),
+  conflicts: (id: string) => call<{conflicts: Record<string, unknown>[]}>(`${syncBase(id)}/conflicts?status=open`, {timeout: 20_000, routeIsNew: true}),
+  conflictContent: (id: string, conflict: string) => call<{content?: string; url?: string}>(`${syncBase(id)}/conflicts/${encodeURIComponent(conflict)}/content`, {timeout: 30_000, routeIsNew: true}),
+  dismiss: (id: string, conflict: string) => call<{ok: true}>(`${syncBase(id)}/conflicts/${encodeURIComponent(conflict)}/dismiss`, {body: {}, timeout: 20_000, routeIsNew: true}),
+  shared: () => call<{project: {id: string}}>('/api/studio/shared-project', {timeout: 20_000, routeIsNew: true}),
+};
+
+// The project as the account has it, to bring it here.
+export const remoteProject = async (cloudId: string) => (await call<{project: CloudProjectView}>(`/api/studio/projects/${cloudId}`, {timeout: 20_000, routeIsNew: true})).project;
+
+// A folder for it that the app can't see yet: no project.json until everything has arrived. The link is written first,
+// so a download cut in the middle finds its folder again.
+export async function beginClone(dir: string, cloudId: string) {
+  const userId = await currentUserId();
+  fs.mkdirSync(path.dirname(projectLinkFile(dir)), {recursive: true});
+  writeJson(projectLinkFile(dir), {cloudId, userId, server: baseUrl(), linkedAt: Date.now(), localOnly: false} satisfies ProjectLink, 1);
+}
+
+export function announceProjects() {
+  changed();
+}
+
+export const validCloudId = (v: unknown): v is string => typeof v === 'string' && UUID.test(v);

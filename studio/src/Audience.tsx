@@ -433,7 +433,7 @@ function useVerticals() {
   const [list, setList] = useState<IdeaVertical[] | null>(null);
   const load = () => ideasApi.board().then((b) => setList(b.verticals), () => setList([]));
   useEffect(() => void load(), []);
-  useSocket((m) => m.type === 'ideas' && void load());
+  useSocket((m) => (m.type === 'ideas' || m.type === 'synced') && void load());
   return list;
 }
 
@@ -1112,6 +1112,11 @@ export function AudiencePage() {
       (e: Error) => setErr(e.message),
     );
   }, []);
+  // Another computer's change arrived; what he's editing here stays.
+  useSocket((m) => {
+    if (m.type !== 'synced' || !m.paths.includes('config/audience.json') || editing) return;
+    void audienceApi.get().then((a) => (setSaved(a), setDraft(a)), () => {});
+  });
 
   const set = (patch: Partial<Audience>) => setDraft((d) => (d ? {...d, ...patch} : d));
   const persist = async (extra: Partial<Audience> = {}) => {

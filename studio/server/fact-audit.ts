@@ -26,6 +26,7 @@ import {readJson, writeJson} from './platform.ts';
 import {httpError, isPlaceholder, listSlugs, title, validSlug} from './reels.ts';
 import {arr, hash, modelOptions, obj, str} from './script-check.ts';
 import {PROJECT, ROOT, listProjects, projectDir, withProject} from './workspace.ts';
+import {runsElsewhere} from './cloud.ts';
 
 type Store = {settings: FactAuditSettings; reports: FactReport[]; seen: Record<string, string>};
 const DEFAULTS: FactAuditSettings = {auto: false, prompt: '', model: '', effort: 'high'};
@@ -412,6 +413,7 @@ export function stopAll() {
 function scan() {
   if (!ROOT) return;
   for (const p of listProjects()) {
+    if (runsElsewhere(projectDir(p.id))) continue; // the automatic audit runs on one computer only
     let s: Store;
     try {
       s = read(p.id);

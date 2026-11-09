@@ -324,6 +324,24 @@ export const cloudApi = {
   downloadKey: (name: string) => post(`/api/cloud/keys/${name}/download`) as Promise<CloudKeys>,
   removeKey: (name: string) => fetch(`/api/cloud/keys/${name}`, {method: 'DELETE'}).then((r) => json<CloudKeys>(r)),
   moveMissingKeys: (direction: 'upload' | 'download') => post('/api/cloud/keys/missing', {direction}) as Promise<CloudKeysMoved>,
+  setName: (name: string) => put<{user: {id: number; email: string; name: string | null}}>('/api/cloud/name', {name}),
+};
+
+// Sync: always for the project named, not the open one (a job ends in the project it started in).
+export const syncApi = {
+  overview: () => fetch('/api/sync').then((r) => json<import('../shared/types').SyncOverview>(r)),
+  detail: (project: string, refresh = false) => fetch(`/api/sync/${project}${refresh ? '?refresh=1' : ''}`).then((r) => json<import('../shared/types').SyncDetail>(r)),
+  preview: (project: string) => fetch(`/api/sync/${project}/preview`).then((r) => json<import('../shared/types').SyncPreview>(r)),
+  run: (project: string, body: {scope?: string; confirmDeletes?: boolean} = {}) => post(`/api/sync/${project}/run`, body) as Promise<import('../shared/types').SyncJob>,
+  cancel: (project: string, id: string) => post(`/api/sync/${project}/queue/${id}/cancel`) as Promise<import('../shared/types').SyncQueue>,
+  retry: (project: string, id: string) => post(`/api/sync/${project}/queue/${id}/retry`) as Promise<import('../shared/types').SyncQueue>,
+  setGroups: (project: string, groups: Partial<Record<import('../shared/types').SyncGroupId, boolean>>) => put<import('../shared/types').SyncDetail>(`/api/sync/${project}/groups`, {groups}),
+  conflicts: (project: string) => fetch(`/api/sync/${project}/conflicts`).then((r) => json<import('../shared/types').SyncConflict[]>(r)),
+  conflictContent: (project: string, id: string, channel: 'project' | 'shared') => fetch(`/api/sync/${project}/conflicts/${id}/content?channel=${channel}`).then((r) => json<{content?: string; url?: string; path: string; deleted: boolean}>(r)),
+  restore: (project: string, id: string, channel: 'project' | 'shared') => post(`/api/sync/${project}/conflicts/${id}/restore`, {channel}) as Promise<import('../shared/types').SyncConflict[]>,
+  dismiss: (project: string, id: string, channel: 'project' | 'shared') => post(`/api/sync/${project}/conflicts/${id}/dismiss`, {channel}) as Promise<import('../shared/types').SyncConflict[]>,
+  clone: (cloudId: string) => post(`/api/cloud/projects/${cloudId}/clone`) as Promise<import('../shared/types').SyncClone>,
+  makePrimary: (project: string) => put<import('../shared/types').SyncDetail>(`/api/sync/${project}/primary`, {}),
 };
 
 export const accountApi = {

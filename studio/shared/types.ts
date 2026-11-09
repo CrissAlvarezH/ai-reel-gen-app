@@ -362,7 +362,7 @@ export type ChatEvent =
   | {op: 'chats'};
 
 // workspace: the studio now works on another folder (every page reloads).
-export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'automations'} | {type: 'audit'} | {type: 'styles'} | {type: 'formats'} | {type: 'cloud'} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
+export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'automations'} | {type: 'audit'} | {type: 'styles'} | {type: 'formats'} | {type: 'cloud'} | {type: 'sync'; project: string; state: SyncActivity; done: number; total: number} | {type: 'synced'; project: string; paths: string[]} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
 
 /* ───── Profile and voice (config/, set in Ajustes) ───── */
 
@@ -616,7 +616,7 @@ export type CloudProjectView = {
   instagramSetAt: string | null;
   createdAt: string;
   updatedAt: string;
-  sync: null;
+  sync: SyncRemoteState | null;
 };
 export type CloudProjectState = 'none' | 'pending' | 'linked' | 'other-account' | 'local-only' | 'deleted';
 export type LocalCloudProject = {id: string; name: string; created: number; cloudId: string | null; state: CloudProjectState};
@@ -660,7 +660,7 @@ export type AutomationRun = {id: string; automation: string; name: string; trigg
 // runs: most recent first.
 // Automatizaciones → a step's agent: each CLI that can run one, with its models and what a new conversation starts on.
 export type AutomationAgent = {id: string; label: string; ready: boolean; default: boolean; models: AgentModel[]; choice: {model: string; effort: string}};
-export type AutomationsView = {automations: (Automation & {running: boolean})[]; runs: AutomationRun[]};
+export type AutomationsView = { project: string; elsewhere: boolean;automations: (Automation & {running: boolean})[]; runs: AutomationRun[]};
 
 /* ───── Fuentes de información (projects/<id>/sources/) ───── */
 
@@ -721,3 +721,77 @@ export type FactReport = {
 export type FactAuditSettings = {auto: boolean; prompt: string; model: string; effort: string}; // effort: the reviewers' reasoning effort ('high' by default)
 export type FactAuditVideo = {slug: string; title: string; script: boolean; updated: number; lastAudit: number | null; stale: boolean; busy: boolean};
 export type FactAuditView = {settings: FactAuditSettings; agent: string; models: {id: string; label: string; efforts: string[]}[]; videos: FactAuditVideo[]; reports: FactReport[]};
+
+/* ───── Sync (server/sync.ts, server/sync-queue.ts) ───── */
+
+export type SyncGroupId = 'videos' | 'ideas' | 'settings' | 'sources' | 'reels' | 'automations' | 'audit' | 'styles';
+// What a project's sync is doing right now, for the socket.
+export type SyncActivity = 'idle' | 'running' | 'cloning' | 'done' | 'error' | 'confirm' | 'waiting';
+export type SyncGroupSize = {docBytes: number; fileBytes: number; docs: number; files: number};
+export type SyncRemoteState = {
+  rev: number;
+  bytes: number;
+  docBytes: number;
+  fileBytes: number;
+  docs: number;
+  files: number;
+  groups: Partial<Record<SyncGroupId, SyncGroupSize>>;
+  quota: {projectBytes: number; accountBytes: number; accountUsedBytes: number};
+  lastSyncedAt: string | null;
+  lastSyncedDevice: string | null;
+  primaryDeviceId: string | null;
+  openConflicts: number;
+};
+export type SyncJobState = 'pending' | 'running' | 'done' | 'error' | 'confirm';
+export type SyncJobStats = {uploaded: number; downloaded: number; deleted: number; skipped: number; conflicts: number};
+export type SyncJob = {
+  id: string;
+  scope: string; // 'full', 'group:<id>' or 'video:<slug>'
+  state: SyncJobState;
+  trigger: 'manual' | 'auto';
+  created: number;
+  started: number | null;
+  ended: number | null;
+  attempts: number;
+  nextAt: number; // pending: not before this
+  waiting: string | null; // pending, why it isn't running yet (an agent is working on it, there's no network)
+  error: string | null;
+  confirmDeletes: boolean;
+  deletes: number; // state 'confirm': how many files it would delete in the account
+  done: number;
+  total: number;
+  stats: SyncJobStats | null;
+  warnings: string[];
+};
+export type SyncQueue = {jobs: SyncJob[]; history: SyncJob[]};
+export type ProjectSyncState = 'local' | 'cloud' | 'synced' | 'changes' | 'conflict' | 'syncing' | 'error';
+export type SyncProjectStatus = {id: string; state: ProjectSyncState; up: number; down: number; conflicts: number; done: number; total: number; error: string | null; lastAt: number | null};
+export type SyncClone = {cloudId: string; folder: string; running: boolean; done: number; total: number; error: string | null};
+export type SyncOverview = {signedIn: boolean; projects: SyncProjectStatus[]; clones: SyncClone[]};
+export type SyncDetail = {
+  project: string;
+  signedIn: boolean;
+  linked: boolean;
+  online: boolean | null;
+  groups: Record<SyncGroupId, boolean>;
+  groupsAt: Partial<Record<SyncGroupId, number>>;
+  lastAt: number | null;
+  first: boolean; // the first full sync hasn't been started yet
+  status: SyncProjectStatus;
+  queue: SyncQueue;
+  remote: SyncRemoteState | null;
+  primary: {deviceId: string; elsewhere: boolean};
+};
+export type SyncPreview = {files: number; bytes: number; groups: Partial<Record<SyncGroupId, {files: number; bytes: number}>>};
+export type SyncConflict = {
+  id: string;
+  channel: 'project' | 'shared';
+  path: string;
+  winnerDevice: string | null;
+  winnerMtime: number | null;
+  loserDevice: string | null;
+  loserMtime: number | null;
+  loserDeleted: boolean;
+  loserStorage: 'doc' | 'blob' | null;
+  created: string | null;
+};

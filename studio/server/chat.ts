@@ -920,6 +920,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   proc.on('close', (code, signal) => {
     for (const p of [...run.pending.values()]) p.expire();
     runs.delete(rk);
+    for (const fn of turnEnded) fn();
     const r = run.result;
     // A command answered only in the result (no reply text): show it as the reply.
     if (r?.ok && r.text?.trim() && !run.said) push({id: id(), role: 'assistant', text: r.text, ts: Date.now()});
@@ -952,6 +953,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   });
   proc.on('error', (err) => {
     runs.delete(rk);
+    for (const fn of turnEnded) fn();
     push({id: id(), role: 'status', text: `No pude lanzar ${cli.label}: ${err.message}. Revisa Ajustes → Agente.`, error: true, ts: Date.now()});
     tell({op: 'state', running: false});
     tellList();
@@ -978,6 +980,20 @@ export function stop(key: string, chat: string) {
 }
 
 export const running = (key: string) => [...runs.keys()].some((k) => k.startsWith(`${key}/`));
+// The videos an agent is working on in a project, open or not: its own conversation's, and those a general one
+// created or is moving to. Sync leaves them alone until the agent stops writing.
+export function workingVideos(projectDir: string) {
+  const out = new Set<string>();
+  for (const [k, r] of runs) {
+    if (!r.dir.startsWith(projectDir + path.sep)) continue;
+    const key = k.slice(0, k.lastIndexOf('/'));
+    if (key !== GENERAL) out.add(key);
+    for (const s of [...(r.created ?? []), ...(r.moveTo ? [r.moveTo] : [])]) out.add(s);
+  }
+  return out;
+}
+const turnEnded: (() => void)[] = [];
+export const onTurnEnd = (fn: () => void) => turnEnded.push(fn);
 // Any turn working in a project, open or not (each keeps the conversations folder it started in).
 export const runningIn = (projectDir: string) => [...runs.values()].some((r) => r.dir.startsWith(projectDir + path.sep));
 

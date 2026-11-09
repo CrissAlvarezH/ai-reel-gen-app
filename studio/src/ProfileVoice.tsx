@@ -14,7 +14,7 @@ import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
 import ListSkeleton from '@/components/common/ListSkeleton';
 import {FPS_OPTIONS, platformFormat, type Format} from '../shared/types';
-import {profileApi, voiceApi, type Profile, type Voice, type VoiceModel, type VoiceOption, type VoiceSample} from './api';
+import {profileApi, useSocket, voiceApi, type Profile, type Voice, type VoiceModel, type VoiceOption, type VoiceSample} from './api';
 import {useStyles} from './StylePicker';
 
 // Ajustes → Perfil and Voz: who makes the videos and the voice that narrates them (config/*.json at the
@@ -69,6 +69,14 @@ function useDraft<T>(load: () => Promise<T>, save: (v: T) => Promise<T>) {
       (e: Error) => setErr(e.message),
     );
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Another computer's change arrived. Edits he has in progress here stay.
+  useSocket((m) => {
+    if (m.type !== 'synced' || !m.paths.some((p) => p.startsWith('config/')) || (draft && saved && !same(draft, saved))) return;
+    void load().then((v) => {
+      setSaved(v);
+      setDraft(v);
+    }, () => {});
+  });
   const set = (patch: Partial<T>) => {
     setJustSaved(false);
     setDraft((d) => (d ? {...d, ...patch} : d));

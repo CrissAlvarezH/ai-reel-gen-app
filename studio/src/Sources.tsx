@@ -88,7 +88,7 @@ export function Sources() {
   const [sourceFilter, setSourceFilter] = useState('any');
   const load = useCallback(() => sourcesApi.view().then(setView, (e: Error) => setErr(e.message)), []);
   useEffect(() => void load(), [load]);
-  useSocket((m) => m.type === 'sources' && void load(), load);
+  useSocket((m) => (m.type === 'sources' || m.type === 'synced') && void load(), load);
   uiRef.current = {page: 'sources', ...(open ? {sourceItem: open} : {})};
 
   // A request to a new general conversation, shown in the panel.
@@ -426,7 +426,7 @@ function Results({view, sourceFilter, setSourceFilter}: {view: SourcesView; sour
     [query, sourceFilter, filters, sort, page],
   );
   useEffect(() => void load(), [load]);
-  useSocket((m) => m.type === 'sources' && void load(), load);
+  useSocket((m) => (m.type === 'sources' || m.type === 'synced') && void load(), load);
 
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE));
@@ -581,7 +581,7 @@ function ItemDialog({id, sources, onClose}: {id: string | null; sources: Source[
     setErr('');
     load();
   }, [load]);
-  useSocket((m) => m.type === 'sources' && void load(), load);
+  useSocket((m) => (m.type === 'sources' || m.type === 'synced') && void load(), load);
   useEffect(() => {
     if (it && it.id === id && it.state === 'new') void sourcesApi.editItem(it.id, {state: 'read'}).catch(() => {});
   }, [it, id]);

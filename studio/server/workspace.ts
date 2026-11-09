@@ -324,6 +324,17 @@ export function deleteProject(id: string, nameIn: unknown) {
   return listProjects();
 }
 
+// A folder a download filled in: writing this last is what makes it a project the app can see.
+export function finishProject(id: string, name: string, created: number) {
+  if (!ROOT || !PROJECT_ID.test(id)) throw bad('proyecto no encontrado', 404);
+  writeProject(ROOT, id, {name, created});
+  return listProjects();
+}
+// "styles/<id>" and "formats/<id>" that come with the app, and where its own LESSONS.md is: they don't need to travel.
+export const seedPaths = () => new Set(seeds().map((s) => s.to));
+export const lessonsSeed = () => source(seeds().find((s) => s.to === 'LESSONS.md')!);
+export const isProjectId = (v: unknown): v is string => typeof v === 'string' && PROJECT_ID.test(v);
+
 const projectListeners: ((id: string) => void)[] = [];
 export const onProjectChange = (fn: (id: string) => void) => projectListeners.push(fn);
 

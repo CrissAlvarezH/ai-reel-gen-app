@@ -179,7 +179,7 @@ export function Ideas() {
   }, []);
   const load = useCallback(() => void apply(ideasApi.board), [apply]);
   useEffect(load, [load]);
-  useSocket((m) => m.type === 'ideas' && load(), load);
+  useSocket((m) => (m.type === 'ideas' || m.type === 'synced') && load(), load);
 
   // A vertical the agent deleted stops filtering.
   useEffect(() => {

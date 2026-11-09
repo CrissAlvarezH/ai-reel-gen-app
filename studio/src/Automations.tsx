@@ -14,7 +14,7 @@ import ListSkeleton from '@/components/common/ListSkeleton';
 import EmptyState from '@/components/common/EmptyState';
 import {nextRun, nextRuns} from '../shared/cron';
 import {ALL_EXTERNAL, MAX_ACCOUNT_REELS} from '../shared/types';
-import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, sourcesApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type AutomationAgent, type InspirationAccount, type OwnReel, type OwnReelList, type SourcesView} from './api';
+import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, sourcesApi, syncApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type AutomationAgent, type InspirationAccount, type OwnReel, type OwnReelList, type SourcesView} from './api';
 import {useConfirm} from './confirm';
 import {AgentLogo} from './AgentLogo';
 import {EFFORT_LABELS} from './ChatControls';
@@ -171,6 +171,14 @@ export function Automations() {
         <div>
           <h1 className="text-xl font-semibold">Automatizaciones</h1>
           <p className="mt-1 text-sm text-muted-foreground">Flujos con horario, de este proyecto. Cada paso empieza cuando termina el anterior, y si uno falla el flujo se para. Solo se ejecutan con Reel Studio abierto y el Mac encendido y despierto: una hora perdida no se recupera.</p>
+          {view?.elsewhere && (
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              Se ejecutan en otro equipo.
+              <Button variant="outline" size="sm" onClick={() => void syncApi.makePrimary(view.project).then(() => load(), (e: Error) => setErr(e.message))}>
+                Ejecutar en este equipo
+              </Button>
+            </p>
+          )}
         </div>
         <Button onClick={() => setEditing('new')} className="flex-none">
           <Plus /> Nueva

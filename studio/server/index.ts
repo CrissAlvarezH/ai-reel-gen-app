@@ -27,6 +27,7 @@ import * as workspace from './workspace.ts';
 import * as inspiration from './inspiration.ts';
 import * as account from './account.ts';
 import * as cloud from './cloud.ts';
+import * as syncQueue from './sync-queue.ts';
 import * as ideas from './ideas.ts';
 import * as sources from './sources.ts';
 import * as audience from './audience.ts';
@@ -115,7 +116,7 @@ app.delete('/api/projects/:id', handle(async (req) => {
   return projectsChanged(list);
 }));
 // Its picture (Ajustes → Proyecto): an image file, or the profile photo of its Instagram account (Mi cuenta).
-const projectsChanged = <T>(v: T) => (send({type: 'projects'}), v);
+const projectsChanged = <T>(v: T) => (send({type: 'projects'}), syncQueue.refreshWatchers(), v);
 app.post('/api/projects/:id/avatar', express.raw({type: ['image/png', 'image/jpeg', 'image/webp'], limit: '8mb'}), handle((req) => {
   if (!Buffer.isBuffer(req.body)) throw httpError(400, 'usa una imagen PNG, JPG o WebP');
   return projectsChanged(workspace.setProjectAvatar(req.params.id, req.body, String(req.headers['content-type'] ?? '').split(';')[0]));
@@ -405,6 +406,14 @@ app.post('/api/cloud/code', handle((req) => cloud.sendCode(req.body?.email)));
 app.post('/api/cloud/verify', handle((req) => cloud.verify(req.body?.email, req.body?.code)));
 app.post('/api/cloud/logout', handle(() => cloud.logout()));
 app.put('/api/cloud/account', handle((req) => cloud.setAccount(req.body?.accountId ?? null, account.username())));
+// The same protections as the keys: only this computer. A sync moves the whole project, and this API is also on the local network.
+const thisComputer = (message: string) => (req: Req, res: Response, next: NextFunction) => {
+  if (cloud.isLoopback({remoteAddress: req.socket.remoteAddress, host: req.get('host'), origin: req.get('origin')})) return next();
+  res.status(403).json({error: message});
+};
+const SYNC_ONLY_HERE = 'la sincronización solo se puede gestionar desde el computador donde corre Reel Studio';
+app.put('/api/cloud/name', thisComputer('tu nombre solo se puede cambiar desde el computador donde corre Reel Studio'), handle((req) => cloud.setName(req.body?.name)));
+app.post('/api/cloud/projects/:cloudId/clone', thisComputer(SYNC_ONLY_HERE), handle((req) => syncQueue.clone(req.params.cloudId)));
 app.get('/api/cloud/projects', handle(() => cloud.projects()));
 app.post('/api/cloud/projects/:localId/register', handle((req) => cloud.registerProject(req.params.localId, req.body?.fresh)));
 app.post('/api/cloud/projects/:localId/link', handle((req) => cloud.linkProject(req.params.localId, req.body?.cloudId)));
@@ -419,6 +428,22 @@ app.post('/api/cloud/keys/missing', handle((req) => cloud.moveMissingKeys(req.bo
 app.post('/api/cloud/keys/:name/upload', handle((req) => cloud.uploadKey(req.params.name)));
 app.post('/api/cloud/keys/:name/download', handle((req) => cloud.downloadKey(req.params.name)));
 app.delete('/api/cloud/keys/:name', handle((req) => cloud.removeCloudKey(req.params.name)));
+
+// Sync (server/sync-queue.ts): always for the project named in the URL, never the open one.
+app.use('/api/sync', thisComputer(SYNC_ONLY_HERE));
+app.get('/api/sync', handle(() => syncQueue.overview()));
+app.get('/api/sync/:project', handle((req) => syncQueue.detail(req.params.project, req.query.refresh === '1')));
+app.get('/api/sync/:project/preview', handle((req) => syncQueue.preview(req.params.project)));
+app.post('/api/sync/:project/run', handle((req) => syncQueue.runNow(req.params.project, req.body ?? {})));
+app.get('/api/sync/:project/queue', handle((req) => syncQueue.queueOf(req.params.project)));
+app.post('/api/sync/:project/queue/:id/cancel', handle((req) => syncQueue.cancel(req.params.project, req.params.id)));
+app.post('/api/sync/:project/queue/:id/retry', handle((req) => syncQueue.retry(req.params.project, req.params.id)));
+app.put('/api/sync/:project/groups', handle((req) => syncQueue.setGroups(req.params.project, req.body?.groups)));
+app.get('/api/sync/:project/conflicts', handle((req) => syncQueue.conflicts(req.params.project)));
+app.get('/api/sync/:project/conflicts/:id/content', handle((req) => syncQueue.conflictContent(req.params.project, req.params.id, req.query.channel)));
+app.post('/api/sync/:project/conflicts/:id/restore', handle((req) => syncQueue.restore(req.params.project, req.params.id, req.body?.channel)));
+app.post('/api/sync/:project/conflicts/:id/dismiss', handle((req) => syncQueue.dismiss(req.params.project, req.params.id, req.body?.channel)));
+app.put('/api/sync/:project/primary', handle((req) => syncQueue.primary(req.params.project)));
 
 app.get('/api/account', handle(() => account.status()));
 app.put('/api/account', handle((req) => account.setUsername(req.body?.username)));
@@ -690,10 +715,19 @@ workspace.onChange(() => {
   watchStyles();
   watchFormats();
   serveWorkspace();
+  syncQueue.resetSync();
   send({type: 'workspace'});
 });
 
-cloud.onCloudChange(() => send({type: 'cloud'}));
+cloud.onCloudChange(() => {
+  send({type: 'cloud'});
+  // Signing in or getting the network back is when anything waiting can go.
+  syncQueue.refreshWatchers();
+  syncQueue.pump();
+});
+syncQueue.configure({send, videoBusy: (dir, slug) => chat.workingVideos(dir).has(slug)});
+// A video's job waits for its agent to stop writing.
+chat.onTurnEnd(() => syncQueue.pump());
 
 // Another project: its videos, Mi cuenta and Inspiración are other folders. Agents working in the old one go on
 // (they write to its folders, and their events reach no page of this one); its downloads are left behind.
@@ -710,6 +744,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const)
   process.on(sig, () => {
     chat.stopAll();
     factAudit.stopAll();
+    syncQueue.stopSync();
     process.exit(0);
   });
 
@@ -730,6 +765,7 @@ server.listen(PORT, HOST, () => {
   automations.startScheduler(() => send({type: 'automations'}));
   factAudit.startScanner();
   cloud.startPing();
+  syncQueue.startSync();
   if (HOST === '0.0.0.0') {
     const ips = Object.values(os.networkInterfaces())
       .flat()

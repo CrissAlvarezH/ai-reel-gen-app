@@ -10,7 +10,7 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {cn} from '@/lib/utils';
 import {IMAGE_SOURCES, SOCIAL_SOURCES, type ImageSources, type ProjectContents, type SocialSourceId, type Voice} from '../shared/types';
 import {Switch} from '@/components/ui/switch';
-import {accountApi, fmtAgo, imagesApi, noteAgent, projectsApi, socialApi, settingsApi, voiceApi, workspaceApi, type WorkspaceStatus, type AgentChoice, type AgentUsage, type KeyStatus, type Project, type Settings as SettingsT} from './api';
+import {accountApi, fmtAgo, imagesApi, noteAgent, projectsApi, socialApi, settingsApi, useSocket, voiceApi, workspaceApi, type WorkspaceStatus, type AgentChoice, type AgentUsage, type KeyStatus, type Project, type Settings as SettingsT} from './api';
 import {useConfirm} from './confirm';
 import {useStudio} from './studio';
 import {ProfileCard, ProjectRulesCard, VoiceCard, VoiceCardSkeleton} from './ProfileVoice';
@@ -397,6 +397,7 @@ export function VoiceSection({keys, keysErr, onKeys}: {keys: KeyStatus[] | undef
   useEffect(() => {
     voiceApi.get().then(setVoice, (e: Error) => setErr(e.message));
   }, []);
+  useSocket((m) => m.type === 'synced' && m.paths.includes('config/voice.json') && void voiceApi.get().then(setVoice, () => {}));
 
   // A saved key that hasn't been checked since the server started: check it now (it costs no characters).
   const checking = useRef(false);
@@ -487,6 +488,7 @@ export function ImagesCard({keys, onKeys}: {keys: KeyStatus[] | undefined; onKey
   useEffect(() => {
     imagesApi.get().then(setOn, (e: Error) => setErr(e.message));
   }, []);
+  useSocket((m) => m.type === 'synced' && m.paths.includes('config/images.json') && void imagesApi.get().then(setOn, () => {}));
   const toggle = async (id: keyof ImageSources, v: boolean) => {
     setErr('');
     setOn((o) => (o ? {...o, [id]: v} : o));
@@ -554,6 +556,7 @@ export function SocialCard({keys, onKeys}: {keys: KeyStatus[] | undefined; onKey
   useEffect(() => {
     socialApi.get().then((r) => setSource(r.source), (e: Error) => setErr(e.message));
   }, []);
+  useSocket((m) => m.type === 'synced' && m.paths.includes('config/social.json') && void socialApi.get().then((r) => setSource(r.source), () => {}));
   const choose = async (id: SocialSourceId) => {
     setErr('');
     setSource(id);

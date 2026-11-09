@@ -20,6 +20,7 @@ import * as sources from './sources.ts';
 import {IS_MAC, readJson, writeJson} from './platform.ts';
 import {httpError} from './reels.ts';
 import {PROJECT, VIDEOS, listProjects, projectDir, rel, withProject} from './workspace.ts';
+import {runsElsewhere} from './cloud.ts';
 
 type Store = {automations: Automation[]; runs: AutomationRun[]};
 const KEEP_RUNS = 50;
@@ -42,6 +43,8 @@ export function view(): AutomationsView {
   const s = read(fileOf(PROJECT));
   const running = new Set([...active.values()].map((a) => a.automation));
   return {
+    project: PROJECT,
+    elsewhere: runsElsewhere(projectDir(PROJECT)),
     automations: s.automations.map((a) => ({...a, running: running.has(a.id)})),
     // A run still marked running that isn't going on: the studio closed in the middle of it.
     runs: s.runs
@@ -318,6 +321,7 @@ function tick(now = new Date()) {
   if (minute === lastMinute) return;
   lastMinute = minute;
   for (const {id: project} of listProjects()) {
+    if (runsElsewhere(projectDir(project))) continue; // another computer has this one, or it would all spend twice
     const s = read(fileOf(project));
     for (const a of s.automations) {
       if (!a.enabled || !cronMatches(a.cron, now) || isRunning(a.id)) continue;

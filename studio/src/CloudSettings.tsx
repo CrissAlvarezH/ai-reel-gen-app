@@ -1,7 +1,7 @@
 // His Reel Studio account (the site that holds his Meta app and Instagram connections; the studio only keeps its
 // session, server/cloud.ts): the header's indicator, Ajustes → Cuenta, and Ajustes → Instagram, which of its
 // accounts this project uses for Instagram's own numbers in Mi cuenta and, later, publishing.
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {AlertTriangle, AtSign, BarChart3, CheckCircle2, ExternalLink, FolderSync, KeyRound, Loader2, LogOut, Mail, RefreshCw, Send, type LucideIcon} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -81,10 +81,80 @@ function AccountSkeleton({err}: {err: string}) {
           <Skeleton className="h-7 w-28" />
         </CardAction>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-3">
         <Skeleton className="h-5 w-56" />
+        <div className="mt-2">
+          <NameFieldSkeleton />
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+function NameFieldSkeleton() {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Skeleton className="h-3.5 w-14" />
+      <div className="flex max-w-md gap-2">
+        <Skeleton className="h-8 flex-1" />
+        <Skeleton className="h-8 w-20" />
+      </div>
+    </div>
+  );
+}
+
+// A short note in a corner, out of the page's flow so nothing moves when it comes and goes.
+function SavedToast({text}: {text: string}) {
+  if (!text) return null;
+  return (
+    <div role="status" className="animate-fade-in fixed right-4 bottom-4 z-50 flex items-center gap-2 rounded-lg border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-lg">
+      <CheckCircle2 className="size-4 text-emerald-500" /> {text}
+    </div>
+  );
+}
+
+// What he's called in the app; the login only ever asks for an email.
+function NameField({saved, disabled}: {saved: string; disabled: boolean}) {
+  const [name, setName] = useState(saved);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [toast, setToast] = useState('');
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => setName(saved), [saved]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const dirty = name.trim() !== saved;
+  const save = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      await cloudApi.setName(name);
+      setToast('Nombre guardado');
+      clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setToast(''), 2500);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className="flex flex-col gap-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (dirty && !busy) void save();
+      }}
+    >
+      <Label htmlFor="cloud-name">Nombre</Label>
+      <div className="flex max-w-md gap-2">
+        <Input id="cloud-name" autoComplete="name" maxLength={120} value={name} disabled={busy || disabled} onChange={(e) => setName(e.target.value)} placeholder="Cómo te llamas" className="flex-1" />
+        <Button type="submit" variant="outline" disabled={!dirty || busy || disabled} className="w-20">
+          {busy ? <Loader2 className="animate-spin" /> : 'Guardar'}
+        </Button>
+      </div>
+      {err && <p className="text-sm text-destructive">{err}</p>}
+      <SavedToast text={toast} />
+    </form>
   );
 }
 
@@ -207,6 +277,9 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
                 </Button>
               </span>
             )}
+            <div className="mt-2">
+              <NameField saved={s.user?.name ?? ''} disabled={!s.user} />
+            </div>
           </div>
         ) : (
           <>
@@ -274,7 +347,7 @@ function AccountCard({s, onChange, reload}: {s: CloudStatus; onChange: (s: Cloud
 const BENEFITS: {icon: LucideIcon; title: string; text: string; soon?: boolean}[] = [
   {icon: BarChart3, title: 'Tus métricas reales', text: 'Guardados, compartidos, alcance y retención de tus reels, directo de Instagram, en Mi cuenta.'},
   {icon: Send, title: 'Publica sin salir de la app', text: 'Sube tus reels a Instagram desde Reel Studio, cada proyecto con su cuenta.', soon: true},
-  {icon: FolderSync, title: 'Tus proyectos en cualquier equipo', text: 'Ideas, guiones e inspiración sincronizados entre tus computadores.', soon: true},
+  {icon: FolderSync, title: 'Tus proyectos en cualquier equipo', text: 'Ideas, guiones e inspiración sincronizados entre tus computadores.'},
   {icon: KeyRound, title: 'Tus claves siempre contigo', text: 'Guárdalas cifradas en tu cuenta y tráelas a un equipo nuevo con solo iniciar sesión.'},
 ];
 
