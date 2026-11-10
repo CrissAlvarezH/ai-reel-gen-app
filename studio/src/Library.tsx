@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {CalendarClock, CircleCheck, Eye, Film, Loader2, MoreHorizontal, Plus, Send, Trash2} from 'lucide-react';
+import {Eye, Film, LayoutGrid, Loader2, MoreHorizontal, Plus, Table2, Trash2} from 'lucide-react';
+import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
@@ -10,7 +11,9 @@ import CardGridSkeleton from '@/components/common/CardGridSkeleton';
 import EmptyState from '@/components/common/EmptyState';
 import {api, fmtAgo, fmtTime, useLive, type ReelSummary} from './api';
 import {ReelProgressMini} from './ReelProgress';
-import {useStudio} from './studio';
+import {ReleaseLine} from './Release';
+import {LibraryTable} from './LibraryTable';
+import {projectKey, read, write, useStudio} from './studio';
 
 // On a video posted on Instagram (Mi cuenta has its reel): its views, and how it did against the account's median.
 function PostedBadge({p}: {p: NonNullable<ReelSummary['instagram']>}) {
@@ -23,31 +26,6 @@ function PostedBadge({p}: {p: NonNullable<ReelSummary['instagram']>}) {
       <Eye className="size-3" /> {views}
       {p.ratio != null && <span className={p.ratio >= 2 ? 'text-emerald-400' : 'text-muted-foreground'}>· {p.ratio.toFixed(1)}×</span>}
     </span>
-  );
-}
-
-// Where the video stands on Instagram, under its hook: out (and when), scheduled (and for when), on its way, or finished
-// and not sent yet. A date this year goes without the year; a scheduled one with its hour.
-const day = (iso: string) => {
-  const d = new Date(iso);
-  return d.toLocaleDateString('es', {day: 'numeric', month: 'short', ...(d.getFullYear() === new Date().getFullYear() ? {} : {year: 'numeric'})});
-};
-const hour = (iso: string) => new Date(iso).toLocaleTimeString('es', {hour: 'numeric', minute: '2-digit'});
-const full = (iso: string) => new Date(iso).toLocaleString('es', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit'});
-function ReleaseLine({r}: {r: NonNullable<ReelSummary['release']>}) {
-  const [Icon, text, title, tone] =
-    r.state === 'published'
-      ? [CircleCheck, r.at ? `Publicado el ${day(r.at)}` : 'Publicado', r.at ? `Publicado en Instagram el ${full(r.at)}` : 'Publicado en Instagram', 'text-emerald-600 dark:text-emerald-400']
-      : r.state === 'scheduled' && r.at
-        ? [CalendarClock, `Programado: ${day(r.at)}, ${hour(r.at)}`, `Sale en Instagram el ${full(r.at)}`, 'text-sky-600 dark:text-sky-400']
-        : r.state === 'publishing'
-          ? [Loader2, 'Publicando…', 'Instagram lo está publicando', 'text-amber-600 dark:text-amber-400']
-          : [Send, 'Listo para publicar o programar', 'Está renderizado y aún no lo has enviado a Instagram', 'text-muted-foreground'];
-  return (
-    <p className={`flex items-center gap-1.5 text-xs font-medium ${tone}`} title={title}>
-      <Icon className={`size-3.5 shrink-0${r.state === 'publishing' ? ' animate-spin' : ''}`} />
-      <span className="truncate">{text}</span>
-    </p>
   );
 }
 
@@ -109,6 +87,9 @@ function DeleteReel({reel: r, onClose, onDeleted}: {reel: ReelSummary; onClose: 
   );
 }
 
+type View = 'grid' | 'table';
+const VIEW_KEY = 'studio.library.view';
+
 export function Library() {
   const {uiRef} = useStudio();
   uiRef.current = {page: 'library'};
@@ -116,6 +97,13 @@ export function Library() {
   const [err, setErr] = useState('');
   const [deleting, setDeleting] = useState<ReelSummary | null>(null);
   const load = useCallback(() => api.reels().then(setReels, (e) => setErr(e.message)), []);
+  // Cuadrícula or Tabla: kept per project, like the table's columns.
+  const [view, setView] = useState<View>(() => (read(projectKey(VIEW_KEY), 'grid') === 'table' ? 'table' : 'grid'));
+  const pickView = (v: string) => {
+    const next: View = v === 'table' ? 'table' : 'grid';
+    setView(next);
+    write(projectKey(VIEW_KEY), next);
+  };
   useEffect(() => void load(), [load]);
   useLive(load);
 
@@ -130,7 +118,21 @@ export function Library() {
     <main className="mx-auto max-w-7xl p-6">
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Videos</h1>
+          <div className="flex flex-wrap items-center gap-4">
+            <h1 className="text-2xl font-semibold tracking-tight">Videos</h1>
+            {reels.length > 0 && (
+              <Tabs value={view} onValueChange={pickView}>
+                <TabsList>
+                  <TabsTrigger value="grid" className="px-2.5">
+                    <LayoutGrid /> Cuadrícula
+                  </TabsTrigger>
+                  <TabsTrigger value="table" className="px-2.5">
+                    <Table2 /> Tabla
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground">
             {reels.length} {reels.length === 1 ? 'video' : 'videos'} en este proyecto
           </p>
@@ -157,6 +159,8 @@ export function Library() {
             </Button>
           }
         />
+      ) : view === 'table' ? (
+        <LibraryTable reels={reels} onDelete={setDeleting} />
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
           {reels.map((r, i) => (

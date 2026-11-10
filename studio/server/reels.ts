@@ -12,6 +12,7 @@ import {BEAT_TAGS, type Act, type Format, type Beat, type BoardGroup, type Poste
 import {ROOT, VIDEOS, PROJECT} from './workspace.ts';
 import {postedAs} from './projects-index.ts';
 import {recordsOf} from './publications-file.ts';
+import {createdOf} from './created.ts';
 export {ROOT, VIDEOS};
 
 export const httpError = (status: number, message: string) => Object.assign(new Error(message), {status});
@@ -286,6 +287,7 @@ export function summary(slug: string): ReelSummary {
     latest: vers[0] ?? null,
     versionCount: vers.length,
     thumb,
+    created: createdOf(dir) ?? Math.min(...mtimes),
     updated: Math.max(...mtimes),
     ...scriptInfo(slug, script),
     instagram,
