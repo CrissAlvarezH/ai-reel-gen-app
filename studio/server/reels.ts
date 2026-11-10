@@ -269,7 +269,8 @@ export function summary(slug: string): ReelSummary {
   const vers = versions(slug, dir);
   const bds = boards(slug, dir);
   const board = bds.find((g) => /board/.test(g.name));
-  const thumb = board?.images.find((u) => /t\d/.test(u)) ?? (cuts[0] ? url(slug, `public/cut/${cuts[0]}`) : null);
+  // Its cover (out/miniatura.*) when it has one; else a still from its board, else a cutout.
+  const thumb = thumbnailOf(slug, dir)?.url ?? board?.images.find((u) => /t\d/.test(u)) ?? (cuts[0] ? url(slug, `public/cut/${cuts[0]}`) : null);
   const mtimes = [stat(dir)?.mtimeMs, stat(path.join(dir, 'audio/vo.txt'))?.mtimeMs, vers[0]?.mtime].filter((x): x is number => !!x);
   const kind = videoFormatOf(slug);
   return {
@@ -296,8 +297,8 @@ function beats(dir: string): Beat[] {
 
 // The cover: out/miniatura.png (or .jpg/.webp), rendered by ./thumb.sh next to the renders, so it's in the folder
 // "Descargar video" opens. The mtime in its url makes the browser fetch it again when it's re-rendered.
-// A video's picture for lists: its cover, else what the library card shows.
-export const coverUrl = (slug: string) => thumbnailOf(slug, path.join(VIDEOS, slug))?.url ?? summary(slug).thumb;
+// A video's picture for lists: what the library card shows (its cover first).
+export const coverUrl = (slug: string) => summary(slug).thumb;
 
 function thumbnailOf(slug: string, dir: string): ReelDetail['thumbnail'] {
   const name = ls(path.join(dir, 'out'), (n) => THUMB.test(n))[0];

@@ -28,7 +28,7 @@ export type ReelSummary = {
   progress: ProgressStep[];
   latest: Version | null;
   versionCount: number;
-  thumb: string | null;
+  thumb: string | null; // the card's picture: out/miniatura.* (the cover), else a board still, else a cutout
   updated: number;
   words: number;
   seconds: number; // estimated at the video's voice pace
