@@ -25,7 +25,7 @@ const server = http.createServer(async (req, res) => {
     return res.writeHead(200).end();
   }
   if (req.headers.authorization !== 'Bearer tok') return send(401, {error: 'no'});
-  const view = (p: Pub) => ({id: p.id, status: p.status, scheduledAt: ctl.old ? undefined : p.scheduledAt, error: null, permalink: p.status === 'published' ? `https://www.instagram.com/reel/${p.id}/` : null});
+  const view = (p: Pub) => ({id: p.id, status: p.status, scheduledAt: ctl.old ? undefined : p.scheduledAt, error: null, permalink: p.status === 'published' ? `https://www.instagram.com/reel/R${p.id}code/` : null});
   if (req.method === 'POST' && url === '/api/studio/publications') {
     const body = JSON.parse(raw.toString());
     const id = `P${++ctl.n}`;
@@ -103,7 +103,25 @@ test('now: uploads the video and its cover, then follows it until it is out', as
   await until(() => records()[0].status === 'published');
   assert.equal(ctl.puts.get(`${r.id}.mp4`), 1234);
   assert.equal(ctl.puts.get(`${r.id}.jpg`), 56);
-  assert.equal(records()[0].permalink, `https://www.instagram.com/reel/${r.id}/`);
+  assert.equal(records()[0].permalink, `https://www.instagram.com/reel/R${r.id}code/`);
+});
+
+test('once out, it goes into Mi cuenta at once (when Mi cuenta follows that account), without touching one it has', async () => {
+  const mine = path.join(dir, 'account', 'entiende.finanzas.ya');
+  fs.writeFileSync(path.join(dir, 'config', 'account.json'), JSON.stringify({username: 'entiende.finanzas.ya'}));
+  const r = await publish.publish('mi-video', {version: 'mi-video', scheduledAt: null});
+  const reel = path.join(mine, `R${r.id}code`);
+  await until(() => fs.existsSync(path.join(reel, 'thumb.jpg')));
+  const saved = JSON.parse(fs.readFileSync(path.join(reel, 'reel.json'), 'utf8'));
+  assert.deepEqual([saved.code, saved.url, saved.caption, saved.views], [`R${r.id}code`, `https://www.instagram.com/reel/R${r.id}code/`, 'Guárdalo #ahorro', null]);
+
+  // One Mi cuenta already downloaded stays as it is.
+  fs.writeFileSync(path.join(reel, 'reel.json'), JSON.stringify({...saved, views: 99}));
+  await publish.list('mi-video');
+  await new Promise((res) => setTimeout(res, 50));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(reel, 'reel.json'), 'utf8')).views, 99);
+  fs.rmSync(path.join(dir, 'config', 'account.json'));
+  fs.rmSync(path.join(dir, 'account'), {recursive: true});
 });
 
 test('scheduled: waits in the account, and can be moved and canceled', async () => {

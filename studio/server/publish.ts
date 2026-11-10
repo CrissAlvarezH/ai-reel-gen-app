@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {promisify} from 'node:util';
+import * as account from './account.ts';
 import * as cloud from './cloud.ts';
 import type {CloudPublication, PresignedPut} from './cloud.ts';
 import {readJson, writeJson} from './platform.ts';
@@ -45,7 +46,27 @@ function update(dir: string, id: string, set: Partial<VideoPublication>) {
   if (JSON.stringify(next) === JSON.stringify(list[i])) return next; // unchanged: don't touch the file (it syncs)
   list[i] = next;
   writeJson(path.join(dir, FILE), list);
+  if (next.status === 'published') void noteOut(dir, next);
   return next;
+}
+
+// Out on Instagram: into Mi cuenta right away (account.notePublished), with the cover as its picture.
+const noting = new Set<string>();
+async function noteOut(dir: string, r: VideoPublication) {
+  const project = path.basename(path.dirname(path.dirname(dir))); // projects/<id>/videos/<slug>
+  if (!r.permalink || noting.has(r.id)) return;
+  noting.add(r.id);
+  let cover: Awaited<ReturnType<typeof coverJpeg>> = null;
+  try {
+    if (account.knowsPublished(project, r.account, r.permalink)) return;
+    cover = await coverJpeg(dir).catch(() => null);
+    account.notePublished(project, {account: r.account, permalink: r.permalink, caption: captionOf(dir), posted: r.scheduledAt ?? r.createdAt}, cover?.file);
+  } catch (e) {
+    console.error('Mi cuenta, reel publicado:', (e as Error).message);
+  } finally {
+    if (cover?.temp) fs.rmSync(cover.file, {force: true});
+    noting.delete(r.id);
+  }
 }
 
 const fromCloud = (p: CloudPublication): Partial<VideoPublication> => ({
@@ -79,6 +100,7 @@ export async function list(slug: string): Promise<VideoPublications> {
   // Each one still on its way is asked about (a few at a time is plenty: a video has few).
   const items = await Promise.all(
     recordsOf(dir).map(async (r) => {
+      if (r.status === 'published') void noteOut(dir, r); // one published before Mi cuenta was told
       if (!signedIn || FINAL.has(r.status) || sending.has(r.id)) return r;
       try {
         return update(dir, r.id, fromCloud(await cloud.publicationsApi.get(r.id))) ?? r;

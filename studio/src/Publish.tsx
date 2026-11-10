@@ -10,6 +10,7 @@ import {Button} from '@/components/ui/button';
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from '@/components/ui/dialog';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Switch} from '@/components/ui/switch';
 import {cn} from '@/lib/utils';
 
@@ -25,8 +26,10 @@ const STATUS: Record<PublicationStatus, {label: string; tone: string}> = {
   canceled: {label: 'Cancelada', tone: 'text-muted-foreground'},
 };
 
-// <input type="datetime-local"> speaks local time without a zone.
-const localInput = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+// A time is a day (<input type="date">, local) and a whole hour: the account's cron publishes on the hour.
+type When = {day: string; hour: number};
+const whenOf = (d: Date): When => ({day: new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10), hour: d.getHours()});
+const dateOf = (w: When) => new Date(`${w.day}T${String(w.hour).padStart(2, '0')}:00`);
 // The next o'clock at least 30 minutes away: a sensible first time to offer.
 const nextHour = () => {
   const d = new Date(Date.now() + 30 * 60_000);
@@ -34,6 +37,39 @@ const nextHour = () => {
   d.setHours(d.getHours() + 1);
   return d;
 };
+// When's checked here first, so the form says so before anything is sent.
+const whenError = (w: When) => {
+  const d = dateOf(w);
+  if (Number.isNaN(d.getTime())) return 'Elige una fecha y una hora.';
+  if (d.getTime() <= Date.now()) return 'Elige una hora en el futuro.';
+  return '';
+};
+
+function WhenPicker({id, value, onChange}: {id: string; value: When; onChange: (w: When) => void}) {
+  return (
+    <div className="grid grid-cols-[1fr_auto] gap-2">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${id}-day`}>Fecha</Label>
+        <Input id={`${id}-day`} type="date" value={value.day} min={whenOf(new Date()).day} onChange={(e) => onChange({...value, day: e.target.value})} />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${id}-hour`}>Hora</Label>
+        <Select value={String(value.hour)} onValueChange={(h) => onChange({...value, hour: Number(h)})}>
+          <SelectTrigger id={`${id}-hour`} className="w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Array.from({length: 24}, (_, h) => (
+              <SelectItem key={h} value={String(h)}>
+                {String(h).padStart(2, '0')}:00
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
 const fmtWhen = (iso: string) => new Date(iso).toLocaleString('es', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 
 // The video's publications, refreshed every few seconds while one is on its way, every minute while one waits.
@@ -57,7 +93,7 @@ export function usePublications(slug: string) {
 export function PublishButton({slug, version, data, onDone}: {slug: string; version: string | null; data: VideoPublications | null; onDone: () => void}) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'now' | 'later'>('now');
-  const [when, setWhen] = useState(() => localInput(nextHour()));
+  const [when, setWhen] = useState(() => whenOf(nextHour()));
   const [feed, setFeed] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -70,10 +106,9 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
     if (!version) return;
     let scheduledAt: string | null = null;
     if (mode === 'later') {
-      const d = new Date(when);
-      if (Number.isNaN(d.getTime())) return setError('Elige una fecha y una hora.');
-      if (d.getTime() < Date.now() + 60_000) return setError('Elige una hora al menos un minuto en el futuro.');
-      scheduledAt = d.toISOString();
+      const bad = whenError(when);
+      if (bad) return setError(bad);
+      scheduledAt = dateOf(when).toISOString();
     }
     setBusy(true);
     setError('');
@@ -97,7 +132,7 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
         title={!version ? 'Renderiza el video para publicarlo' : last ? `${STATUS[last.status].label}: abre para ver o publicar otra vez` : 'Publicar esta versión en Instagram, ahora o programada'}
         onClick={() => {
           setMode('now');
-          setWhen(localInput(nextHour()));
+          setWhen(whenOf(nextHour()));
           setError('');
           setOpen(true);
         }}
@@ -176,9 +211,8 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
               </div>
               {mode === 'later' && (
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="publish-when">Fecha y hora</Label>
-                  <Input id="publish-when" type="datetime-local" value={when} min={localInput(new Date())} onChange={(e) => setWhen(e.target.value)} />
-                  <p className="text-xs text-muted-foreground">Sale a esa hora desde tu cuenta, aunque Reel Studio esté cerrado. Hasta entonces puedes cambiarla o cancelarla.</p>
+                  <WhenPicker id="publish-when" value={when} onChange={setWhen} />
+                  <p className="text-xs text-muted-foreground">Sale a esa hora en punto (unos minutos después) desde tu cuenta, aunque Reel Studio esté cerrado. Hasta entonces puedes cambiarla o cancelarla.</p>
                 </div>
               )}
 
@@ -224,7 +258,7 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
 export function PublicationList({slug, data, onChange}: {slug: string; data: VideoPublications | null; onChange: () => void}) {
   const confirm = useConfirm();
   const [moving, setMoving] = useState<VideoPublication | null>(null);
-  const [when, setWhen] = useState('');
+  const [when, setWhen] = useState<When>(() => whenOf(nextHour()));
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   if (!data?.items.length) return null;
@@ -249,12 +283,13 @@ export function PublicationList({slug, data, onChange}: {slug: string; data: Vid
     if (!(await confirm({title: '¿Cancelar esta publicación?', description: 'No saldrá en Instagram y su copia en tu cuenta se borra.', action: 'Sí, cancelarla', cancel: 'No', destructive: true}))) return;
     await act(p.id, () => api.cancelPublication(slug, p.id));
   };
-  const saveTime = async (at: string) => {
+  const saveTime = async (now: boolean) => {
     if (!moving) return;
-    if (at !== 'now') {
-      const d = new Date(when);
-      if (Number.isNaN(d.getTime())) return setError('Elige una fecha y una hora.');
-      at = d.toISOString();
+    let at = 'now';
+    if (!now) {
+      const bad = whenError(when);
+      if (bad) return setError(bad);
+      at = dateOf(when).toISOString();
     }
     if (await act(moving.id, () => api.reschedulePublication(slug, moving.id, at))) setMoving(null);
   };
@@ -282,7 +317,7 @@ export function PublicationList({slug, data, onChange}: {slug: string; data: Vid
                     size="sm"
                     disabled={busy === p.id}
                     onClick={() => {
-                      setWhen(localInput(new Date(p.scheduledAt!)));
+                      setWhen(whenOf(new Date(p.scheduledAt!)));
                       setError('');
                       setMoving(p);
                     }}
@@ -314,22 +349,19 @@ export function PublicationList({slug, data, onChange}: {slug: string; data: Vid
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Cambiar la hora</DialogTitle>
-            <DialogDescription>Sale a esa hora desde tu cuenta, aunque Reel Studio esté cerrado.</DialogDescription>
+            <DialogDescription>Sale a esa hora en punto desde tu cuenta, aunque Reel Studio esté cerrado. «Publicar ahora» la manda ya.</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="publish-move">Fecha y hora</Label>
-            <Input id="publish-move" type="datetime-local" value={when} min={localInput(new Date())} onChange={(e) => setWhen(e.target.value)} />
-          </div>
+          <WhenPicker id="publish-move" value={when} onChange={setWhen} />
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           )}
           <DialogFooter>
-            <Button variant="ghost" disabled={!!busy} onClick={() => saveTime('now')}>
+            <Button variant="ghost" disabled={!!busy} onClick={() => saveTime(true)}>
               Publicar ahora
             </Button>
-            <Button disabled={!!busy} onClick={() => saveTime(when)}>
+            <Button disabled={!!busy} onClick={() => saveTime(false)}>
               {busy && <Loader2 className="animate-spin" />}
               Guardar
             </Button>

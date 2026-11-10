@@ -218,6 +218,45 @@ async function insights(dir: string, linked: {accountId: number; username: strin
   }
 }
 
+// A reel this app just published (publish.ts): into Mi cuenta at once, with what's known (its code, link, caption and
+// time), so its video shows as posted without paying a download. The next download fills in its numbers and cover
+// link. Only for the account Mi cuenta follows in that project, and never over a reel it already has.
+export function notePublished(project: string, p: {account: string; permalink: string; caption: string; posted: string}, cover?: string | null) {
+  const code = /\/(?:reel|p)\/([A-Za-z0-9_-]+)/.exec(p.permalink)?.[1] ?? '';
+  if (!CODE.test(code)) return false;
+  const wrote = withProject(project, () => {
+    if (username() !== p.account) return false;
+    const d = reelDir(p.account, code);
+    if (fs.existsSync(path.join(d, 'reel.json'))) return false;
+    const now = Date.now();
+    writeJson(path.join(d, 'reel.json'), {
+      code,
+      url: p.permalink,
+      caption: p.caption,
+      posted: p.posted,
+      views: null,
+      likes: null,
+      comments: null,
+      duration: null,
+      music: null,
+      metricsAt: now,
+      videoUrl: null,
+      displayUrl: null,
+      added: now,
+    } satisfies ReelFile);
+    if (cover) fs.copyFileSync(cover, path.join(d, 'thumb.jpg'));
+    return true;
+  });
+  if (wrote) changed();
+  return wrote;
+}
+
+// Whether that reel still has to be noted (so the cover isn't prepared for nothing).
+export const knowsPublished = (project: string, account: string, permalink: string) => {
+  const code = /\/(?:reel|p)\/([A-Za-z0-9_-]+)/.exec(permalink)?.[1] ?? '';
+  return !CODE.test(code) || withProject(project, () => username() !== account || fs.existsSync(path.join(reelDir(account, code), 'reel.json')));
+};
+
 // From the page: waits until it's done.
 export async function fetchLatest(limitIn: unknown) {
   const u = requireUser();
