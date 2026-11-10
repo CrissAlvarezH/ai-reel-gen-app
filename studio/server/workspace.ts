@@ -376,12 +376,12 @@ if (initial && isDir(initial)) apply(path.resolve(initial));
 
 // to: where it goes in the workspace. from: where it is in the repo (dev); the installer bundles each one
 // at RESOURCES/<to>. Styles and skills go one by one, so a workspace that has some keeps them and gets the rest.
+// Nothing Git ignores goes (refs/: third-party style references, local only).
 type Seed = {to: string; from: string};
 const SEED_FIXED: Seed[] = [
   {to: 'template', from: 'template'},
   {to: 'tools', from: 'tools'},
   {to: 'scripts', from: 'scripts'},
-  {to: 'refs/style-collage', from: 'refs/style-collage'},
   {to: 'CLAUDE.md', from: 'studio/workspace/CLAUDE.md'},
   {to: 'LESSONS.md', from: 'studio/workspace/LESSONS.md'},
   {to: '.gitignore', from: 'studio/workspace/gitignore'},

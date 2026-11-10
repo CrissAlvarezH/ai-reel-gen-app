@@ -1,8 +1,8 @@
 # Collage de papel con semitono — how to build it
 
 The style's own part of the process (`.claude/skills/reel-studio/SKILL.md` has the steps). Palette, fonts and
-what to avoid are in `style.json` next to this file; references in `refs/style-collage/`, approved frames in
-`refs/approved/`. Lessons for this style: `LESSONS.md`, its collage section. Template: `template/`.
+what to avoid are in `style.json` next to this file; references in `refs/style-collage/` and approved frames in
+`refs/approved/`, when this workspace has them (local, they don't come with the app). Lessons for this style: `LESSONS.md`, its collage section. Template: `template/`.
 
 ## Look
 
