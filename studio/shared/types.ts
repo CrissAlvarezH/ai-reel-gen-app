@@ -29,6 +29,7 @@ export type ReelSummary = {
   latest: Version | null;
   versionCount: number;
   thumb: string | null; // the card's picture: out/miniatura.* (the cover), else a board still, else a cutout
+  created: number; // ms: created.txt, written when the video was made (estimated once for older ones)
   updated: number;
   words: number;
   seconds: number; // estimated at the video's voice pace

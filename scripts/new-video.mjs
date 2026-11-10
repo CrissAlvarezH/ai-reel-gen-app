@@ -109,6 +109,7 @@ export function scaffold({root, project = projectDir(root), slug, style, templat
   }
   const pkg = path.join(dir, 'package.json');
   if (fs.existsSync(pkg)) fs.writeFileSync(pkg, fs.readFileSync(pkg, 'utf8').replace('"name":"reel"', `"name":${JSON.stringify(slug)}`));
+  fs.writeFileSync(path.join(dir, 'created.txt'), `${new Date().toISOString()}\n`); // when it was made (Reel Studio's library)
   fs.writeFileSync(path.join(dir, 'style.txt'), `${style}\n`);
   if (kind?.id) fs.writeFileSync(path.join(dir, 'format.txt'), `${kind.id}\n`);
   if (title) fs.writeFileSync(path.join(dir, 'title.txt'), `${title}\n`);

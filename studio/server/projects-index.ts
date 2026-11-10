@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {ROOT, listProjects} from './workspace.ts';
 import {readJson} from './platform.ts';
+import {CREATED, createdOf} from './created.ts';
 import {register, read as readIndex, dirs, mtime, median, norm, strs, json, row, words, since, durationWhere, type DB, type DURATIONS} from './db.ts';
 import type {CloudReelMetrics, InspirationProfile, OwnReel, PostedReel, ReelAnalysis, ReelTranscript} from '../shared/types.ts';
 
@@ -152,7 +153,7 @@ type ReelFile = {code: string; url: string; caption: string; posted: string | nu
 type AccountFile = {username: string; fullName: string | null; profile: InspirationProfile | null; fetched: number | null; error: string | null};
 type InsightsFile = {metrics?: Partial<CloudReelMetrics>; at?: number};
 
-const VIDEO_FILES = ['title.txt', 'style.txt', 'audio/vo.txt', 'audio/beats.json', 'caption.md', 'audio/vo.mp3', 'src/words.json'];
+const VIDEO_FILES = [CREATED, 'title.txt', 'style.txt', 'audio/vo.txt', 'audio/beats.json', 'caption.md', 'audio/vo.mp3', 'src/words.json'];
 const REEL_FILES = ['reel.json', 'meta.json', 'thumb.jpg', 'transcript.json', 'hook.jpg', 'analysis.json', 'insights.json'];
 
 // Each returns whether anything changed.
@@ -183,12 +184,7 @@ function syncVideos(d: DB, ids: string[]) {
       const words = readJson<{e: number}[]>(path.join(dir, 'src/words.json'));
       const beats = readJson<unknown>(path.join(dir, 'audio/beats.json'));
       const rendered = renders.length ? Math.max(...renders) : null;
-      let created = 0;
-      try {
-        created = fs.statSync(dir).birthtimeMs || fs.statSync(dir).ctimeMs;
-      } catch {
-        /* gone */
-      }
+      const created = createdOf(dir) ?? 0;
       const prev = (oldReel.get(id, slug) as {reel: string | null} | undefined)?.reel ?? null;
       upsert.run(
         ...row([
