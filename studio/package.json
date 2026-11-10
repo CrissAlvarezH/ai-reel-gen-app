@@ -5,6 +5,9 @@
   "author": "Cristian Alvarez",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^22.18.0 || >=23.6.0"
+  },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server/index.ts",
     "dev": "node --disable-warning=ExperimentalWarning --watch-path=server --watch-path=shared server/index.ts",
