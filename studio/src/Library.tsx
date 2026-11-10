@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {Eye, Film, Loader2, MoreHorizontal, Plus, Trash2} from 'lucide-react';
+import {CalendarClock, CircleCheck, Eye, Film, Loader2, MoreHorizontal, Plus, Send, Trash2} from 'lucide-react';
 import {AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
@@ -23,6 +23,31 @@ function PostedBadge({p}: {p: NonNullable<ReelSummary['instagram']>}) {
       <Eye className="size-3" /> {views}
       {p.ratio != null && <span className={p.ratio >= 2 ? 'text-emerald-400' : 'text-muted-foreground'}>· {p.ratio.toFixed(1)}×</span>}
     </span>
+  );
+}
+
+// Where the video stands on Instagram, under its hook: out (and when), scheduled (and for when), on its way, or finished
+// and not sent yet. A date this year goes without the year; a scheduled one with its hour.
+const day = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString('es', {day: 'numeric', month: 'short', ...(d.getFullYear() === new Date().getFullYear() ? {} : {year: 'numeric'})});
+};
+const hour = (iso: string) => new Date(iso).toLocaleTimeString('es', {hour: 'numeric', minute: '2-digit'});
+const full = (iso: string) => new Date(iso).toLocaleString('es', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit'});
+function ReleaseLine({r}: {r: NonNullable<ReelSummary['release']>}) {
+  const [Icon, text, title, tone] =
+    r.state === 'published'
+      ? [CircleCheck, r.at ? `Publicado el ${day(r.at)}` : 'Publicado', r.at ? `Publicado en Instagram el ${full(r.at)}` : 'Publicado en Instagram', 'text-emerald-600 dark:text-emerald-400']
+      : r.state === 'scheduled' && r.at
+        ? [CalendarClock, `Programado: ${day(r.at)}, ${hour(r.at)}`, `Sale en Instagram el ${full(r.at)}`, 'text-sky-600 dark:text-sky-400']
+        : r.state === 'publishing'
+          ? [Loader2, 'Publicando…', 'Instagram lo está publicando', 'text-amber-600 dark:text-amber-400']
+          : [Send, 'Listo para publicar o programar', 'Está renderizado y aún no lo has enviado a Instagram', 'text-muted-foreground'];
+  return (
+    <p className={`flex items-center gap-1.5 text-xs font-medium ${tone}`} title={title}>
+      <Icon className={`size-3.5 shrink-0${r.state === 'publishing' ? ' animate-spin' : ''}`} />
+      <span className="truncate">{text}</span>
+    </p>
   );
 }
 
@@ -149,6 +174,7 @@ export function Library() {
                   <CardHeader className="gap-1 py-4">
                     <CardTitle className="truncate">{r.title ?? r.slug}</CardTitle>
                     <CardDescription className="line-clamp-2">{r.hook || 'Sin guion'}</CardDescription>
+                    {r.release && <ReleaseLine r={r.release} />}
                   </CardHeader>
                   <CardContent className="flex flex-col gap-2 pb-4">
                     <ReelProgressMini steps={r.progress} />

@@ -7,10 +7,11 @@ import {formatRef} from './formats.ts';
 import * as footage from './footage.ts';
 import {videoVoice, voiceRef} from './config.ts';
 import {fsUrl, readJson} from './platform.ts';
-import {BEAT_TAGS, type Act, type Format, type Beat, type BoardGroup, type ReelDetail, type ReelSummary, type ProgressStep, type Version, type Word} from '../shared/types.ts';
+import {BEAT_TAGS, type Act, type Format, type Beat, type BoardGroup, type PostedReel, type ReelDetail, type ReelRelease, type ReelSummary, type VideoPublication, type ProgressStep, type Version, type Word} from '../shared/types.ts';
 
 import {ROOT, VIDEOS, PROJECT} from './workspace.ts';
 import {postedAs} from './projects-index.ts';
+import {recordsOf} from './publications-file.ts';
 export {ROOT, VIDEOS};
 
 export const httpError = (status: number, message: string) => Object.assign(new Error(message), {status});
@@ -273,20 +274,37 @@ export function summary(slug: string): ReelSummary {
   const thumb = thumbnailOf(slug, dir)?.url ?? board?.images.find((u) => /t\d/.test(u)) ?? (cuts[0] ? url(slug, `public/cut/${cuts[0]}`) : null);
   const mtimes = [stat(dir)?.mtimeMs, stat(path.join(dir, 'audio/vo.txt'))?.mtimeMs, vers[0]?.mtime].filter((x): x is number => !!x);
   const kind = videoFormatOf(slug);
+  const steps = progress(dir, script ?? '', readJson<Word[]>(path.join(dir, 'src/words.json')) ?? [], vers, !!kind?.footage, !!kind?.voiceOnly);
+  const instagram = postedAs(PROJECT, slug);
   return {
     slug,
     title: title(slug),
     style: styleOf(slug),
     videoFormat: kind,
     hook: script?.trim().split(/(?<=[.?!])\s/)[0] ?? '',
-    progress: progress(dir, script ?? '', readJson<Word[]>(path.join(dir, 'src/words.json')) ?? [], vers, !!kind?.footage, !!kind?.voiceOnly),
+    progress: steps,
     latest: vers[0] ?? null,
     versionCount: vers.length,
     thumb,
     updated: Math.max(...mtimes),
     ...scriptInfo(slug, script),
-    instagram: postedAs(PROJECT, slug),
+    instagram,
+    release: releaseOf(recordsOf(dir), instagram, steps.every((s) => s.done)),
   };
+}
+
+// Where a video stands on Instagram, for its card. What's on its way first (it's what will change next), then what's
+// out, then a finished one not sent yet. A record is its last known state: publish.ts refreshes those still on their way.
+export function releaseOf(records: VideoPublication[], posted: PostedReel | null, finished: boolean): ReelRelease | null {
+  const at = (r: VideoPublication) => r.scheduledAt ?? r.createdAt;
+  const pending = records.filter((r) => r.status === 'uploading' || r.status === 'scheduled' || r.status === 'processing' || r.status === 'publishing');
+  // Sent for now, or its time came and Instagram is taking it.
+  if (pending.some((r) => !r.scheduledAt || r.status === 'processing' || r.status === 'publishing')) return {state: 'publishing', at: null};
+  const next = pending.map(at).sort()[0];
+  if (next) return {state: 'scheduled', at: next};
+  const out = records.filter((r) => r.status === 'published').map(at).sort().at(-1);
+  if (out ?? posted) return {state: 'published', at: out ?? posted?.posted ?? null};
+  return finished ? {state: 'ready', at: null} : null;
 }
 
 function beats(dir: string): Beat[] {

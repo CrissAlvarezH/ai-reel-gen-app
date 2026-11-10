@@ -186,3 +186,29 @@ test('one record the calendar cannot read does not take the calendar down, and s
   await publish.cancel('mi-video', ok.id); // rewrites the file
   assert.ok(records().some((r) => r.id === 'viejo'));
 });
+
+test('the library asks about the videos whose moment came (once a minute at most), not about those still waiting', async () => {
+  const past = new Date(Date.now() - 60_000).toISOString();
+  const future = new Date(Date.now() + 3600_000).toISOString();
+  // In the account both are out already; the files still have them as scheduled.
+  for (const [id, at] of [['D1', past], ['D2', future]] as const) ctl.pubs.set(id, {id, body: {}, status: 'published', scheduledAt: at, gets: 0});
+  const rec = (id: string, at: string) => ({id, version: 'v', account: 'entiende.finanzas.ya', scheduledAt: at, createdAt: past, status: 'scheduled', error: null, permalink: null});
+  const other = path.join(dir, 'videos', 'otro-video');
+  fs.mkdirSync(other, {recursive: true});
+  fs.writeFileSync(path.join(other, 'publicaciones.json'), JSON.stringify([rec('D2', future)]));
+  fs.writeFileSync(path.join(video, 'publicaciones.json'), JSON.stringify([rec('D1', past)]));
+  const now = Date.now() + 10 * 60_000;
+  publish.refreshDue(now);
+  await until(() => records()[0].status === 'published');
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(other, 'publicaciones.json'), 'utf8'))[0].status, 'scheduled', 'one still waiting is not asked about');
+  fs.rmSync(other, {recursive: true});
+
+  // Within the minute it doesn't ask again.
+  fs.writeFileSync(path.join(video, 'publicaciones.json'), JSON.stringify([rec('D1', past)]));
+  publish.refreshDue(now + 30_000);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(records()[0].status, 'scheduled');
+  publish.refreshDue(now + 61_000);
+  await until(() => records()[0].status === 'published');
+});
