@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type {ChildProcess} from 'node:child_process';
 import {ROOT, VIDEOS, formatOf, httpError, listSlugs, styleOf, summary, title as videoTitle, videoFormatOf} from './reels.ts';
-import {CONFIG, DATA, PROJECT, PROJECT_DIR, projectName, rel as relPath, resource} from './workspace.ts';
+import {CONFIG, DATA, PROJECT, PROJECT_DIR, isProjectId, projectName, rel as relPath, resource, withProject} from './workspace.ts';
 import {AGENTS, EFFORT_LABELS, agentById, agentCli, currentAgent, type AgentCli, type AgentEvent} from './agent.ts';
 import {IS_WIN, PY, VENV_BIN, readJson, writeJson} from './platform.ts';
 import {getKey} from './settings.ts';
@@ -594,8 +594,18 @@ function formatsText() {
 }
 
 // The line every turn carries: a resumed session keeps the system prompt it started with, so the current one is asked for.
-const CURRENT = '[Reel Studio: tus instrucciones vigentes salen de curl -s "$REEL_STUDIO_URL/api/chat/$REEL_STUDIO/instructions" y mandan sobre las que recibiste al empezar esta conversación. Consúltalas antes de decir que no puedes algo y cuando dudes del perfil, el estilo o la voz.]';
-export const instructions = (key: string) => SYSTEM(key);
+// It names its own project: he may have opened another one since its turn started.
+const CURRENT = '[Reel Studio: tus instrucciones vigentes salen de curl -s "$REEL_STUDIO_URL/api/chat/$REEL_STUDIO/instructions?project=$REEL_STUDIO_PROJECT_ID" y mandan sobre las que recibiste al empezar esta conversación. Consúltalas antes de decir que no puedes algo y cuando dudes del perfil, el estilo o la voz.]';
+// Those instructions, as they are now in the conversation's own project (the open one if none is named).
+export function instructions(key: string, project?: string) {
+  const own = () => {
+    if (key !== GENERAL && !listSlugs().includes(key)) throw httpError(404, 'conversación no encontrada');
+    return SYSTEM(key);
+  };
+  if (!project || project === PROJECT) return own();
+  if (!isProjectId(project)) throw httpError(404, 'proyecto no encontrado');
+  return withProject(project, own);
+}
 
 // How a general conversation moves to a video. Also told in the prompt to a conversation that started before (a resumed
 // Claude Code session keeps the system prompt it started with).
@@ -817,7 +827,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
     });
   push({id: id(), role: 'user', text: text?.trim() ?? '', comments: comments ?? [], ...(refs.length ? {refs} : {}), ...(ideaRefs.length ? {ideas: ideaRefs} : {}), ...(images.length ? {images} : {}), ts: Date.now()});
 
-  const proc = cli.turn({prompt, systemPrompt: unattended ? `${SYSTEM(key)}\n${unattended.system}` : SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_CHAT: chat, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR, ...unattended?.env}, model, effort, chrome: !unattended && getChromeAccess(), mode: unattended ? '' : modeOf(prev, cli)});
+  const proc = cli.turn({prompt, systemPrompt: unattended ? `${SYSTEM(key)}\n${unattended.system}` : SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_CHAT: chat, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR, REEL_STUDIO_PROJECT_ID: PROJECT, ...unattended?.env}, model, effort, chrome: !unattended && getChromeAccess(), mode: unattended ? '' : modeOf(prev, cli)});
   // Starts from what it was (a new session from another agent starts empty).
   const run: Run = {dir, proc, pending: new Map(), started: Date.now(), live: '', tool: null, stderr: '', context: resume ? prev.context : undefined};
   const setContext = (ctx: ChatContext) => {

@@ -285,9 +285,10 @@ app.get('/api/chat-options', handle(() => chat.options()));
 app.get('/api/chat-examples', handle(() => chat.examples()));
 app.get('/api/chat/:key', chatKey, handle((req) => chat.list(req.params.key)));
 // For the agent (curl, from the line each turn carries): its instructions as they are now, in plain text.
-app.get('/api/chat/:key/instructions', chatKey, (req, res) => {
+// ?project=: the agent's own project (REEL_STUDIO_PROJECT_ID), which may not be the open one.
+app.get('/api/chat/:key/instructions', (req: Req, res: Response) => {
   try {
-    res.type('text/plain').send(chat.instructions(req.params.key));
+    res.type('text/plain').send(chat.instructions(req.params.key, typeof req.query.project === 'string' ? req.query.project : undefined));
   } catch (e) {
     fail(res, e);
   }
