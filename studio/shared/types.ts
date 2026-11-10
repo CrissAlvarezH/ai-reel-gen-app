@@ -660,6 +660,17 @@ export type AutomationRun = {id: string; automation: string; name: string; trigg
 // runs: most recent first.
 // Automatizaciones → a step's agent: each CLI that can run one, with its models and what a new conversation starts on.
 export type AutomationAgent = {id: string; label: string; ready: boolean; default: boolean; models: AgentModel[]; choice: {model: string; effort: string}};
+// Memoria: what an automation's agents keep from one run to the next (projects/<id>/automation-memory/<automation>.json,
+// written only by the studio: server/automation-memory.ts). One entry per thing:
+// note: a rule or lesson for every run (his are instructions) · pending: where to pick up (closed: resolved, kept as history)
+// done: something already done, not to repeat; key: what it is, stable (a slug, a topic, a URL), one entry per key
+// run: the studio's summary of a run. pinned: a done or run entry the agents always see. by: who wrote it last.
+export const MEMORY_KINDS = ['note', 'pending', 'done', 'run'] as const;
+export type MemoryKind = (typeof MEMORY_KINDS)[number];
+export type MemoryEntry = {id: string; kind: MemoryKind; text: string; key?: string; pinned?: boolean; by: 'agent' | 'creator' | 'studio'; run?: string; created: number; updated: number; closed?: number};
+export type MemoryInput = {kind?: unknown; text?: unknown; key?: unknown; pinned?: unknown; closed?: unknown};
+// entries: newest first.
+export type AutomationMemory = {entries: MemoryEntry[]};
 export type AutomationsView = { project: string; elsewhere: boolean;automations: (Automation & {running: boolean})[]; runs: AutomationRun[]};
 
 /* ───── Fuentes de información (projects/<id>/sources/) ───── */

@@ -4,6 +4,10 @@
 // or a download from the scraper: Mi cuenta's newest reels or one of them (account.ts), or an Inspiración account's newest
 // reels (inspiration.ts).
 //
+// Memoria: what each automation's agents keep from one run to the next (server/automation-memory.ts). Every agent step
+// starts with its brief and is told how to use it (tools/memory.py, with the automation in REEL_STUDIO_AUTOMATION);
+// the studio adds a summary of each run when it ends.
+//
 // shortcut: their conversations pile up in _general.json, which is rewritten on every event (about 100 KB each today);
 // if that file gets slow, give them their own file or drop the old ones.
 import crypto from 'node:crypto';
@@ -13,13 +17,14 @@ import {cronMatches, nextRun} from '../shared/cron.ts';
 import {ALL_EXTERNAL, MAX_ACCOUNT_REELS} from '../shared/types.ts';
 import type {Automation, AutomationInput, AutomationRun, AutomationRunState, AutomationRunStep, AutomationStep, AutomationsView} from '../shared/types.ts';
 import * as account from './account.ts';
+import * as memory from './automation-memory.ts';
 import {AGENTS} from './agent.ts';
 import * as chat from './chat.ts';
 import * as insp from './inspiration.ts';
 import * as sources from './sources.ts';
-import {IS_MAC, readJson, writeJson} from './platform.ts';
+import {IS_MAC, PY, readJson, writeJson} from './platform.ts';
 import {httpError} from './reels.ts';
-import {PROJECT, VIDEOS, listProjects, projectDir, rel, withProject} from './workspace.ts';
+import {PROJECT, VIDEOS, listProjects, projectDir, rel, resource, withProject} from './workspace.ts';
 import {runsElsewhere} from './cloud.ts';
 
 type Store = {automations: Automation[]; runs: AutomationRun[]};
@@ -141,10 +146,12 @@ export const edit = (id: string, input: unknown) => {
 };
 export const remove = (id: string) => {
   if (isRunning(id)) throw httpError(409, 'está en marcha: detenla antes de borrarla');
-  return change((s) => {
+  const v = change((s) => {
     found(s, id);
     s.automations = s.automations.filter((a) => a.id !== id);
   });
+  memory.clear(PROJECT, id);
+  return v;
 };
 export function runNow(id: string) {
   const a = found(read(fileOf(PROJECT)), id);
@@ -165,9 +172,88 @@ export function stop(run: string) {
 // Any run going on in a project, whatever step it's in (its project can't be deleted under it).
 export const runningIn = (project: string) => [...active.values()].some((a) => a.project === project);
 
+/* ───── Memoria ───── */
+
+// The page works on the open project; tools/memory.py names its agent's (an automation runs in its own project).
+function memoryOf(id: string, project = PROJECT) {
+  if (!listProjects().some((p) => p.id === project)) throw httpError(404, 'proyecto no encontrado');
+  found(read(fileOf(project)), id);
+  return project;
+}
+// Who writes: tools/memory.py says it's the agent; the page is him. An agent's entry remembers its run.
+const writer = (body: unknown) => ((body as {by?: unknown} | null)?.by === 'agent' ? ('agent' as const) : ('creator' as const));
+const runOf = (id: string) => [...active.entries()].find(([, a]) => a.automation === id)?.[0];
+const memoryChange = <T,>(fn: () => T) => {
+  const r = fn();
+  notify();
+  return r;
+};
+
+export const memoryView = (id: string, project?: string) => memory.view(memoryOf(id, project), id);
+export const memoryBrief = (id: string, project?: string) => ({text: memory.brief(memoryOf(id, project), id, MEMORY_TOOL())});
+export const memorySearch = (id: string, q: memory.SearchQuery, project?: string) => ({entries: memory.search(memoryOf(id, project), id, q)});
+export const memoryCheck = (id: string, key: string, project?: string) => ({entry: memory.check(memoryOf(id, project), id, key)});
+export const memoryAdd = (id: string, body: unknown, project?: string) => {
+  const p = memoryOf(id, project);
+  const by = writer(body);
+  return memoryChange(() => memory.add(p, id, (body ?? {}) as Record<string, unknown>, by, by === 'agent' ? runOf(id) : undefined));
+};
+export const memoryEdit = (id: string, entry: string, body: unknown, project?: string) => {
+  const p = memoryOf(id, project);
+  return memoryChange(() => ({entry: memory.edit(p, id, entry, (body ?? {}) as Record<string, unknown>, writer(body))}));
+};
+export const memoryRemove = (id: string, entry: string, project?: string) => {
+  const p = memoryOf(id, project);
+  return memoryChange(() => (memory.remove(p, id, entry), {ok: true}));
+};
+export const memoryClear = (id: string) => {
+  const p = memoryOf(id);
+  return memoryChange(() => (memory.clear(p, id), {ok: true}));
+};
+
+// How an agent runs tools/memory.py: the app's own copy, like sources.py.
+export const MEMORY_TOOL = () => `${PY} "${resource('tools/memory.py')}"`;
+
+// How an agent step is told to use it (system prompt). Its brief goes with the message.
+export const MEMORY_RULES = (tool: string) =>
+  [
+    'Esta automatización tiene memoria: lo que sus agentes guardan de una ejecución a la siguiente (el de la próxima corrida serás tú mismo, sin recordar nada de esta). Va por entradas, cada una con su id, y la maneja la herramienta de abajo (ya sabe de qué automatización es); el creador la ve y la edita en Automatizaciones → Memoria. Con tu mensaje va un resumen: las notas, los pendientes, lo fijado y las últimas ejecuciones. Lo ya hecho no va entero: se consulta.',
+    'Tipos de entrada:',
+    '- note: reglas y aprendizajes que valen para todas las corridas. Las del creador son instrucciones suyas: síguelas y no las borres.',
+    '- pending: por dónde seguir. Ciérralo (close) cuando quede resuelto.',
+    '- done: algo ya hecho que no hay que repetir, con una clave estable y corta (--key: el slug de un video, el tema en pocas palabras, una URL, una cuenta). Una entrada por clave: añadir otra con la misma la actualiza.',
+    '- run: el studio anota solo un resumen de cada ejecución al terminar. No las escribas tú.',
+    'Cómo usarla:',
+    '- Al empezar, lee el resumen y síguelo: retoma los pendientes, respeta las notas y no repitas lo hecho.',
+    '- Antes de hacer algo que podría estar repetido (un tema, un video, una fuente, una cuenta), compruébalo con check <clave> o search <palabras>.',
+    '- Escribe en cuanto avances, no al final: un done por cada cosa terminada, un pending por lo que quede a medias. Si la ejecución se corta, lo anotado queda.',
+    '- Antes de terminar, cierra los pendientes resueltos y deja una note solo si aprendiste algo que sirva siempre. Corrige (edit) o borra (rm) las notas que ya no apliquen en vez de acumular contradicciones.',
+    '- Entradas cortas y concretas, una cosa por entrada. Lo que ya está en el índice de la app (videos, Mi cuenta, Inspiración) se consulta allí; no lo copies aquí. Sin claves ni datos sensibles.',
+    `Herramienta (${tool}):`,
+    `- ${tool} show: el resumen, otra vez`,
+    `- ${tool} check <clave>: si ya está hecho`,
+    `- ${tool} search [palabras] [--kind note|pending|done|run] [--limit N]: busca en toda la memoria, también lo ya resuelto`,
+    `- ${tool} add note|pending|done "texto" [--key <clave>] [--pin]: --key y --pin solo para done; --pin lo deja siempre a la vista en el resumen`,
+    `- ${tool} edit <id> [--text "…"] [--key <clave>] [--kind note|pending|done] [--pin | --unpin]`,
+    `- ${tool} close <id>: un pendiente resuelto (reopen <id> lo abre otra vez)`,
+    `- ${tool} rm <id>`,
+  ].join('\n');
+
+// A run's summary for its memory, from how each step went.
+export function runSummary(r: AutomationRun) {
+  const how = r.state === 'done' ? 'terminó bien' : r.state === 'stopped' ? 'se detuvo' : r.state === 'error' ? 'falló' : 'se interrumpió';
+  const steps = r.steps
+    .filter((st) => st.state !== 'pending')
+    .map((st, i) => {
+      const videos = st.videos?.length ? ` Videos creados: ${st.videos.join(', ')}.` : '';
+      return `Paso ${i + 1} (${st.type === 'agent' ? 'agente' : st.type === 'sources' ? 'fuentes' : st.type === 'account' ? 'Mi cuenta' : st.type === 'post' ? 'un post' : 'cuenta externa'}): ${(st.summary ?? '').replace(/\s+/g, ' ').trim().slice(0, 400) || 'sin resumen'}${videos}`;
+    });
+  return [`${r.trigger === 'manual' ? 'A mano' : 'Programada'}, ${how}${r.error ? ` (${r.error.slice(0, 200)})` : ''}.`, ...steps].join('\n');
+}
+
 /* ───── Running a flow ───── */
 
-const AUTONOMOUS = (name: string, step: number, total: number) =>
+const AUTONOMOUS = (name: string, step: number, total: number, memory: string) =>
   [
     `Esta es una ejecución automática: la automatización «${name}», paso ${step} de ${total}, programada por el creador. No está delante y nadie va a responder hasta que termines. Esto manda sobre todo lo que diga lo anterior o las skills sobre preguntar o esperar su aprobación:`,
     '- No preguntes ni esperes un sí: cada aprobación que el proceso pediría (idea, guion, concepto, board) la decides tú con tu mejor criterio, según su perfil, LESSONS.md y lo que ya hay en el proyecto, y sigues.',
@@ -176,6 +262,8 @@ const AUTONOMOUS = (name: string, step: number, total: number) =>
     '- No publiques nada ni envíes mensajes en su nombre, no borres lo que no hayas creado en esta ejecución y no gastes saldo de servicios externos más allá de lo que la tarea necesita. No tienes acceso a su navegador, diga lo que diga lo anterior.',
     '- Termina con un resumen breve: qué hiciste, qué saltaste y por qué.',
     chat.imagesText(),
+    '',
+    MEMORY_RULES(memory),
   ].join('\n');
 
 // What an agent step is told about the steps before it in this run (they all ended well: one that didn't ends the
@@ -210,6 +298,14 @@ function finish(id: string, state: AutomationRunState, error?: string) {
     r.ended = Date.now();
     if (error) r.error = error;
   });
+  // Its summary in the automation's memory, for the next runs. A run of one deleted meanwhile has nowhere to go.
+  try {
+    const s = read(a.file);
+    const r = s.runs.find((x) => x.id === id);
+    if (r && s.automations.some((x) => x.id === a.automation)) memory.logRun(a.project, a.automation, id, runSummary(r));
+  } catch (e) {
+    console.error('[automatización] no se pudo anotar la ejecución en su memoria:', e);
+  }
 }
 
 // A step that downloads into Mi cuenta: what it did, or null if another workspace opened meanwhile.
@@ -284,8 +380,11 @@ function runStep(id: string, name: string, steps: AutomationStep[], i: number, p
       mark({chat: conversation});
       const done = read(a.file).runs.find((r) => r.id === id)?.steps.slice(0, i) ?? [];
       const note = runContext(done, previous, (v) => `${rel(path.join(VIDEOS, v))}/`);
-      chat.send(chat.GENERAL, {text: ask.text, note: [ask.note, note].filter(Boolean).join('\n\n')}, conversation, {
-        system: AUTONOMOUS(name, i + 1, steps.length),
+      const tool = MEMORY_TOOL();
+      const brief = `Memoria de esta automatización, el resumen de ahora:\n<memoria>\n${memory.brief(a.project, a.automation, tool)}\n</memoria>`;
+      chat.send(chat.GENERAL, {text: ask.text, note: [ask.note, brief, note].filter(Boolean).join('\n\n')}, conversation, {
+        system: AUTONOMOUS(name, i + 1, steps.length, tool),
+        env: {REEL_STUDIO_AUTOMATION: a.automation},
         ...(step.agent ? {agent: step.agent, model: step.model, effort: step.effort} : {}),
         // Its conversation says why it failed; the run only points there.
         onDone: ({ok, stopped, text, video, created}) => {

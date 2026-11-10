@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {CalendarPublication, PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView} from '../shared/types';
+import type {CalendarPublication, PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationMemory, AutomationsView, MemoryInput, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -415,6 +415,8 @@ export const inspirationApi = {
 // Every change answers with the whole view.
 const automationsCall = (method: string, path: string, body?: unknown) =>
   fetch(path, {method, headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)}).then((r) => json<AutomationsView>(r));
+const memoryCall = (method: string, path: string, body?: unknown) =>
+  fetch(path, {method, headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)}).then((r) => json<unknown>(r));
 export const automationsApi = {
   view: () => automationsCall('GET', '/api/automations'),
   agents: () => fetch('/api/automations/agents').then((r) => json<AutomationAgent[]>(r)),
@@ -423,6 +425,11 @@ export const automationsApi = {
   remove: (id: string) => automationsCall('DELETE', `/api/automations/${id}`),
   run: (id: string) => automationsCall('POST', `/api/automations/${id}/run`),
   stop: (run: string) => automationsCall('POST', `/api/automation-runs/${run}/stop`),
+  memory: (id: string) => fetch(`/api/automations/${id}/memory`).then((r) => json<AutomationMemory>(r)),
+  addMemory: (id: string, input: MemoryInput) => memoryCall('POST', `/api/automations/${id}/memory`, input),
+  editMemory: (id: string, entry: string, input: MemoryInput) => memoryCall('PUT', `/api/automations/${id}/memory/${entry}`, input),
+  removeMemory: (id: string, entry: string) => memoryCall('DELETE', `/api/automations/${id}/memory/${entry}`),
+  clearMemory: (id: string) => memoryCall('DELETE', `/api/automations/${id}/memory`),
 };
 
 /* ───── Auditoría ───── */

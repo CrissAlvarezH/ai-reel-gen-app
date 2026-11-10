@@ -490,6 +490,18 @@ app.post('/api/automations', handle((req) => automations.add(req.body)));
 app.put('/api/automations/:id', handle((req) => automations.edit(req.params.id, req.body)));
 app.delete('/api/automations/:id', handle((req) => automations.remove(req.params.id)));
 app.post('/api/automations/:id/run', handle((req) => automations.runNow(req.params.id)));
+// Memoria (server/automation-memory.ts): the page, of the open project, and the agents (tools/memory.py, which says
+// its project in ?project= and {"by": "agent"} when it writes).
+const memProject = (req: Req) => (typeof req.query.project === 'string' ? req.query.project : undefined);
+const qs = (v: unknown) => (typeof v === 'string' ? v : undefined);
+app.get('/api/automations/:id/memory', handle((req) => automations.memoryView(req.params.id, memProject(req))));
+app.get('/api/automations/:id/memory/brief', handle((req) => automations.memoryBrief(req.params.id, memProject(req))));
+app.get('/api/automations/:id/memory/search', handle((req) => automations.memorySearch(req.params.id, {q: qs(req.query.q), kind: qs(req.query.kind), limit: Number(req.query.limit) || undefined}, memProject(req))));
+app.get('/api/automations/:id/memory/check', handle((req) => automations.memoryCheck(req.params.id, qs(req.query.key) ?? '', memProject(req))));
+app.post('/api/automations/:id/memory', handle((req) => automations.memoryAdd(req.params.id, req.body, memProject(req))));
+app.put('/api/automations/:id/memory/:entry', handle((req) => automations.memoryEdit(req.params.id, req.params.entry, req.body, memProject(req))));
+app.delete('/api/automations/:id/memory/:entry', handle((req) => automations.memoryRemove(req.params.id, req.params.entry, memProject(req))));
+app.delete('/api/automations/:id/memory', handle((req) => automations.memoryClear(req.params.id)));
 app.post('/api/automation-runs/:id/stop', handle((req) => automations.stop(req.params.id)));
 
 // Auditoría (server/fact-audit.ts), of the open project: three agents check a script's facts with sources. Every change

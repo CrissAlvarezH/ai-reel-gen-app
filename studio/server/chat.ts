@@ -715,7 +715,8 @@ export type SendInput = {text?: string; comments?: Comment[]; refs?: unknown; id
 // system: added to its system prompt. onDone: when it ends; text is the last thing it said.
 // agent/model/effort: the CLI it runs on (an automation's step); absent: the one in Ajustes.
 // onDone's video: the one the conversation moved to when the turn ended (it's among that video's now). created: the videos it made.
-export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boolean; text: string; video?: string; created: string[]}) => void; agent?: string; model?: string; effort?: string};
+// env: more variables for its tools (an automation's agent: REEL_STUDIO_AUTOMATION, for tools/memory.py).
+export type Unattended = {system: string; onDone: (r: {ok: boolean; stopped: boolean; text: string; video?: string; created: string[]}) => void; agent?: string; model?: string; effort?: string; env?: Record<string, string>};
 
 // note: text for the agent only, ahead of the message (not shown in the transcript).
 // chat: which conversation; by default the open one.
@@ -804,7 +805,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
     });
   push({id: id(), role: 'user', text: text?.trim() ?? '', comments: comments ?? [], ...(refs.length ? {refs} : {}), ...(ideaRefs.length ? {ideas: ideaRefs} : {}), ...(images.length ? {images} : {}), ts: Date.now()});
 
-  const proc = cli.turn({prompt, systemPrompt: unattended ? `${SYSTEM(key)}\n${unattended.system}` : SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_CHAT: chat, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR}, model, effort, chrome: !unattended && getChromeAccess(), mode: unattended ? '' : modeOf(prev, cli)});
+  const proc = cli.turn({prompt, systemPrompt: unattended ? `${SYSTEM(key)}\n${unattended.system}` : SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_CHAT: chat, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR, ...unattended?.env}, model, effort, chrome: !unattended && getChromeAccess(), mode: unattended ? '' : modeOf(prev, cli)});
   // Starts from what it was (a new session from another agent starts empty).
   const run: Run = {dir, proc, pending: new Map(), started: Date.now(), live: '', tool: null, stderr: '', context: resume ? prev.context : undefined};
   const setContext = (ctx: ChatContext) => {

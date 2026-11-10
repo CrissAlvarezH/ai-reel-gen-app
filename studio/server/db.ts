@@ -2,7 +2,7 @@
 // search, filter, order or page it, and for the agent's queries (tools/studio_sql.py, read-only). It lives in
 // the workspace, .reel-studio/index.sqlite (gitignored), and spans every project. Each part of the app adds
 // its tables and keeps them up to date (register): Inspiración (inspiration-index.ts), the projects with their
-// videos and Mi cuenta (projects-index.ts).
+// videos and Mi cuenta (projects-index.ts), the automations' memory (automation-memory.ts).
 //
 // The files stay the source of truth: the index is rebuilt from them whenever it's missing, of another
 // version, or broken, and sync() re-reads only what changed (by modification times). Nothing writes to it
@@ -18,7 +18,7 @@ import {ROOT} from './workspace.ts';
 
 export type {DB};
 
-const VERSION = 6; // bump when a part's schema changes: the index is rebuilt
+const VERSION = 7; // bump when a part's schema changes: the index is rebuilt
 export const INDEX_FILE = () => path.join(ROOT, '.reel-studio', 'index.sqlite');
 const OLD_FILE = () => path.join(ROOT, 'inspiration', '.index.sqlite'); // Inspiración's own index, before this one
 

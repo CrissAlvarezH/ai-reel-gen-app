@@ -1,20 +1,21 @@
 import {useCallback, useEffect, useState} from 'react';
-import {Bot, CalendarClock, Check, ChevronDown, Clapperboard, Loader2, MessageSquare, Newspaper, Pencil, Play, Plus, RefreshCw, Search, Sparkles, Square, Trash2, Users, X, type LucideIcon} from 'lucide-react';
+import {Bot, BrainCircuit, CalendarClock, Check, ChevronDown, CircleCheck, Clapperboard, Ellipsis, Loader2, MessageSquare, Newspaper, Pencil, Pin, PinOff, Play, Plus, RefreshCw, RotateCcw, Search, Sparkles, Square, Trash2, Users, X, type LucideIcon} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Dialog, DialogContent, DialogDescription, DialogTitle} from '@/components/ui/dialog';
-import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
+import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Switch} from '@/components/ui/switch';
+import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {Textarea} from '@/components/ui/textarea';
 import {cn} from '@/lib/utils';
 import ListSkeleton from '@/components/common/ListSkeleton';
 import EmptyState from '@/components/common/EmptyState';
 import {nextRun, nextRuns} from '../shared/cron';
 import {ALL_EXTERNAL, MAX_ACCOUNT_REELS} from '../shared/types';
-import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, sourcesApi, syncApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type AutomationRunStep, type AutomationStep, type AutomationsView, type AutomationAgent, type InspirationAccount, type OwnReel, type OwnReelList, type SourcesView} from './api';
+import {accountApi, automationsApi, chatApi, fmtAgo, inspirationApi, sourcesApi, syncApi, useSocket, type Automation, type AutomationInput, type AutomationRun, type MemoryEntry, type MemoryInput, type MemoryKind, type AutomationRunStep, type AutomationStep, type AutomationsView, type AutomationAgent, type InspirationAccount, type OwnReel, type OwnReelList, type SourcesView} from './api';
 import {useConfirm} from './confirm';
 import {AgentLogo} from './AgentLogo';
 import {EFFORT_LABELS} from './ChatControls';
@@ -129,6 +130,8 @@ export function Automations() {
   const [err, setErr] = useState('');
   // null: closed; 'new', or the one being edited.
   const [editing, setEditing] = useState<Automation | 'new' | null>(null);
+  // The one whose Memoria is open.
+  const [memoryOf, setMemoryOf] = useState<string | null>(null);
   const load = useCallback(() => automationsApi.view().then(setView, (e: Error) => setErr(e.message)), []);
   useEffect(() => void load(), [load]);
   useSocket((m) => m.type === 'automations' && void load(), () => void load());
@@ -208,12 +211,25 @@ export function Automations() {
                   <Play /> Ejecutar ahora
                 </Button>
               )}
-              <Button variant="ghost" size="icon-sm" title="Editar" aria-label={`Editar ${a.name}`} onClick={() => setEditing(a)}>
-                <Pencil />
+              <Button variant="outline" size="sm" title="Las notas que sus agentes dejan de una ejecución a la siguiente" onClick={() => setMemoryOf(a.id)}>
+                <BrainCircuit /> Memoria
               </Button>
-              <Button variant="ghost" size="icon-sm" title="Borrar" aria-label={`Borrar ${a.name}`} onClick={() => void remove(a)}>
-                <Trash2 />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" title="Más opciones" aria-label={`Más opciones de ${a.name}`}>
+                    <Ellipsis />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setEditing(a)}>
+                    <Pencil /> Editar
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onSelect={() => void remove(a)}>
+                    <Trash2 /> Borrar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
             <ol>
               <Point icon={CalendarClock}>
@@ -244,8 +260,185 @@ export function Automations() {
           ))}
         </section>
       )}
+      {memoryOf && view?.automations.some((a) => a.id === memoryOf) && <MemoryDialog automation={view.automations.find((a) => a.id === memoryOf)!} onClose={() => setMemoryOf(null)} />}
       {editing && <AutomationForm automation={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={setView} />}
     </main>
+  );
+}
+
+// Memoria: what an automation's agents keep from one run to the next (server/automation-memory.ts), one entry per
+// thing, by kind. Its agents write it on their own through tools/memory.py; here he reads it, adds what they should
+// know, corrects it or clears it. It follows every change, theirs too.
+const MEMORY_TABS: {kind: MemoryKind; label: string; hint: string; placeholder?: string}[] = [
+  {kind: 'note', label: 'Notas', hint: 'Reglas y aprendizajes que valen para todas las ejecuciones. El agente las lee siempre al empezar; las tuyas las sigue como instrucciones.', placeholder: 'Por ejemplo: no repitas un tema tratado en los últimos 30 días.'},
+  {kind: 'pending', label: 'Pendientes', hint: 'Por dónde seguir. El agente los ve al empezar y los cierra cuando los resuelve.', placeholder: 'Algo que la próxima ejecución debe retomar.'},
+  {kind: 'done', label: 'Hechos', hint: 'Lo que ya se hizo, para no repetirlo, cada uno con su clave. No van enteros al agente: los consulta por clave o palabras antes de hacer algo. Los fijados sí los ve siempre.', placeholder: 'Qué se hizo.'},
+  {kind: 'run', label: 'Ejecuciones', hint: 'El resumen de cada ejecución, que anota el studio al terminar. El agente ve las 3 últimas y las fijadas.'},
+];
+const BY: Record<MemoryEntry['by'], string> = {agent: 'Agente', creator: 'Tú', studio: 'Studio'};
+const normText = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+const PAGE = 100;
+
+function MemoryDialog({automation: a, onClose}: {automation: Automation & {running: boolean}; onClose: () => void}) {
+  const confirm = useConfirm();
+  const [entries, setEntries] = useState<MemoryEntry[] | null>(null);
+  const [tab, setTab] = useState<MemoryKind>('note');
+  const [q, setQ] = useState('');
+  const [shown, setShown] = useState(PAGE);
+  const [err, setErr] = useState('');
+  const load = useCallback(() => automationsApi.memory(a.id).then((m) => setEntries(m.entries), (e: Error) => setErr(e.message)), [a.id]);
+  useEffect(() => void load(), [load]);
+  useSocket((m) => m.type === 'automations' && void load());
+  // Every change answers once it's written; the list comes again from the server.
+  const act = (p: Promise<unknown>) => {
+    setErr('');
+    return p.then(
+      () => (void load(), true),
+      (e: Error) => (setErr(e.message), false),
+    );
+  };
+  const clear = async () => {
+    if (await confirm({title: '¿Vaciar la memoria?', description: `Se borran todas sus entradas: la próxima ejecución de «${a.name}» empieza sin recordar nada de las anteriores.`, action: 'Vaciar', destructive: true})) void act(automationsApi.clearMemory(a.id));
+  };
+  const words = normText(q).split(/\s+/).filter(Boolean);
+  const of = (k: MemoryKind) => (entries ?? []).filter((e) => e.kind === k);
+  const current = MEMORY_TABS.find((t) => t.kind === tab)!;
+  // Open pending first, oldest first; elsewhere what's pinned, then the newest.
+  const list = of(tab)
+    .filter((e) => words.every((w) => normText(`${e.key ?? ''} ${e.text}`).includes(w)))
+    .sort((x, y) => (tab === 'pending' ? Number(!!x.closed) - Number(!!y.closed) || (x.closed ? y.updated - x.updated : x.created - y.created) : Number(!!y.pinned) - Number(!!x.pinned)));
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-3 sm:max-w-3xl">
+        <DialogTitle>Memoria de «{a.name}»</DialogTitle>
+        <DialogDescription>Lo que sus agentes guardan de una ejecución a la siguiente para seguir por donde iban y no repetir lo que ya hicieron. La consultan y la actualizan solos; tú puedes añadir, corregir o borrar.</DialogDescription>
+        {err && <p className="text-sm text-destructive">{err}</p>}
+        {!entries && !err ? (
+          <ListSkeleton count={3} />
+        ) : (
+          <Tabs value={tab} onValueChange={(v) => (setTab(v as MemoryKind), setShown(PAGE))} className="min-h-0 flex-1 gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <TabsList>
+                {MEMORY_TABS.map((t) => (
+                  <TabsTrigger key={t.kind} value={t.kind} className="px-3">
+                    {t.label} <span className="text-xs text-muted-foreground tabular-nums">{t.kind === 'pending' ? of(t.kind).filter((e) => !e.closed).length : of(t.kind).length}</span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              <div className="relative ml-auto min-w-40 flex-1 sm:max-w-56">
+                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input value={q} onChange={(e) => (setQ(e.target.value), setShown(PAGE))} placeholder="Buscar" aria-label="Buscar en la memoria" className="h-8 pl-8 text-sm" />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">{current.hint}</p>
+            {current.placeholder && <MemoryAdd key={tab} kind={tab} placeholder={current.placeholder} onAdd={(input) => act(automationsApi.addMemory(a.id, input))} />}
+            <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-1">
+              {list.slice(0, shown).map((e) => (
+                <MemoryRow key={e.id} entry={e} onChange={(input) => act(automationsApi.editMemory(a.id, e.id, input))} onRemove={() => void act(automationsApi.removeMemory(a.id, e.id))} />
+              ))}
+              {!list.length && <li className="py-6 text-center text-sm text-muted-foreground">{words.length ? 'Nada coincide.' : 'Nada todavía.'}</li>}
+              {list.length > shown && (
+                <li>
+                  <Button variant="outline" size="sm" onClick={() => setShown((n) => n + PAGE)}>
+                    Mostrar {Math.min(PAGE, list.length - shown)} más
+                  </Button>
+                </li>
+              )}
+            </ul>
+          </Tabs>
+        )}
+        <div className="flex items-center gap-2 border-t pt-3">
+          <span className="mr-auto text-xs text-muted-foreground">{entries?.length ? `${entries.length} entradas` : 'Vacía'}</span>
+          {!!entries?.length && (
+            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => void clear()}>
+              <Trash2 /> Vaciar memoria
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MemoryAdd({kind, placeholder, onAdd}: {kind: MemoryKind; placeholder: string; onAdd: (input: MemoryInput) => Promise<boolean>}) {
+  const [text, setText] = useState('');
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const add = () => {
+    setBusy(true);
+    void onAdd({kind, text, ...(kind === 'done' && key.trim() ? {key} : {})}).then((ok) => {
+      setBusy(false);
+      if (ok) setText(''), setKey('');
+    });
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-md border p-2">
+      <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder} aria-label="Nueva entrada" className="min-h-14 resize-none border-0 p-1 text-sm shadow-none focus-visible:ring-0" />
+      <div className="flex items-center gap-2">
+        {kind === 'done' && <Input value={key} onChange={(e) => setKey(e.target.value)} placeholder="Clave: un slug, un tema, una URL" aria-label="Clave" className="h-8 flex-1 text-sm" />}
+        <Button size="sm" className="ml-auto" disabled={!text.trim() || busy} onClick={add}>
+          {busy ? <Loader2 className="animate-spin" /> : <Plus />} Añadir
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function MemoryRow({entry: e, onChange, onRemove}: {entry: MemoryEntry; onChange: (input: MemoryInput) => Promise<boolean>; onRemove: () => void}) {
+  const [draft, setDraft] = useState<{text: string; key: string} | null>(null);
+  const save = () => void onChange({text: draft!.text, ...(e.kind === 'done' ? {key: draft!.key} : {})}).then((ok) => ok && setDraft(null));
+  return (
+    <li className={cn('group rounded-md border px-3 py-2', e.closed && 'opacity-60')}>
+      {draft ? (
+        <div className="flex flex-col gap-2">
+          <Textarea value={draft.text} onChange={(x) => setDraft({...draft, text: x.target.value})} aria-label="Texto" className="min-h-20 text-sm" autoFocus />
+          {e.kind === 'done' && <Input value={draft.key} onChange={(x) => setDraft({...draft, key: x.target.value})} placeholder="Clave" aria-label="Clave" className="h-8 text-sm" />}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setDraft(null)}>
+              Cancelar
+            </Button>
+            <Button size="sm" disabled={!draft.text.trim()} onClick={save}>
+              <Check /> Guardar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            {e.key && <p className="mb-0.5 truncate font-mono text-xs font-medium">{e.key}</p>}
+            <p className={cn('text-sm whitespace-pre-line', e.closed && 'line-through')}>{e.text}</p>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+              {e.pinned && (
+                <span className="flex items-center gap-1 text-foreground">
+                  <Pin className="size-3" /> Fijado
+                </span>
+              )}
+              <span>{BY[e.by]}</span>
+              <span>{e.kind === 'run' ? new Date(e.created).toLocaleString('es', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : fmtAgo(e.updated)}</span>
+              {e.closed && <span>Resuelto {fmtAgo(e.closed)}</span>}
+            </p>
+          </div>
+          <div className="flex flex-none items-center opacity-60 group-hover:opacity-100">
+            {e.kind === 'pending' && (
+              <Button variant="ghost" size="icon-sm" title={e.closed ? 'Abrir otra vez' : 'Marcar como resuelto'} aria-label={e.closed ? 'Abrir otra vez' : 'Marcar como resuelto'} onClick={() => void onChange({closed: !e.closed})}>
+                {e.closed ? <RotateCcw /> : <CircleCheck />}
+              </Button>
+            )}
+            {(e.kind === 'done' || e.kind === 'run') && (
+              <Button variant="ghost" size="icon-sm" title={e.pinned ? 'Dejar de fijar' : 'Fijar: el agente lo verá siempre al empezar'} aria-label={e.pinned ? 'Dejar de fijar' : 'Fijar'} onClick={() => void onChange({pinned: !e.pinned})}>
+                {e.pinned ? <PinOff /> : <Pin />}
+              </Button>
+            )}
+            <Button variant="ghost" size="icon-sm" title="Editar" aria-label="Editar" onClick={() => setDraft({text: e.text, key: e.key ?? ''})}>
+              <Pencil />
+            </Button>
+            <Button variant="ghost" size="icon-sm" title="Borrar" aria-label="Borrar" onClick={onRemove}>
+              <Trash2 />
+            </Button>
+          </div>
+        </div>
+      )}
+    </li>
   );
 }
 
