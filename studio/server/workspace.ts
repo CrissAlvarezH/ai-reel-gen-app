@@ -147,8 +147,16 @@ function migrate(root: string) {
   move(path.join(root, 'videos'), path.join(dir, 'videos'));
   for (const f of ['profile.json', 'voice.json', 'account.json']) move(path.join(root, 'config', f), path.join(dir, 'config', f));
   move(path.join(root, 'account'), path.join(dir, 'account'));
-  move(path.join(root, 'studio/data'), path.join(dir, '.reel-studio/chats'));
-  move(path.join(root, '.reel-studio/chats'), path.join(dir, '.reel-studio/chats'));
+  // Conversations: .reel-studio/chats (the newer place), then what's only in studio/data. A file in both keeps the
+  // newer one; the other stays where it was.
+  const chats = path.join(dir, '.reel-studio/chats');
+  for (const from of [path.join(root, '.reel-studio/chats'), path.join(root, 'studio/data')]) {
+    if (!fs.existsSync(chats)) move(from, chats);
+    else if (isDir(from)) {
+      for (const n of fs.readdirSync(from)) move(path.join(from, n), path.join(chats, n));
+      if (!fs.readdirSync(from).length) fs.rmdirSync(from);
+    }
+  }
   writeProject(root, id, {name: 'Principal', created: Date.now()});
 }
 
