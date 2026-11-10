@@ -69,3 +69,16 @@ test('a report goes through its states; turning automatic on counts the current 
   assert.throws(() => audit.setState('r1', 'borrado'), /ese estado no existe/);
   assert.equal(audit.remove('r1').reports.length, 0);
 });
+
+test('a fact-audit.json that cannot be read is not written over by the next change', async () => {
+  const audit = await import('./fact-audit.ts');
+  const ws = await import('./workspace.ts');
+  ws.openProject('p');
+  const file = path.join(ws.projectDir('p'), 'fact-audit.json');
+  const cut = '{"settings": {"auto": true, "prompt": "Revisa las cifras con la DIAN"}, "reports": [{"id": "r1", "slug": "cdt"';
+  fs.writeFileSync(file, cut);
+  assert.throws(() => audit.view(), /no se puede leer projects\/p\/fact-audit\.json/);
+  assert.throws(() => audit.setSettings({auto: false}), /no se puede leer/);
+  assert.equal(fs.readFileSync(file, 'utf8'), cut);
+  fs.rmSync(file);
+});
