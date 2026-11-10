@@ -751,6 +751,8 @@ test('bringing a project over: it appears whole, or it does not appear', async (
   assert.ok(ws.listProjects().some((p) => p.id === 'traido'));
   assert.equal(engine.loadState(path.join(root, 'projects/traido'), 'project', other.id).baseRev, other.rev);
   assert.equal(other.primaryDeviceId, null, 'a project brought over does not claim it');
+  // project.json shows up before the clone ends (refreshRemote still runs): until then a second clone returns the running one.
+  await until(() => !queue.partial(other.id));
   await assert.rejects(queue.clone(other.id), /ya está/);
 });
 
