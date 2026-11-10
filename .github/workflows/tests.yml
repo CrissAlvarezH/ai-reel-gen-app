@@ -1,0 +1,49 @@
+# Corre en cada PR y en cada push a main. «Studio» y «Skills» son checks obligatorios para mergear a main.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  studio:
+    name: Studio
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: studio
+    env:
+      # Los tests no abren Electron: no hace falta descargar su binario (~100 MB).
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # engines: ^22.18.0 || >=23.6.0 (corre los .ts sin compilar)
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: studio/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  skills:
+    name: Skills
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: python3 .claude/skills/asset-library/scripts/test_library.py
