@@ -10,7 +10,7 @@ import * as audience from './audience.ts';
 import {checkModel, setCheckModel} from './config.ts';
 import {readJson, writeJson} from './platform.ts';
 import {VIDEOS, isPlaceholder} from './reels.ts';
-import {PROJECT, inProject} from './workspace.ts';
+import {PROJECT, inProject, rel} from './workspace.ts';
 
 const FILE = (slug: string) => path.join(VIDEOS, slug, 'audience-check.json');
 export const scriptOf = (slug: string) => {
@@ -142,7 +142,7 @@ export function agentText(slug: string): string {
   const c = s.check;
   if (!c) return '';
   const lines = [
-    `Análisis de audiencia del guion (Alineación con tu audiencia, ${path.relative(path.dirname(VIDEOS), FILE(slug))}): ${c.score}/100${s.stale ? '. Ojo: el guion cambió después de este análisis, compáralo con audio/vo.txt' : ''}.`,
+    `Análisis de audiencia del guion (Alineación con tu audiencia, ${rel(FILE(slug))}): ${c.score}/100${s.stale ? '. Ojo: el guion cambió después de este análisis, compáralo con audio/vo.txt' : ''}.`,
     c.verdict && `Veredicto: ${c.verdict}`,
     (c.problem || c.level) && `Le habla a: ${[c.problem && `«${c.problem}»`, c.level].filter(Boolean).join(', ')}`,
     'Criterios:',

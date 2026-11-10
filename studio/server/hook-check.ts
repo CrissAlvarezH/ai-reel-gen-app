@@ -10,7 +10,7 @@ import {agentCli} from './agent.ts';
 import * as audience from './audience.ts';
 import {readJson, writeJson} from './platform.ts';
 import {VIDEOS, isPlaceholder} from './reels.ts';
-import {PROJECT, inProject} from './workspace.ts';
+import {PROJECT, inProject, rel} from './workspace.ts';
 import {arr, hash, modelFor, obj, scriptOf, str} from './script-check.ts';
 
 const FILE = (slug: string) => path.join(VIDEOS, slug, 'hook-check.json');
@@ -104,7 +104,7 @@ export function agentText(slug: string): string {
   const c = s.check;
   if (!c) return s.error ? `La revisión del gancho falló: ${s.error}` : 'Este video aún no tiene revisión del gancho.';
   const lines = [
-    `Fuerza del gancho (${path.relative(path.dirname(VIDEOS), FILE(slug))}): ${c.score}/100${s.stale ? '. Ojo: el guion cambió después de esta revisión, compáralo con audio/vo.txt' : ''}.`,
+    `Fuerza del gancho (${rel(FILE(slug))}): ${c.score}/100${s.stale ? '. Ojo: el guion cambió después de esta revisión, compáralo con audio/vo.txt' : ''}.`,
     c.verdict && `Veredicto: ${c.verdict}`,
     c.hook && `Gancho revisado: «${c.hook}»`,
     c.question && `Pregunta que abre: ${c.question}`,
