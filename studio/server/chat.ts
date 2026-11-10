@@ -77,11 +77,21 @@ function modeOf(c: Pick<Chat, 'mode'>, cli: AgentCli) {
 const file = (key: string, dir = DATA) => path.join(dir, `${key}.json`);
 function load(key: string, dir = DATA): Store {
   let raw: Partial<Store> & {sessionId?: string | null; items?: ChatItem[]; seenAt?: number};
+  let text: string | null = null;
   try {
-    raw = JSON.parse(fs.readFileSync(file(key, dir), 'utf8'));
+    text = fs.readFileSync(file(key, dir), 'utf8');
+    raw = JSON.parse(text);
   } catch {
+    // A file that's there but can't be read (cut by a crash mid-write, edited by hand) is set aside, not written over:
+    // its conversations can still be recovered from the copy.
+    if (text !== null) {
+      const kept = `${file(key, dir)}.ilegible-${Date.now()}`;
+      fs.renameSync(file(key, dir), kept);
+      console.warn(`[chat] ${key}.json no se pudo leer: se guardó como ${path.basename(kept)} y empieza una conversación nueva`);
+    }
     raw = {};
   }
+  if (!raw || typeof raw !== 'object') raw = {};
   // Before tabs there was one conversation per key: {sessionId, items, seenAt}.
   if (!Array.isArray(raw.chats)) {
     const items = raw.items ?? [];
@@ -95,7 +105,9 @@ function load(key: string, dir = DATA): Store {
   if (!st.chats.some((c) => c.id === st.active && !c.closed)) st.active = (st.chats.findLast((c) => !c.closed) ?? st.chats.at(-1)!).id;
   return st;
 }
-const save = (key: string, s: Store, dir = DATA) => fs.writeFileSync(file(key, dir), JSON.stringify(s, null, 1));
+// Atomic (written next to it and renamed over it): it's rewritten on every event of a turn, and a crash halfway must
+// not leave a cut file.
+const save = (key: string, s: Store, dir = DATA) => writeJson(file(key, dir), s, 1);
 const find = (s: Store, chat: string) => {
   const c = s.chats.find((x) => x.id === chat);
   if (!c) throw httpError(404, 'conversación no encontrada');
