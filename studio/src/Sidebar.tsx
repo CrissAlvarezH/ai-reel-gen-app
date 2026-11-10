@@ -86,6 +86,16 @@ function Posted({p}: {p: NonNullable<ReelSummary['instagram']>}) {
   );
 }
 
+// Scheduled on Instagram (publicaciones.json): opens Videos programados.
+function Scheduled({at}: {at: string}) {
+  const when = new Date(at).toLocaleString('es', {weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit'});
+  return (
+    <a href="#/programados" title={`Programado: sale en Instagram el ${when}`} aria-label={`Programado para el ${when}`} className="grid size-6 place-items-center rounded-md text-sky-600 hover:bg-background/60 dark:text-sky-400">
+      <CalendarClock className="size-4" />
+    </a>
+  );
+}
+
 // Instagram's glyph: a rounded square, a lens and the flash dot.
 export function InstagramGlyph({className}: {className?: string}) {
   return (
@@ -130,10 +140,10 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   const inUse = useAgentId();
   const [agents, setAgents] = useState<Agent[]>([]);
   // Each video's progress (Guion → Voz → … → Render) and when its files last changed.
-  const [reels, setReels] = useState<Record<string, {progress: ProgressStep[]; updated: number; instagram: ReelSummary['instagram']}>>({});
+  const [reels, setReels] = useState<Record<string, {progress: ProgressStep[]; updated: number; instagram: ReelSummary['instagram']; release: ReelSummary['release']}>>({});
   const load = useCallback(() => {
     agentsApi.list().then(setAgents, () => {});
-    api.reels().then((list) => setReels(Object.fromEntries(list.map((r) => [r.slug, {progress: r.progress, updated: r.updated, instagram: r.instagram}]))), () => {});
+    api.reels().then((list) => setReels(Object.fromEntries(list.map((r) => [r.slug, {progress: r.progress, updated: r.updated, instagram: r.instagram, release: r.release}]))), () => {});
   }, []);
   // A video's last activity: its conversation's last message or its files, whichever is newer (one made by an
   // automation, or by the general conversation, has no conversation of its own yet).
@@ -274,6 +284,7 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
                   </button>
                   <div className="mr-1 flex flex-none flex-col items-center self-start pt-0.5">
                     {reels[a.slug!]?.progress.length ? <ReelProgressRing steps={reels[a.slug!].progress} className="m-1.5 mb-1" /> : null}
+                    {reels[a.slug!]?.release?.state === 'scheduled' && reels[a.slug!].release!.at && <Scheduled at={reels[a.slug!].release!.at!} />}
                     {reels[a.slug!]?.instagram && <Posted p={reels[a.slug!].instagram!} />}
                 </div>
                 </div>
