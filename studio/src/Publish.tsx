@@ -2,7 +2,7 @@
 // button opens the form; under the player, what was sent from this video and how it's going. A scheduled one goes out
 // from the account at its time, with the app closed; until then it can be moved or canceled.
 import {useCallback, useEffect, useState} from 'react';
-import {CalendarClock, ExternalLink, Loader2, Send} from 'lucide-react';
+import {CalendarClock, CircleCheck, ExternalLink, Loader2, Send} from 'lucide-react';
 import {api, type PublicationStatus, type VideoPublication, type VideoPublications} from './api';
 import {useConfirm} from './confirm';
 import {Badge} from '@/components/ui/badge';
@@ -62,6 +62,9 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const ready = !!data?.signedIn && !!data.account;
+  // This version's latest publication that went (or is going) somewhere: the button wears its state, and the form
+  // warns before sending the same video twice.
+  const last = version ? data?.items.find((p) => p.version === version && p.status !== 'error' && p.status !== 'canceled') : undefined;
 
   const submit = async () => {
     if (!version) return;
@@ -89,9 +92,9 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
     <>
       <Button
         variant="outline"
-        className="shrink-0"
         disabled={!version}
-        title={version ? 'Publicar esta versión en Instagram, ahora o programada' : 'Renderiza el video para publicarlo'}
+        className={cn('shrink-0', last?.status === 'published' && 'text-emerald-600 dark:text-emerald-400', last?.status === 'scheduled' && 'text-violet-600 dark:text-violet-400')}
+        title={!version ? 'Renderiza el video para publicarlo' : last ? `${STATUS[last.status].label}: abre para ver o publicar otra vez` : 'Publicar esta versión en Instagram, ahora o programada'}
         onClick={() => {
           setMode('now');
           setWhen(localInput(nextHour()));
@@ -99,7 +102,23 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
           setOpen(true);
         }}
       >
-        <Send /> Publicar
+        {!last ? (
+          <>
+            <Send /> Publicar
+          </>
+        ) : last.status === 'published' ? (
+          <>
+            <CircleCheck /> Publicado
+          </>
+        ) : last.status === 'scheduled' ? (
+          <>
+            <CalendarClock /> Programado
+          </>
+        ) : (
+          <>
+            <Loader2 className="animate-spin" /> {STATUS[last.status].label}…
+          </>
+        )}
       </Button>
       <Dialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
         <DialogContent className="sm:max-w-md">
@@ -116,6 +135,22 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
             </DialogDescription>
           </DialogHeader>
 
+          {ready && last && (
+            <div className="flex flex-col gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              <span>
+                {last.status === 'published'
+                  ? `Esta versión ya está en Instagram (${fmtWhen(last.createdAt)}): si la publicas otra vez, saldrá repetida.`
+                  : last.status === 'scheduled' && last.scheduledAt
+                    ? `Esta versión ya está programada para el ${fmtWhen(last.scheduledAt)}. Cámbiala o cancélala debajo del video.`
+                    : 'Esta versión se está publicando ahora mismo.'}
+              </span>
+              {last.permalink && (
+                <a href={last.permalink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 self-start text-xs underline-offset-2 hover:underline">
+                  Ver en Instagram <ExternalLink className="size-3" />
+                </a>
+              )}
+            </div>
+          )}
           {!ready ? (
             <Button asChild variant="outline" className="self-start">
               <a href="#/ajustes/cuenta" onClick={() => setOpen(false)}>
@@ -175,7 +210,7 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
             {ready && (
               <Button disabled={busy || !version} onClick={submit}>
                 {busy && <Loader2 className="animate-spin" />}
-                {mode === 'now' ? 'Publicar ahora' : 'Programar'}
+                {mode === 'now' ? (last ? 'Publicar otra vez' : 'Publicar ahora') : last ? 'Programar otra vez' : 'Programar'}
               </Button>
             )}
           </DialogFooter>
