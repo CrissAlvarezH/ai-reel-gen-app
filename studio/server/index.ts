@@ -151,22 +151,27 @@ app.get('/api/reels', handle(() => listSlugs().map(summary).sort((a, b) => b.upd
 app.get('/api/reels/:slug', reel, handle((req) => detail(req.params.slug)));
 // Alineación con tu audiencia (server/script-check.ts) and Fuerza del gancho (server/hook-check.ts): GET only reads;
 // POST judges the script if it changed (force: again) and answers once done. ?format=text: the agent's reading of it.
-const check = (agentText: (slug: string) => string, fn: (req: Req) => unknown) => async (req: Req, res: Response) => {
+// ?project=: the agent's own project (REEL_STUDIO_PROJECT_ID; it goes on in it after he opens another one), else the open one.
+const agentProject = (req: Req) => (typeof req.query.project === 'string' && req.query.project ? req.query.project : undefined);
+const check = (agentText: (slug: string) => string, fn: (req: Req, project: string | undefined) => unknown) => async (req: Req, res: Response) => {
   try {
-    const r = await fn(req);
-    if (req.query.format === 'text') res.type('text/plain').send(agentText(req.params.slug) || 'Este video aún no tiene revisión de audiencia.');
+    const project = agentProject(req);
+    const {slug} = req.params;
+    if (!workspace.inProject(project, () => validSlug(slug) && listSlugs().includes(slug))) return void res.status(404).json({error: 'reel no encontrado'});
+    const r = await fn(req, project);
+    if (req.query.format === 'text') res.type('text/plain').send(workspace.inProject(project, () => agentText(slug)) || 'Este video aún no tiene revisión de audiencia.');
     else res.json(r);
   } catch (e) {
     fail(res, e);
   }
 };
-app.get('/api/reels/:slug/audience-check', reel, check(scriptCheck.agentText, (req) => scriptCheck.state(req.params.slug)));
-app.post('/api/reels/:slug/audience-check', reel, check(scriptCheck.agentText, (req) => scriptCheck.run(req.params.slug, req.body?.force === true)));
+app.get('/api/reels/:slug/audience-check', check(scriptCheck.agentText, (req, p) => workspace.inProject(p, () => scriptCheck.state(req.params.slug))));
+app.post('/api/reels/:slug/audience-check', check(scriptCheck.agentText, (req, p) => scriptCheck.run(req.params.slug, req.body?.force === true, p)));
 // The model each review runs on (its badge): the open project's choice for the agent in Ajustes.
 app.get('/api/checks/models', handle(() => scriptCheck.models()));
 app.put('/api/checks/:check/model', handle((req) => scriptCheck.setModel(req.params.check, req.body?.model)));
-app.get('/api/reels/:slug/hook-check', reel, check(hookCheck.agentText, (req) => hookCheck.state(req.params.slug)));
-app.post('/api/reels/:slug/hook-check', reel, check(hookCheck.agentText, (req) => hookCheck.run(req.params.slug, req.body?.force === true)));
+app.get('/api/reels/:slug/hook-check', check(hookCheck.agentText, (req, p) => workspace.inProject(p, () => hookCheck.state(req.params.slug))));
+app.post('/api/reels/:slug/hook-check', check(hookCheck.agentText, (req, p) => hookCheck.run(req.params.slug, req.body?.force === true, p)));
 
 app.put('/api/reels/:slug/file', reel, handle((req) => {
   const {path: rel, content} = req.body ?? {};
@@ -285,9 +290,10 @@ app.get('/api/chat-options', handle(() => chat.options()));
 app.get('/api/chat-examples', handle(() => chat.examples()));
 app.get('/api/chat/:key', chatKey, handle((req) => chat.list(req.params.key)));
 // For the agent (curl, from the line each turn carries): its instructions as they are now, in plain text.
-app.get('/api/chat/:key/instructions', chatKey, (req, res) => {
+// ?project=: the agent's own project (REEL_STUDIO_PROJECT_ID), which may not be the open one.
+app.get('/api/chat/:key/instructions', (req: Req, res: Response) => {
   try {
-    res.type('text/plain').send(chat.instructions(req.params.key));
+    res.type('text/plain').send(chat.instructions(req.params.key, typeof req.query.project === 'string' ? req.query.project : undefined));
   } catch (e) {
     fail(res, e);
   }
@@ -739,6 +745,9 @@ function serveWorkspace() {
   vite.watcher.add(path.join(VIDEOS, '*/src').replace(/\\/g, '/'));
 }
 serveWorkspace();
+// An /api route that doesn't exist is a mistake (a typo, the wrong method, a route from an older version): it answers
+// 404 in JSON, like the others, instead of falling through to the app's page, which an agent's curl reads as success.
+app.use('/api', (req: Req, res: Response) => void res.status(404).json({error: `no existe la ruta ${req.method} ${req.originalUrl.split('?')[0]}`}));
 app.use(vite.middlewares);
 
 // A new workspace (welcome page or Ajustes): stop the agents and Inspiración's work in the old one, watch the

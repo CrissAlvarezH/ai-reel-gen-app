@@ -5,8 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type {ChildProcess} from 'node:child_process';
-import {ROOT, VIDEOS, formatOf, httpError, listSlugs, styleOf, summary, title as videoTitle, videoFormatOf} from './reels.ts';
-import {CONFIG, DATA, PROJECT, PROJECT_DIR, projectName, rel as relPath, resource} from './workspace.ts';
+import {ROOT, VIDEOS, formatOf, httpError, listSlugs, styleOf, summary, title as videoTitle, validSlug, videoFormatOf} from './reels.ts';
+import {CONFIG, DATA, PROJECT, PROJECT_DIR, inProject, projectName, rel as relPath, resource, withProject} from './workspace.ts';
 import {AGENTS, EFFORT_LABELS, agentById, agentCli, currentAgent, type AgentCli, type AgentEvent} from './agent.ts';
 import {IS_WIN, PY, VENV_BIN, readJson, writeJson} from './platform.ts';
 import {getKey} from './settings.ts';
@@ -48,7 +48,8 @@ type PendingPermission = {answer: (allow: boolean) => void; expire: () => void; 
 // moveTo: the video its agent asked to go on in (a general conversation), once the turn ends. moveAuto: it was set by
 // scripts/new-video.sh when its agent created that video ('many': it created more than one, so it stays).
 // created: every video scripts/new-video.sh made for this turn, in order (an automation's next steps are told them).
-type Run = {dir: string; proc: ChildProcess; pending: Map<string, PendingPermission>; started: number; live: string; tool: string | null; stderr: string; result?: {ok: boolean; text?: string}; stopped?: boolean; context?: ChatContext; said?: boolean; moveTo?: string; moveAuto?: 'one' | 'many'; created?: string[]};
+// project: the one it works in (open when it started; he may open another meanwhile, or it's an automation of another).
+type Run = {dir: string; project: string; proc: ChildProcess; pending: Map<string, PendingPermission>; started: number; live: string; tool: string | null; stderr: string; result?: {ok: boolean; text?: string}; stopped?: boolean; context?: ChatContext; said?: boolean; moveTo?: string; moveAuto?: 'one' | 'many'; created?: string[]};
 
 let seq = 0;
 const id = () => `${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -77,11 +78,21 @@ function modeOf(c: Pick<Chat, 'mode'>, cli: AgentCli) {
 const file = (key: string, dir = DATA) => path.join(dir, `${key}.json`);
 function load(key: string, dir = DATA): Store {
   let raw: Partial<Store> & {sessionId?: string | null; items?: ChatItem[]; seenAt?: number};
+  let text: string | null = null;
   try {
-    raw = JSON.parse(fs.readFileSync(file(key, dir), 'utf8'));
+    text = fs.readFileSync(file(key, dir), 'utf8');
+    raw = JSON.parse(text);
   } catch {
+    // A file that's there but can't be read (cut by a crash mid-write, edited by hand) is set aside, not written over:
+    // its conversations can still be recovered from the copy.
+    if (text !== null) {
+      const kept = `${file(key, dir)}.ilegible-${Date.now()}`;
+      fs.renameSync(file(key, dir), kept);
+      console.warn(`[chat] ${key}.json no se pudo leer: se guardó como ${path.basename(kept)} y empieza una conversación nueva`);
+    }
     raw = {};
   }
+  if (!raw || typeof raw !== 'object') raw = {};
   // Before tabs there was one conversation per key: {sessionId, items, seenAt}.
   if (!Array.isArray(raw.chats)) {
     const items = raw.items ?? [];
@@ -95,7 +106,9 @@ function load(key: string, dir = DATA): Store {
   if (!st.chats.some((c) => c.id === st.active && !c.closed)) st.active = (st.chats.findLast((c) => !c.closed) ?? st.chats.at(-1)!).id;
   return st;
 }
-const save = (key: string, s: Store, dir = DATA) => fs.writeFileSync(file(key, dir), JSON.stringify(s, null, 1));
+// Atomic (written next to it and renamed over it): it's rewritten on every event of a turn, and a crash halfway must
+// not leave a cut file.
+const save = (key: string, s: Store, dir = DATA) => writeJson(file(key, dir), s, 1);
 const find = (s: Store, chat: string) => {
   const c = s.chats.find((x) => x.id === chat);
   if (!c) throw httpError(404, 'conversación no encontrada');
@@ -548,7 +561,7 @@ export const SOURCES_TOOL = () => `${PY} "${resource('tools/sources.py')}"`;
 
 // The studio's index (server/db.ts), for every conversation.
 const INDEX_LINE = () =>
-  `Índice de la app: una base SQLite de solo lectura con todo lo que la app guarda en archivos, de todos los proyectos (filtra siempre por project; el abierto es '${PROJECT}'), que la app mantiene al día (no la escribas): ${PY} tools/studio_sql.py --schema (las tablas y qué significa cada columna) y ${PY} tools/studio_sql.py "SELECT …". Tablas: projects; videos y video_beats (los videos de cada proyecto: título, estilo, guion, caption, renders, estructura y el reel en que se publicó); own_accounts y own_reels (Mi cuenta de cada proyecto: sus reels con vistas, multiplicador, interacción y el video del que salió cada uno); insp_accounts, insp_reels e insp_beats (Inspiración). Úsalo para comparar, contar, ordenar o buscar entre muchos; para el detalle, abre los archivos.`;
+  `Índice de la app: una base SQLite de solo lectura con todo lo que la app guarda en archivos, de todos los proyectos (filtra siempre por project; el abierto es '${PROJECT}'), que la app mantiene al día (no la escribas): ${PY} tools/studio_sql.py --schema (las tablas y qué significa cada columna) y ${PY} tools/studio_sql.py "SELECT …". Tablas, con los nombres reales de sus columnas más usadas (el resto, en --schema; no adivines nombres): projects; videos (columnas: project, slug, title, style, script, caption, renders, created, updated, reel), los videos de cada proyecto, con reel el código del reel en que se publicó, y video_beats (columnas: project, slug, idx, tag, line), su estructura; own_accounts (columnas: project, username, median, followers) y own_reels (columnas: project, account, code, posted, views, ratio, engagement, video), Mi cuenta de cada proyecto: ratio es el multiplicador (vistas sobre la mediana de la cuenta), engagement la interacción y video el video del proyecto del que salió; insp_accounts, insp_reels (columnas: project, account, code, posted, views, ratio) e insp_beats, Inspiración. Úsalo para comparar, contar, ordenar o buscar entre muchos; para el detalle, abre los archivos.`;
 
 // Only Claude Code has the Chrome integration (TurnOptions.chrome).
 function chromeNote() {
@@ -581,9 +594,30 @@ function formatsText() {
   return `Formatos (tipos de video, formats/<id>/format.json; la página Formatos): ${all.map(one).join('; ')}. El formato dice cómo se hace el video; el estilo, cómo se ve.`;
 }
 
-// The line every turn carries: a resumed session keeps the system prompt it started with, so the current one is asked for.
-const CURRENT = '[Reel Studio: tus instrucciones vigentes salen de curl -s "$REEL_STUDIO_URL/api/chat/$REEL_STUDIO/instructions" y mandan sobre las que recibiste al empezar esta conversación. Consúltalas antes de decir que no puedes algo y cuando dudes del perfil, el estilo o la voz.]';
-export const instructions = (key: string) => SYSTEM(key);
+// The line every turn he's watching carries: a resumed session keeps the system prompt it started with, so the current one is
+// asked for. It names its own project: he may have opened another one since its turn started. Not an automation's
+// (unattended): its session is always new, and what the curl brings back lacks the rules it was given on top (decide alone,
+// its memory), which this line would tell it to put first.
+const CURRENT = '[Reel Studio: tus instrucciones vigentes salen de curl -s "$REEL_STUDIO_URL/api/chat/$REEL_STUDIO/instructions?project=$REEL_STUDIO_PROJECT_ID" y mandan sobre las que recibiste al empezar esta conversación. Consúltalas antes de decir que no puedes algo y cuando dudes del perfil, el estilo o la voz.]';
+// Those instructions, as they are now in the conversation's own project (the open one if none is named).
+export function instructions(key: string, project?: string) {
+  const own = () => {
+    if (key !== GENERAL && !listSlugs().includes(key)) throw httpError(404, 'conversación no encontrada');
+    return SYSTEM(key);
+  };
+  return inProject(project, own);
+}
+
+// fn in the project a turn works in, open or not; undefined when that project isn't in this workspace anymore.
+function inProjectOf<T>(r: Pick<Run, 'project' | 'dir'>, fn: () => T): T | undefined {
+  let same = false;
+  try {
+    same = withProject(r.project, () => DATA === r.dir);
+  } catch {
+    return undefined;
+  }
+  return same ? withProject(r.project, fn) : undefined;
+}
 
 // How a general conversation moves to a video. Also told in the prompt to a conversation that started before (a resumed
 // Claude Code session keeps the system prompt it started with).
@@ -593,7 +627,7 @@ const MOVE_LINE =
 // The two script reviews on a video's page (server/script-check.ts, server/hook-check.ts): what they are and how its agent
 // reads or runs them. slug: the video's, or <slug> for the general conversation.
 const checksLine = (slug: string) =>
-  `Revisiones del guion, arriba en la página del video: «Alineación con tu audiencia» (audience-check.json, contra su Perfil de audiencia) y «Fuerza del gancho» (hook-check.json: el gancho de 0–10 s con puntaje, criterios, qué cambiar y ganchos alternativos). Las hace el estudio solo unos segundos después de cada cambio de audio/vo.txt; no escribas esos archivos. Léelas con curl -s "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text" (o audience-check). Para lanzarlas tú y esperar el resultado (puede tardar unos minutos; si el guion no cambió, devuelve la última sin gastar): curl -s -X POST "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text" -H "Content-Type: application/json" -d '{}' (con {"force":true}, otra vez aunque no haya cambiado). Úsalas cuando escribas o cambies el gancho o el guion, y si te pide aplicarlas, léelas antes.`;
+  `Revisiones del guion, arriba en la página del video: «Alineación con tu audiencia» (audience-check.json, contra su Perfil de audiencia) y «Fuerza del gancho» (hook-check.json: el gancho de 0–10 s con puntaje, criterios, qué cambiar y ganchos alternativos). Las hace el estudio solo unos segundos después de cada cambio de audio/vo.txt; no escribas esos archivos. Léelas con curl -s "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text&project=$REEL_STUDIO_PROJECT_ID" (o audience-check). Para lanzarlas tú y esperar el resultado (puede tardar unos minutos; si el guion no cambió, devuelve la última sin gastar): curl -s -X POST "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text&project=$REEL_STUDIO_PROJECT_ID" -H "Content-Type: application/json" -d '{}' (con {"force":true}, otra vez aunque no haya cambiado). Úsalas cuando escribas o cambies el gancho o el guion, y si te pide aplicarlas, léelas antes.`;
 
 const SYSTEM = (key: string) =>
   key === GENERAL
@@ -685,13 +719,18 @@ export function moveToVideo(chat: string, slug: string, dir: string) {
 // Its agent asks, during its turn, to go on in a video (the one it created): it moves when the turn ends.
 // auto: scripts/new-video.sh asking, as it creates a video for this conversation's agent. One video made this turn:
 // it goes on there; a second one: it stays where it is (nobody said which), unless its agent then asks for one.
+// A video of the project whose conversations are in dir (a turn pins its folder): the agent's own project, which may not
+// be the open one.
+export const videoOfChats = (dir: string, slug: unknown): slug is string => validSlug(slug) && fs.existsSync(path.join(dir, '..', '..', 'videos', slug));
+
 export function requestMove(key: string, chat: string, slug: unknown, auto = false) {
   const only = 'solo se le asigna un video a una conversación que no tiene ninguno';
   if (key !== GENERAL) throw httpError(409, `esta conversación ya tiene video («${videoTitle(key) ?? key}») y no puede cambiarse: ${only}`);
   const r = runs.get(runKey(key, chat));
   if (!r) throw httpError(409, 'solo su agente la mueve, durante su turno');
+  const exists = (v: unknown): v is string => videoOfChats(r.dir, v);
   if (auto) {
-    if (typeof slug !== 'string' || !listSlugs().includes(slug)) throw httpError(404, 'ese video no existe en el proyecto abierto');
+    if (!exists(slug)) throw httpError(404, 'ese video no existe en su proyecto');
     if (!r.created?.includes(slug)) (r.created ??= []).push(slug);
     if (r.moveTo && !r.moveAuto) return {slug: r.moveTo, when: 'al terminar este turno'}; // its agent already chose
     if (r.moveAuto) {
@@ -704,7 +743,7 @@ export function requestMove(key: string, chat: string, slug: unknown, auto = fal
     return {slug, when: 'al terminar este turno'};
   }
   if (r.moveTo && !r.moveAuto) throw httpError(409, `esta conversación ya tiene video asignado («${videoTitle(r.moveTo) ?? r.moveTo}», pasa a él al terminar este turno) y no puede cambiarse: ${only}`);
-  if (typeof slug !== 'string' || !listSlugs().includes(slug)) throw httpError(404, 'ese video no existe en el proyecto abierto');
+  if (!exists(slug)) throw httpError(404, 'ese video no existe en su proyecto');
   r.moveTo = slug;
   r.moveAuto = undefined;
   return {slug, when: 'al terminar este turno'};
@@ -765,7 +804,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   const told = key === GENERAL && resume && !prev.moveTold ? `[Reel Studio: ${MOVE_LINE}]` : '';
   const prompt = slash
     ? text!.trim()
-    : [handover, brief, told, [fmtCtx(context, progress, style, voice, kind), CURRENT].filter(Boolean).join('\n'), note, commentsText(key, comments), refsText(refs.filter((r) => !r.own)), ownRefsText(refs.filter((r) => r.own)), ideaRefsText(ideaRefs), audited, uploads.agentText(images), text?.trim()].filter(Boolean).join('\n\n');
+    : [handover, brief, told, [fmtCtx(context, progress, style, voice, kind), unattended ? '' : CURRENT].filter(Boolean).join('\n'), note, commentsText(key, comments), refsText(refs.filter((r) => !r.own)), ownRefsText(refs.filter((r) => r.own)), ideaRefsText(ideaRefs), audited, uploads.agentText(images), text?.trim()].filter(Boolean).join('\n\n');
   // A step's own model and effort when it still exists on that CLI (choiceOf falls back to the starting choice).
   const {model, effort} = choiceOf(unattended?.agent ? {model: unattended.model, effort: unattended.effort} : prev, cli);
 
@@ -805,9 +844,9 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
     });
   push({id: id(), role: 'user', text: text?.trim() ?? '', comments: comments ?? [], ...(refs.length ? {refs} : {}), ...(ideaRefs.length ? {ideas: ideaRefs} : {}), ...(images.length ? {images} : {}), ts: Date.now()});
 
-  const proc = cli.turn({prompt, systemPrompt: unattended ? `${SYSTEM(key)}\n${unattended.system}` : SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_CHAT: chat, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR, ...unattended?.env}, model, effort, chrome: !unattended && getChromeAccess(), mode: unattended ? '' : modeOf(prev, cli)});
+  const proc = cli.turn({prompt, systemPrompt: unattended ? `${SYSTEM(key)}\n${unattended.system}` : SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_CHAT: chat, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR, REEL_STUDIO_PROJECT_ID: PROJECT, ...unattended?.env}, model, effort, chrome: !unattended && getChromeAccess(), mode: unattended ? '' : modeOf(prev, cli)});
   // Starts from what it was (a new session from another agent starts empty).
-  const run: Run = {dir, proc, pending: new Map(), started: Date.now(), live: '', tool: null, stderr: '', context: resume ? prev.context : undefined};
+  const run: Run = {dir, project: PROJECT, proc, pending: new Map(), started: Date.now(), live: '', tool: null, stderr: '', context: resume ? prev.context : undefined};
   const setContext = (ctx: ChatContext) => {
     if (run.context?.used === ctx.used && run.context?.window === ctx.window) return;
     run.context = ctx;
@@ -910,12 +949,12 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
 
   // Once: a CLI that couldn't start gives both 'error' and 'close'.
   let ended = false;
-  const end = (ok: boolean, stopped: boolean) =>
+  const end = (ok: boolean, stopped: boolean, video?: string) =>
     safe(() => {
       if (ended) return;
       ended = true;
       const said = find(load(key, dir), chat).items.findLast((i) => i.role === 'assistant');
-      unattended?.onDone({ok, stopped, text: said?.role === 'assistant' ? said.text : '', video: run.moveTo && here() ? run.moveTo : undefined, created: run.created ?? []});
+      unattended?.onDone({ok, stopped, text: said?.role === 'assistant' ? said.text : '', video, created: run.created ?? []});
     });
 
   proc.on('close', (code, signal) => {
@@ -942,11 +981,13 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
     tell({op: 'state', running: false});
     tellList();
     const stopped = !!signal || !!run.stopped;
-    end(!stopped && !!r?.ok, stopped);
-    const to = run.moveTo;
-    if (to && here())
+    // It goes on in that video, in its own project, whether that's the open one or not (its pages hear it if it is).
+    const to = run.moveTo && videoOfChats(dir, run.moveTo) && inProjectOf(run, () => true) ? run.moveTo : undefined;
+    end(!stopped && !!r?.ok, stopped, to);
+    if (to)
       safe(() => {
-        moveToVideo(chat, to, dir);
+        inProjectOf(run, () => moveToVideo(chat, to, dir));
+        if (!here()) return;
         tell({op: 'moved', to});
         tellList();
         emitList(to);

@@ -10,6 +10,7 @@ import * as audience from './audience.ts';
 import {checkModel, setCheckModel} from './config.ts';
 import {readJson, writeJson} from './platform.ts';
 import {VIDEOS, isPlaceholder} from './reels.ts';
+import {PROJECT, inProject, rel} from './workspace.ts';
 
 const FILE = (slug: string) => path.join(VIDEOS, slug, 'audience-check.json');
 export const scriptOf = (slug: string) => {
@@ -91,6 +92,8 @@ export function setModel(check: unknown, model: unknown): CheckModels {
   return models();
 }
 
+// By the video's folder: two projects can have a video with the same slug.
+const keyOf = (slug: string) => path.join(VIDEOS, slug);
 const running = new Map<string, Promise<void>>();
 const errors = new Map<string, string>();
 
@@ -100,31 +103,37 @@ export function state(slug: string): ScriptCheckState {
   return {
     audience: audience.configured(audience.get()),
     script: !!script && !isPlaceholder(slug, script),
-    running: running.has(slug),
+    running: running.has(keyOf(slug)),
     stale: !!check && check.script !== hash(script),
     check,
-    error: errors.get(slug) ?? '',
+    error: errors.get(keyOf(slug)) ?? '',
   };
 }
 
 // Judges the script unless this very script was judged already (force: again anyway). One at a time per video.
-export async function run(slug: string, force = false): Promise<ScriptCheckState> {
-  const s = state(slug);
-  if (!s.audience) throw Object.assign(new Error('primero llena tu Perfil de audiencia'), {status: 400});
-  if (!s.script) throw Object.assign(new Error('este video aún no tiene guion'), {status: 400});
-  if (!running.has(slug) && (force || !s.check || s.stale)) {
-    const script = scriptOf(slug);
-    errors.delete(slug);
-    running.set(
-      slug,
-      judge(script)
-        .then((c) => writeJson(FILE(slug), c))
-        .catch((e: Error) => void errors.set(slug, e.message))
-        .finally(() => running.delete(slug)),
-    );
-  }
-  await running.get(slug);
-  return state(slug);
+// project: the agent's own (its curl names it), which may not be the open one. The video's folder is pinned when it
+// starts, so the result goes to its video even if he opens another project meanwhile.
+export async function run(slug: string, force = false, project?: string): Promise<ScriptCheckState> {
+  const {key, own} = inProject(project, () => {
+    const s = state(slug);
+    if (!s.audience) throw Object.assign(new Error('primero llena tu Perfil de audiencia'), {status: 400});
+    if (!s.script) throw Object.assign(new Error('este video aún no tiene guion'), {status: 400});
+    const key = keyOf(slug);
+    if (!running.has(key) && (force || !s.check || s.stale)) {
+      const file = FILE(slug);
+      errors.delete(key);
+      running.set(
+        key,
+        judge(scriptOf(slug))
+          .then((c) => void (fs.existsSync(key) && writeJson(file, c)))
+          .catch((e: Error) => void errors.set(key, e.message))
+          .finally(() => running.delete(key)),
+      );
+    }
+    return {key, own: PROJECT};
+  });
+  await running.get(key);
+  return inProject(own, () => state(slug));
 }
 
 // For the agent, when he attaches it to a message ("Agregar al chat"): the check as it is, saying if the script changed since.
@@ -133,7 +142,7 @@ export function agentText(slug: string): string {
   const c = s.check;
   if (!c) return '';
   const lines = [
-    `Análisis de audiencia del guion (Alineación con tu audiencia, ${path.relative(path.dirname(VIDEOS), FILE(slug))}): ${c.score}/100${s.stale ? '. Ojo: el guion cambió después de este análisis, compáralo con audio/vo.txt' : ''}.`,
+    `Análisis de audiencia del guion (Alineación con tu audiencia, ${rel(FILE(slug))}): ${c.score}/100${s.stale ? '. Ojo: el guion cambió después de este análisis, compáralo con audio/vo.txt' : ''}.`,
     c.verdict && `Veredicto: ${c.verdict}`,
     (c.problem || c.level) && `Le habla a: ${[c.problem && `«${c.problem}»`, c.level].filter(Boolean).join(', ')}`,
     'Criterios:',

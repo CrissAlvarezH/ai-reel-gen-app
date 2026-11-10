@@ -147,8 +147,16 @@ function migrate(root: string) {
   move(path.join(root, 'videos'), path.join(dir, 'videos'));
   for (const f of ['profile.json', 'voice.json', 'account.json']) move(path.join(root, 'config', f), path.join(dir, 'config', f));
   move(path.join(root, 'account'), path.join(dir, 'account'));
-  move(path.join(root, 'studio/data'), path.join(dir, '.reel-studio/chats'));
-  move(path.join(root, '.reel-studio/chats'), path.join(dir, '.reel-studio/chats'));
+  // Conversations: .reel-studio/chats (the newer place), then what's only in studio/data. A file in both keeps the
+  // newer one; the other stays where it was.
+  const chats = path.join(dir, '.reel-studio/chats');
+  for (const from of [path.join(root, '.reel-studio/chats'), path.join(root, 'studio/data')]) {
+    if (!fs.existsSync(chats)) move(from, chats);
+    else if (isDir(from)) {
+      for (const n of fs.readdirSync(from)) move(path.join(from, n), path.join(chats, n));
+      if (!fs.readdirSync(from).length) fs.rmdirSync(from);
+    }
+  }
   writeProject(root, id, {name: 'Principal', created: Date.now()});
 }
 
@@ -358,6 +366,13 @@ export function withProject<T>(id: string, fn: () => T): T {
     applyProject(open);
   }
 }
+// fn on the bindings of a project named by its id, or on the open one without it: for the calls of an agent, which name
+// its own project (it goes on in it after he opens another one).
+export function inProject<T>(project: string | undefined, fn: () => T): T {
+  if (!project || project === PROJECT) return fn();
+  if (!PROJECT_ID.test(project)) throw bad('proyecto no encontrado', 404);
+  return withProject(project, fn);
+}
 export const projectName = () => (ROOT && PROJECT ? (readProject(ROOT, PROJECT)?.name ?? PROJECT) : '');
 // A path inside the workspace as the agent sees it (from the workspace's root), with forward slashes.
 export const rel = (p: string) => path.relative(ROOT, p).split(path.sep).join('/');
@@ -369,12 +384,12 @@ if (initial && isDir(initial)) apply(path.resolve(initial));
 
 // to: where it goes in the workspace. from: where it is in the repo (dev); the installer bundles each one
 // at RESOURCES/<to>. Styles and skills go one by one, so a workspace that has some keeps them and gets the rest.
+// Nothing Git ignores goes (refs/: third-party style references, local only).
 type Seed = {to: string; from: string};
 const SEED_FIXED: Seed[] = [
   {to: 'template', from: 'template'},
   {to: 'tools', from: 'tools'},
   {to: 'scripts', from: 'scripts'},
-  {to: 'refs/style-collage', from: 'refs/style-collage'},
   {to: 'CLAUDE.md', from: 'studio/workspace/CLAUDE.md'},
   {to: 'LESSONS.md', from: 'studio/workspace/LESSONS.md'},
   {to: '.gitignore', from: 'studio/workspace/gitignore'},
@@ -426,7 +441,13 @@ export function stageResources(out: string) {
 
 /* ───── Choosing the folder ───── */
 
-export const expand = (p: string) => path.resolve(p.trim().replace(/^~(?=$|[\\/])/, os.homedir()));
+// A full path, or one from the home folder (~). A relative one would resolve against the server's own folder (inside
+// the app, when installed), so it's refused.
+export function expand(p: string) {
+  const full = p.trim().replace(/^~(?=$|[\\/])/, os.homedir());
+  if (!path.isAbsolute(full)) throw Object.assign(new Error(`escribe la ruta completa (p. ej. ${suggested()})`), {status: 400});
+  return path.resolve(full);
+}
 export const suggested = () => path.join(os.homedir(), 'Documents', 'Reel Studio');
 
 // What's in a folder the user is about to choose.

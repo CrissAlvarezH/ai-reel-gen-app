@@ -151,7 +151,7 @@ remove it from older commits.
 cp .env.example .env            # add ELEVENLABS_API_KEY
 python3 -m venv .venv && .venv/bin/pip install -r tools/requirements.txt
 ```
-Needs Node 20+, ffmpeg, Python 3.11+.
+Needs Node 22.18+ (or 23.6+: the studio runs its TypeScript directly with Node), ffmpeg, Python 3.11+.
 
 ## New reel
 ```

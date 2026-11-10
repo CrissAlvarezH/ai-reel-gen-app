@@ -11,6 +11,7 @@
 // shortcut: their conversations pile up in _general.json, which is rewritten on every event (about 100 KB each today);
 // if that file gets slow, give them their own file or drop the old ones.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {cronMatches, nextRun} from '../shared/cron.ts';
@@ -33,7 +34,15 @@ const MAX_PROMPT = 20_000;
 
 const newId = () => crypto.randomBytes(4).toString('hex');
 const fileOf = (project: string) => path.join(projectDir(project), 'automations.json');
-const read = (file: string): Store => ({automations: [], runs: [], ...readJson<Partial<Store>>(file)});
+// A file that's there but can't be read (edited by hand, cut) stops here, so the next change doesn't write an empty list
+// over his automations and their history.
+function read(file: string): Store {
+  if (!fs.existsSync(file)) return {automations: [], runs: []};
+  const s = readJson<Partial<Store>>(file);
+  if (!s || typeof s !== 'object' || Array.isArray(s) || (s.automations !== undefined && !Array.isArray(s.automations)) || (s.runs !== undefined && !Array.isArray(s.runs)))
+    throw httpError(500, `no se puede leer ${rel(file)}: arréglalo o bórralo`);
+  return {automations: [], runs: [], ...s};
+}
 
 // The runs going on. file: pinned when it started, since the workspace may change before its last event arrives.
 // chat: the conversation of the step going on, if it has one. work: stops a step that processes reels. stopped: asked to stop.
@@ -280,7 +289,12 @@ export function runContext(done: AutomationRunStep[], previous: string, where: (
 }
 
 function patchRun(file: string, id: string, fn: (r: AutomationRun) => void) {
-  const s = read(file);
+  let s: Store;
+  try {
+    s = read(file);
+  } catch (e) {
+    return console.error('[automatización] no se pudo anotar la ejecución:', (e as Error).message);
+  }
   const r = s.runs.find((x) => x.id === id);
   if (!r) return;
   fn(r);
@@ -421,7 +435,13 @@ function tick(now = new Date()) {
   lastMinute = minute;
   for (const {id: project} of listProjects()) {
     if (runsElsewhere(projectDir(project))) continue; // another computer has this one, or it would all spend twice
-    const s = read(fileOf(project));
+    let s: Store;
+    try {
+      s = read(fileOf(project));
+    } catch (e) {
+      if (minute % 60 === 0) console.error(`[automatización] ${project}:`, (e as Error).message);
+      continue; // the others still run
+    }
     for (const a of s.automations) {
       if (!a.enabled || !cronMatches(a.cron, now) || isRunning(a.id)) continue;
       // Restarted within the same minute: it already fired.

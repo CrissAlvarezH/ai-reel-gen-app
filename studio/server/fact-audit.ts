@@ -25,7 +25,7 @@ import {getProfile} from './config.ts';
 import {readJson, writeJson} from './platform.ts';
 import {httpError, isPlaceholder, listSlugs, title, validSlug} from './reels.ts';
 import {arr, hash, modelOptions, obj, str} from './script-check.ts';
-import {PROJECT, ROOT, listProjects, projectDir, withProject} from './workspace.ts';
+import {PROJECT, ROOT, listProjects, projectDir, rel, withProject} from './workspace.ts';
 import {runsElsewhere} from './cloud.ts';
 
 type Store = {settings: FactAuditSettings; reports: FactReport[]; seen: Record<string, string>};
@@ -38,8 +38,13 @@ const MERGE_TIMEOUT = 6 * 60_000;
 
 const fileOf = (project: string) => path.join(projectDir(project), 'fact-audit.json');
 const scriptFile = (project: string, slug: string) => path.join(projectDir(project), 'videos', slug, 'audio/vo.txt');
+// A file that's there but can't be read (edited by hand, cut) stops here, so the next change doesn't write empty
+// settings and no reports over it.
 const read = (project: string): Store => {
-  const s = readJson<Partial<Store>>(fileOf(project)) ?? {};
+  const file = fileOf(project);
+  const raw = readJson<Partial<Store>>(file);
+  if (fs.existsSync(file) && (!raw || typeof raw !== 'object' || Array.isArray(raw))) throw httpError(500, `no se puede leer ${rel(file)}: arréglalo o bórralo`);
+  const s = raw ?? {};
   return {settings: {...DEFAULTS, ...s.settings}, reports: Array.isArray(s.reports) ? s.reports : [], seen: s.seen && typeof s.seen === 'object' ? s.seen : {}};
 };
 function change<T>(project: string, fn: (s: Store) => T): T {

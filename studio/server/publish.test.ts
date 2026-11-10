@@ -172,3 +172,17 @@ test('no account chosen, a missing version or a bad one stop before anything is 
   await assert.rejects(publish.publish('mi-video', {version: 'mi-video'}), /cuenta de Instagram/);
   assert.equal(ctl.pubs.size, 0);
 });
+
+test('one record the calendar cannot read does not take the calendar down, and stays in the file', async () => {
+  const at = new Date(Date.now() + 3600_000).toISOString();
+  const ok = await publish.publish('mi-video', {version: 'mi-video', scheduledAt: at});
+  await until(() => records()[0].status === 'scheduled');
+  // A record written by hand or by another version: no createdAt nor status.
+  const odd = {id: 'viejo', version: 'mi-video', account: 'entiende.finanzas.ya', scheduledAt: null};
+  fs.writeFileSync(path.join(video, 'publicaciones.json'), JSON.stringify([...records(), odd]));
+  const cal = await publish.calendar();
+  assert.deepEqual(cal.map((p) => p.id), [ok.id]);
+  assert.deepEqual((await publish.list('mi-video')).items.map((p) => p.id), [ok.id]);
+  await publish.cancel('mi-video', ok.id); // rewrites the file
+  assert.ok(records().some((r) => r.id === 'viejo'));
+});

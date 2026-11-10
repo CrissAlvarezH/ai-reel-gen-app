@@ -3,12 +3,14 @@
 // videos/<slug>/hook-check.json with a hash of the script it judged, so the same script is never judged twice and a
 // changed one shows as stale. The Perfil de audiencia sharpens it when there is one; it isn't needed.
 // The rubric comes from video-script's hook rules plus Jun Yuh, "Why Your Content Dies After 1.7 Seconds" (YouTube).
+import fs from 'node:fs';
 import path from 'node:path';
 import type {HookCheck, HookCheckState, ScriptCheckCriterion} from '../shared/types.ts';
 import {agentCli} from './agent.ts';
 import * as audience from './audience.ts';
 import {readJson, writeJson} from './platform.ts';
 import {VIDEOS, isPlaceholder} from './reels.ts';
+import {PROJECT, inProject, rel} from './workspace.ts';
 import {arr, hash, modelFor, obj, scriptOf, str} from './script-check.ts';
 
 const FILE = (slug: string) => path.join(VIDEOS, slug, 'hook-check.json');
@@ -60,32 +62,40 @@ export function clean(raw: unknown, script: string): HookCheck {
   };
 }
 
+// By the video's folder: two projects can have a video with the same slug.
+const keyOf = (slug: string) => path.join(VIDEOS, slug);
 const running = new Map<string, Promise<void>>();
 const errors = new Map<string, string>();
 
 export function state(slug: string): HookCheckState {
   const script = scriptOf(slug);
   const check = read(slug);
-  return {script: !!script && !isPlaceholder(slug, script), running: running.has(slug), stale: !!check && check.script !== hash(script), check, error: errors.get(slug) ?? ''};
+  return {script: !!script && !isPlaceholder(slug, script), running: running.has(keyOf(slug)), stale: !!check && check.script !== hash(script), check, error: errors.get(keyOf(slug)) ?? ''};
 }
 
 // Judges the script unless this very script was judged already (force: again anyway). One at a time per video.
-export async function run(slug: string, force = false): Promise<HookCheckState> {
-  const s = state(slug);
-  if (!s.script) throw Object.assign(new Error('este video aún no tiene guion'), {status: 400});
-  if (!running.has(slug) && (force || !s.check || s.stale)) {
-    const script = scriptOf(slug);
-    errors.delete(slug);
-    running.set(
-      slug,
-      judge(script)
-        .then((c) => writeJson(FILE(slug), c))
-        .catch((e: Error) => void errors.set(slug, e.message))
-        .finally(() => running.delete(slug)),
-    );
-  }
-  await running.get(slug);
-  return state(slug);
+// project: the agent's own (its curl names it), which may not be the open one. The video's folder is pinned when it
+// starts, so the result goes to its video even if he opens another project meanwhile.
+export async function run(slug: string, force = false, project?: string): Promise<HookCheckState> {
+  const {key, own} = inProject(project, () => {
+    const s = state(slug);
+    if (!s.script) throw Object.assign(new Error('este video aún no tiene guion'), {status: 400});
+    const key = keyOf(slug);
+    if (!running.has(key) && (force || !s.check || s.stale)) {
+      const file = FILE(slug);
+      errors.delete(key);
+      running.set(
+        key,
+        judge(scriptOf(slug))
+          .then((c) => void (fs.existsSync(key) && writeJson(file, c)))
+          .catch((e: Error) => void errors.set(key, e.message))
+          .finally(() => running.delete(key)),
+      );
+    }
+    return {key, own: PROJECT};
+  });
+  await running.get(key);
+  return inProject(own, () => state(slug));
 }
 
 // For the agent (GET or POST …/hook-check?format=text): the check as it is, saying if the script changed since.
@@ -94,7 +104,7 @@ export function agentText(slug: string): string {
   const c = s.check;
   if (!c) return s.error ? `La revisión del gancho falló: ${s.error}` : 'Este video aún no tiene revisión del gancho.';
   const lines = [
-    `Fuerza del gancho (${path.relative(path.dirname(VIDEOS), FILE(slug))}): ${c.score}/100${s.stale ? '. Ojo: el guion cambió después de esta revisión, compáralo con audio/vo.txt' : ''}.`,
+    `Fuerza del gancho (${rel(FILE(slug))}): ${c.score}/100${s.stale ? '. Ojo: el guion cambió después de esta revisión, compáralo con audio/vo.txt' : ''}.`,
     c.verdict && `Veredicto: ${c.verdict}`,
     c.hook && `Gancho revisado: «${c.hook}»`,
     c.question && `Pregunta que abre: ${c.question}`,

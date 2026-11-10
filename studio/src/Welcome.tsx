@@ -100,6 +100,7 @@ function FolderStep({status, onNext}: {status: WorkspaceStatus; onNext: () => vo
   useEffect(() => {
     setInfo(null);
     setCopied(null);
+    setErr('');
     if (!path.trim()) return;
     const t = setTimeout(() => {
       workspaceApi.inspect(path).then(setInfo, (e: Error) => setErr(e.message));

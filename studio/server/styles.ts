@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type {Style, StyleRef, StyleThumbnail} from '../shared/types.ts';
 
-import {STYLES} from './workspace.ts';
+import {ROOT, STYLES} from './workspace.ts';
 import {getProfile} from './config.ts';
 export {STYLES};
 
@@ -14,6 +14,8 @@ const list = <T>(v: unknown, ok: (x: Record<string, unknown>) => boolean) =>
   (Array.isArray(v) ? v.filter((x) => !!x && typeof x === 'object' && ok(x as Record<string, unknown>)) : []) as T[];
 const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
 const fileUrl = (rel: string) => `/style-files/${rel.split('/').map(encodeURIComponent).join('/')}`;
+// Images it lists that this workspace has: local references (refs/, not shipped) may be missing in another one.
+const images = (v: unknown) => strs(v).filter((rel) => fs.existsSync(path.join(ROOT, rel))).map(fileUrl);
 
 // style.json "thumbnail": {look, avoid, example (a workspace-relative image)}; null when the style has none.
 function thumbnail(v: unknown): StyleThumbnail | null {
@@ -59,8 +61,8 @@ export function listStyles(): Style[] {
       sources: strs(j.sources),
       avoid: strs(j.avoid),
       thumbnail: thumbnail(j.thumbnail),
-      examples: strs(j.examples).map(fileUrl),
-      references: strs(j.references).map(fileUrl),
+      examples: images(j.examples),
+      references: images(j.references),
     });
   }
   return out.sort((a, b) => Number(b.projectDefault) - Number(a.projectDefault) || Number(b.default) - Number(a.default) || a.name.localeCompare(b.name));
