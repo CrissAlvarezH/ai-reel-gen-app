@@ -5,8 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type {ChildProcess} from 'node:child_process';
-import {ROOT, VIDEOS, formatOf, httpError, listSlugs, styleOf, summary, title as videoTitle, videoFormatOf} from './reels.ts';
-import {CONFIG, DATA, PROJECT, PROJECT_DIR, isProjectId, projectName, rel as relPath, resource, withProject} from './workspace.ts';
+import {ROOT, VIDEOS, formatOf, httpError, listSlugs, styleOf, summary, title as videoTitle, validSlug, videoFormatOf} from './reels.ts';
+import {CONFIG, DATA, PROJECT, PROJECT_DIR, inProject, projectName, rel as relPath, resource} from './workspace.ts';
 import {AGENTS, EFFORT_LABELS, agentById, agentCli, currentAgent, type AgentCli, type AgentEvent} from './agent.ts';
 import {IS_WIN, PY, VENV_BIN, readJson, writeJson} from './platform.ts';
 import {getKey} from './settings.ts';
@@ -602,9 +602,7 @@ export function instructions(key: string, project?: string) {
     if (key !== GENERAL && !listSlugs().includes(key)) throw httpError(404, 'conversación no encontrada');
     return SYSTEM(key);
   };
-  if (!project || project === PROJECT) return own();
-  if (!isProjectId(project)) throw httpError(404, 'proyecto no encontrado');
-  return withProject(project, own);
+  return inProject(project, own);
 }
 
 // How a general conversation moves to a video. Also told in the prompt to a conversation that started before (a resumed
@@ -615,7 +613,7 @@ const MOVE_LINE =
 // The two script reviews on a video's page (server/script-check.ts, server/hook-check.ts): what they are and how its agent
 // reads or runs them. slug: the video's, or <slug> for the general conversation.
 const checksLine = (slug: string) =>
-  `Revisiones del guion, arriba en la página del video: «Alineación con tu audiencia» (audience-check.json, contra su Perfil de audiencia) y «Fuerza del gancho» (hook-check.json: el gancho de 0–10 s con puntaje, criterios, qué cambiar y ganchos alternativos). Las hace el estudio solo unos segundos después de cada cambio de audio/vo.txt; no escribas esos archivos. Léelas con curl -s "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text" (o audience-check). Para lanzarlas tú y esperar el resultado (puede tardar unos minutos; si el guion no cambió, devuelve la última sin gastar): curl -s -X POST "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text" -H "Content-Type: application/json" -d '{}' (con {"force":true}, otra vez aunque no haya cambiado). Úsalas cuando escribas o cambies el gancho o el guion, y si te pide aplicarlas, léelas antes.`;
+  `Revisiones del guion, arriba en la página del video: «Alineación con tu audiencia» (audience-check.json, contra su Perfil de audiencia) y «Fuerza del gancho» (hook-check.json: el gancho de 0–10 s con puntaje, criterios, qué cambiar y ganchos alternativos). Las hace el estudio solo unos segundos después de cada cambio de audio/vo.txt; no escribas esos archivos. Léelas con curl -s "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text&project=$REEL_STUDIO_PROJECT_ID" (o audience-check). Para lanzarlas tú y esperar el resultado (puede tardar unos minutos; si el guion no cambió, devuelve la última sin gastar): curl -s -X POST "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text&project=$REEL_STUDIO_PROJECT_ID" -H "Content-Type: application/json" -d '{}' (con {"force":true}, otra vez aunque no haya cambiado). Úsalas cuando escribas o cambies el gancho o el guion, y si te pide aplicarlas, léelas antes.`;
 
 const SYSTEM = (key: string) =>
   key === GENERAL
@@ -707,13 +705,18 @@ export function moveToVideo(chat: string, slug: string, dir: string) {
 // Its agent asks, during its turn, to go on in a video (the one it created): it moves when the turn ends.
 // auto: scripts/new-video.sh asking, as it creates a video for this conversation's agent. One video made this turn:
 // it goes on there; a second one: it stays where it is (nobody said which), unless its agent then asks for one.
+// A video of the project whose conversations are in dir (a turn pins its folder): the agent's own project, which may not
+// be the open one.
+export const videoOfChats = (dir: string, slug: unknown): slug is string => validSlug(slug) && fs.existsSync(path.join(dir, '..', '..', 'videos', slug));
+
 export function requestMove(key: string, chat: string, slug: unknown, auto = false) {
   const only = 'solo se le asigna un video a una conversación que no tiene ninguno';
   if (key !== GENERAL) throw httpError(409, `esta conversación ya tiene video («${videoTitle(key) ?? key}») y no puede cambiarse: ${only}`);
   const r = runs.get(runKey(key, chat));
   if (!r) throw httpError(409, 'solo su agente la mueve, durante su turno');
+  const exists = (v: unknown): v is string => videoOfChats(r.dir, v);
   if (auto) {
-    if (typeof slug !== 'string' || !listSlugs().includes(slug)) throw httpError(404, 'ese video no existe en el proyecto abierto');
+    if (!exists(slug)) throw httpError(404, 'ese video no existe en su proyecto');
     if (!r.created?.includes(slug)) (r.created ??= []).push(slug);
     if (r.moveTo && !r.moveAuto) return {slug: r.moveTo, when: 'al terminar este turno'}; // its agent already chose
     if (r.moveAuto) {
@@ -726,7 +729,7 @@ export function requestMove(key: string, chat: string, slug: unknown, auto = fal
     return {slug, when: 'al terminar este turno'};
   }
   if (r.moveTo && !r.moveAuto) throw httpError(409, `esta conversación ya tiene video asignado («${videoTitle(r.moveTo) ?? r.moveTo}», pasa a él al terminar este turno) y no puede cambiarse: ${only}`);
-  if (typeof slug !== 'string' || !listSlugs().includes(slug)) throw httpError(404, 'ese video no existe en el proyecto abierto');
+  if (!exists(slug)) throw httpError(404, 'ese video no existe en su proyecto');
   r.moveTo = slug;
   r.moveAuto = undefined;
   return {slug, when: 'al terminar este turno'};

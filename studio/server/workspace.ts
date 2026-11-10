@@ -358,6 +358,13 @@ export function withProject<T>(id: string, fn: () => T): T {
     applyProject(open);
   }
 }
+// fn on the bindings of a project named by its id, or on the open one without it: for the calls of an agent, which name
+// its own project (it goes on in it after he opens another one).
+export function inProject<T>(project: string | undefined, fn: () => T): T {
+  if (!project || project === PROJECT) return fn();
+  if (!PROJECT_ID.test(project)) throw bad('proyecto no encontrado', 404);
+  return withProject(project, fn);
+}
 export const projectName = () => (ROOT && PROJECT ? (readProject(ROOT, PROJECT)?.name ?? PROJECT) : '');
 // A path inside the workspace as the agent sees it (from the workspace's root), with forward slashes.
 export const rel = (p: string) => path.relative(ROOT, p).split(path.sep).join('/');
