@@ -35,9 +35,13 @@ export type ReelSummary = {
   voice: VoiceRef | null; // the voice that narrates it (the global one, or its own voice.json)
   pace: number; // spoken words per second with that voice
   instagram: PostedReel | null; // the reel it was posted as, if Mi cuenta has it
+  release: ReelRelease | null; // where it stands on Instagram (the card's line under its hook); null: not finished yet
 };
 
 // In the detail, words is the timed VO (src/words.json), not the summary's word count.
+// A video on its way out: sent and on its way (publishing), waiting for its time (scheduled, at), out (published, at:
+// when, null if Mi cuenta doesn't know) or rendered and not sent yet (ready). From publicaciones.json and Mi cuenta.
+export type ReelRelease = {state: 'publishing' | 'scheduled' | 'published' | 'ready'; at: string | null};
 export type ReelDetail = Omit<ReelSummary, 'words'> & {
   script: string;
   beats: Beat[];

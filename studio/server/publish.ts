@@ -12,12 +12,12 @@ import {promisify} from 'node:util';
 import * as account from './account.ts';
 import * as cloud from './cloud.ts';
 import type {CloudPublication, PresignedPut} from './cloud.ts';
-import {readJson, writeJson} from './platform.ts';
+import {writeJson} from './platform.ts';
+import {FILE, rawOf, recordsOf} from './publications-file.ts';
 import {coverUrl, httpError, title as titleOf} from './reels.ts';
 import {VIDEOS} from './workspace.ts';
 import type {CalendarPublication, PublicationStatus, PublishInput, VideoPublication, VideoPublications} from '../shared/types.ts';
 
-const FILE = 'publicaciones.json';
 const KEEP = 20;
 const FINAL: ReadonlySet<PublicationStatus> = new Set(['published', 'error', 'canceled']);
 const MAX_VIDEO = 300 * 1024 * 1024; // Instagram's limits
@@ -31,17 +31,6 @@ const run = promisify(execFile);
 
 // Uploads going on in this process: their record isn't refreshed from the account until they end.
 const sending = new Set<string>();
-
-// Every record with an id, as it is in the file (one this version can't show is kept when the file is rewritten), and
-// those the pages can show: with the fields the calendar and its ordering read. The file travels with the video's sync
-// and can be edited by hand, so one record that lacks them can't take the whole calendar down.
-const rawOf = (dir: string) => {
-  const raw = readJson<unknown>(path.join(dir, FILE));
-  return Array.isArray(raw) ? (raw as VideoPublication[]).filter((r) => r && typeof r === 'object' && typeof r.id === 'string') : [];
-};
-const shown = (r: VideoPublication) =>
-  typeof r.version === 'string' && typeof r.createdAt === 'string' && typeof r.status === 'string' && (r.scheduledAt == null || typeof r.scheduledAt === 'string');
-const recordsOf = (dir: string) => rawOf(dir).filter(shown);
 
 // Re-read and rewritten on every change: the file is shared by the uploads and the page's refreshes.
 function update(dir: string, id: string, set: Partial<VideoPublication>) {
@@ -117,6 +106,23 @@ export async function list(slug: string): Promise<VideoPublications> {
     }),
   );
   return {signedIn, account: cloud.linkedAccount()?.username ?? null, caption: captionOf(dir), cover: !!coverIn(dir), items: items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))};
+}
+
+// The library: its cards show each video's last known state, so the ones whose moment came (sent for now, or scheduled
+// for a time already past) are asked about; a change rewrites publicaciones.json and the watcher redraws the card.
+// At most once a minute, in the background.
+let dueAt = 0;
+export function refreshDue(now = Date.now()) {
+  if (now - dueAt < 60_000 || !cloud.signedIn()) return;
+  dueAt = now;
+  let slugs: string[] = [];
+  try {
+    slugs = fs.readdirSync(VIDEOS, {withFileTypes: true}).filter((d) => d.isDirectory()).map((d) => d.name);
+  } catch {
+    return;
+  }
+  const due = (r: {status: PublicationStatus; scheduledAt: string | null}) => !FINAL.has(r.status) && (!r.scheduledAt || Date.parse(r.scheduledAt) <= now);
+  for (const slug of slugs) if (recordsOf(path.join(VIDEOS, slug)).some(due)) list(slug).catch(() => {});
 }
 
 // Videos programados: what every video of the project sent, each refreshed like its page does. Canceled ones stay out.

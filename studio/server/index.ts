@@ -147,7 +147,10 @@ const reel = (req: Req, res: Response, next: NextFunction) => {
   next();
 };
 
-app.get('/api/reels', handle(() => listSlugs().map(summary).sort((a, b) => b.updated - a.updated)));
+app.get('/api/reels', handle(() => {
+  publish.refreshDue();
+  return listSlugs().map(summary).sort((a, b) => b.updated - a.updated);
+}));
 app.get('/api/reels/:slug', reel, handle((req) => detail(req.params.slug)));
 // Alineación con tu audiencia (server/script-check.ts) and Fuerza del gancho (server/hook-check.ts): GET only reads;
 // POST judges the script if it changed (force: again) and answers once done. ?format=text: the agent's reading of it.
