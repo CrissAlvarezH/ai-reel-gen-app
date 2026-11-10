@@ -42,9 +42,14 @@ before(async () => {
     server.stderr!.on('data', read);
   });
 });
-after(() => {
-  server?.kill('SIGTERM');
-  fs.rmSync(root, {recursive: true, force: true});
+// The server is gone before its workspace is: still writing in it (its index), the removal would find it not empty.
+after(async () => {
+  if (server && server.exitCode === null && server.signalCode === null) {
+    const gone = new Promise((r) => server.once('exit', r));
+    server.kill('SIGTERM');
+    await Promise.race([gone, new Promise((r) => setTimeout(r, 5000))]);
+  }
+  fs.rmSync(root, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
 });
 
 test('an /api route that does not exist answers 404 in JSON, not the app page', async () => {
