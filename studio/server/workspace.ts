@@ -403,7 +403,7 @@ const children = (rel: string) => {
 };
 // Only product styles seed new workspaces or ship in the installer. Other folders in this
 // development workspace may be a customer's custom styles and must remain local.
-const BUILTIN_STYLES = ['collage-semitono', 'cuaderno-apuntes', 'plano-tecnico'];
+const BUILTIN_STYLES = ['collage-semitono', 'cuaderno-apuntes', 'panel-de-cifras', 'plano-tecnico'];
 export const seeds = (): Seed[] => [
   ...SEED_FIXED,
   ...BUILTIN_STYLES.map((n) => ({to: `styles/${n}`, from: `styles/${n}`})),

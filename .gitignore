@@ -16,6 +16,7 @@ __pycache__/
 !/styles/collage-semitono/
 !/styles/cuaderno-apuntes/
 !/styles/plano-tecnico/
+!/styles/panel-de-cifras/
 # secrets
 .env
 # renders and regenerable media
