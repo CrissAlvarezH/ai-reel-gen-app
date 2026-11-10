@@ -433,7 +433,13 @@ export function stageResources(out: string) {
 
 /* ───── Choosing the folder ───── */
 
-export const expand = (p: string) => path.resolve(p.trim().replace(/^~(?=$|[\\/])/, os.homedir()));
+// A full path, or one from the home folder (~). A relative one would resolve against the server's own folder (inside
+// the app, when installed), so it's refused.
+export function expand(p: string) {
+  const full = p.trim().replace(/^~(?=$|[\\/])/, os.homedir());
+  if (!path.isAbsolute(full)) throw Object.assign(new Error(`escribe la ruta completa (p. ej. ${suggested()})`), {status: 400});
+  return path.resolve(full);
+}
 export const suggested = () => path.join(os.homedir(), 'Documents', 'Reel Studio');
 
 // What's in a folder the user is about to choose.
