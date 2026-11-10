@@ -593,8 +593,10 @@ function formatsText() {
   return `Formatos (tipos de video, formats/<id>/format.json; la página Formatos): ${all.map(one).join('; ')}. El formato dice cómo se hace el video; el estilo, cómo se ve.`;
 }
 
-// The line every turn carries: a resumed session keeps the system prompt it started with, so the current one is asked for.
-// It names its own project: he may have opened another one since its turn started.
+// The line every turn he's watching carries: a resumed session keeps the system prompt it started with, so the current one is
+// asked for. It names its own project: he may have opened another one since its turn started. Not an automation's
+// (unattended): its session is always new, and what the curl brings back lacks the rules it was given on top (decide alone,
+// its memory), which this line would tell it to put first.
 const CURRENT = '[Reel Studio: tus instrucciones vigentes salen de curl -s "$REEL_STUDIO_URL/api/chat/$REEL_STUDIO/instructions?project=$REEL_STUDIO_PROJECT_ID" y mandan sobre las que recibiste al empezar esta conversación. Consúltalas antes de decir que no puedes algo y cuando dudes del perfil, el estilo o la voz.]';
 // Those instructions, as they are now in the conversation's own project (the open one if none is named).
 export function instructions(key: string, project?: string) {
@@ -790,7 +792,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   const told = key === GENERAL && resume && !prev.moveTold ? `[Reel Studio: ${MOVE_LINE}]` : '';
   const prompt = slash
     ? text!.trim()
-    : [handover, brief, told, [fmtCtx(context, progress, style, voice, kind), CURRENT].filter(Boolean).join('\n'), note, commentsText(key, comments), refsText(refs.filter((r) => !r.own)), ownRefsText(refs.filter((r) => r.own)), ideaRefsText(ideaRefs), audited, uploads.agentText(images), text?.trim()].filter(Boolean).join('\n\n');
+    : [handover, brief, told, [fmtCtx(context, progress, style, voice, kind), unattended ? '' : CURRENT].filter(Boolean).join('\n'), note, commentsText(key, comments), refsText(refs.filter((r) => !r.own)), ownRefsText(refs.filter((r) => r.own)), ideaRefsText(ideaRefs), audited, uploads.agentText(images), text?.trim()].filter(Boolean).join('\n\n');
   // A step's own model and effort when it still exists on that CLI (choiceOf falls back to the starting choice).
   const {model, effort} = choiceOf(unattended?.agent ? {model: unattended.model, effort: unattended.effort} : prev, cli);
 
