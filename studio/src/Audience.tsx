@@ -1112,10 +1112,15 @@ export function AudiencePage() {
       (e: Error) => setErr(e.message),
     );
   }, []);
-  // Another computer's change arrived; what he's editing here stays.
+  // An agent changed it here, or another computer's change arrived: shown at once. What he's editing and hasn't
+  // saved stays (it's applied only when this page has nothing unsaved), and his own saves change nothing.
   useSocket((m) => {
-    if (m.type !== 'synced' || !m.paths.includes('config/audience.json') || editing) return;
-    void audienceApi.get().then((a) => (setSaved(a), setDraft(a)), () => {});
+    if (m.type !== 'audience' && !(m.type === 'synced' && m.paths.some((p) => p === 'config/audience.json' || p === 'config/profile.json'))) return;
+    void audienceApi.get().then((a) => {
+      if (editing || JSON.stringify(a) === JSON.stringify(saved) || JSON.stringify(draft) !== JSON.stringify(saved)) return;
+      setSaved(a);
+      setDraft(a);
+    }, () => {});
   });
 
   const set = (patch: Partial<Audience>) => setDraft((d) => (d ? {...d, ...patch} : d));

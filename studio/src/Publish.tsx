@@ -14,9 +14,9 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/c
 import {Switch} from '@/components/ui/switch';
 import {cn} from '@/lib/utils';
 
-const MOVING: ReadonlySet<PublicationStatus> = new Set(['uploading', 'processing', 'publishing']);
+export const MOVING: ReadonlySet<PublicationStatus> = new Set(['uploading', 'processing', 'publishing']);
 
-const STATUS: Record<PublicationStatus, {label: string; tone: string}> = {
+export const STATUS: Record<PublicationStatus, {label: string; tone: string}> = {
   uploading: {label: 'Subiendo', tone: 'text-sky-600 dark:text-sky-400'},
   scheduled: {label: 'Programada', tone: 'text-violet-600 dark:text-violet-400'},
   processing: {label: 'Instagram lo procesa', tone: 'text-sky-600 dark:text-sky-400'},

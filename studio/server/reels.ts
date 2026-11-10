@@ -296,6 +296,9 @@ function beats(dir: string): Beat[] {
 
 // The cover: out/miniatura.png (or .jpg/.webp), rendered by ./thumb.sh next to the renders, so it's in the folder
 // "Descargar video" opens. The mtime in its url makes the browser fetch it again when it's re-rendered.
+// A video's picture for lists: its cover, else what the library card shows.
+export const coverUrl = (slug: string) => thumbnailOf(slug, path.join(VIDEOS, slug))?.url ?? summary(slug).thumb;
+
 function thumbnailOf(slug: string, dir: string): ReelDetail['thumbnail'] {
   const name = ls(path.join(dir, 'out'), (n) => THUMB.test(n))[0];
   const st = name ? stat(path.join(dir, 'out', name)) : null;

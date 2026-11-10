@@ -195,7 +195,7 @@ export type PillarSet = {name: string; pillars: Pillar[]; leftovers: string[]};
 /* ───── Where Cristian is in the UI (sent with every message to the agent) ───── */
 
 export type UiContext = {
-  page: 'account' | 'library' | 'ideas' | 'audience' | 'automations' | 'audit' | 'sources' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
+  page: 'account' | 'library' | 'scheduled' | 'ideas' | 'audience' | 'automations' | 'audit' | 'sources' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
   slug?: string;
   style?: string; // style open on the Estilos page (styles/<id>)
   videoFormat?: string; // format open on the Formatos page (formats/<id>)
@@ -362,7 +362,7 @@ export type ChatEvent =
   | {op: 'chats'};
 
 // workspace: the studio now works on another folder (every page reloads).
-export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'automations'} | {type: 'audit'} | {type: 'styles'} | {type: 'formats'} | {type: 'cloud'} | {type: 'sync'; project: string; state: SyncActivity; done: number; total: number} | {type: 'synced'; project: string; paths: string[]} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
+export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'automations'} | {type: 'audit'} | {type: 'styles'} | {type: 'formats'} | {type: 'audience'} | {type: 'cloud'} | {type: 'sync'; project: string; state: SyncActivity; done: number; total: number} | {type: 'synced'; project: string; paths: string[]} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
 
 /* ───── Profile and voice (config/, set in Ajustes) ───── */
 
@@ -817,4 +817,7 @@ export type VideoPublication = {
 };
 // account: the project's Instagram account (null: none chosen); cover: out/miniatura.* exists and goes as the cover.
 export type VideoPublications = {signedIn: boolean; account: string | null; caption: string; cover: boolean; items: VideoPublication[]};
+// Videos programados: every publication of the project's videos, on its day (scheduledAt, or when it was sent).
+// caption: the video's caption.md now (what it was sent with isn't kept).
+export type CalendarPublication = VideoPublication & {slug: string; title: string; cover: string | null; caption: string; at: string};
 export type PublishInput = {version: string; scheduledAt: string | null; shareToFeed: boolean};

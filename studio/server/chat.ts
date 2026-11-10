@@ -632,7 +632,7 @@ const SYSTEM = (key: string) =>
         ...COMMON(),
       ].join('\n');
 
-const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', ideas: 'Ideas de contenido', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', audience: 'Perfil de audiencia', reel: null};
+const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', scheduled: 'Videos programados', ideas: 'Ideas de contenido', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', audience: 'Perfil de audiencia', reel: null};
 const fmtCtx = (c: UiContext | undefined, progress?: string, style?: string, voice?: string, kind?: string) => {
   if (!c || typeof c !== 'object') return '';
   const parts: (string | null | undefined)[] = [PAGES[c.page] ?? (c.slug ? `video ${c.slug}` : null)];

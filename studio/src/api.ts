@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView} from '../shared/types';
+import type {CalendarPublication, PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -41,6 +41,7 @@ export const api = {
   revealVersion: (slug: string, url: string) => post(`/api/reels/${slug}/reveal-version`, {url}),
   revealThumbnail: (slug: string) => post(`/api/reels/${slug}/reveal-thumbnail`),
   // Publicar (server/publish.ts): what was sent to Instagram from this video, and sending a version now or at a time.
+  calendar: () => fetch('/api/publications').then((r) => json<CalendarPublication[]>(r)),
   publications: (slug: string) => fetch(`/api/reels/${slug}/publications`).then((r) => json<VideoPublications>(r)),
   publish: (slug: string, input: PublishInput) => post(`/api/reels/${slug}/publications`, input) as Promise<VideoPublication>,
   reschedulePublication: (slug: string, id: string, scheduledAt: string) =>

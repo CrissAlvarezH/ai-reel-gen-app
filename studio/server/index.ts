@@ -217,6 +217,7 @@ app.post('/api/reels/:slug/reveal-version', reel, handle((req) => {
   reveal(path.join(VIDEOS, req.params.slug, 'out', filename), true);
 }));
 // Publicar: to the project's Instagram account, now or at a time (publish.ts).
+app.get('/api/publications', handle(() => publish.calendar()));
 app.get('/api/reels/:slug/publications', reel, handle((req) => publish.list(req.params.slug)));
 app.post('/api/reels/:slug/publications', reel, handle((req) => publish.publish(req.params.slug, req.body)));
 app.patch('/api/reels/:slug/publications/:id', reel, handle((req) => publish.reschedule(req.params.slug, req.params.id, req.body?.scheduledAt)));
@@ -689,6 +690,24 @@ function watchFormats() {
 }
 watchFormats();
 
+// The project's Perfil de audiencia (config/audience.json, and profile.json for who it's for) changes on disk when an
+// agent edits it: its page reloads it.
+let configWatcher: ReturnType<typeof chokidar.watch> | null = null;
+let configPending: NodeJS.Timeout | undefined;
+function watchConfig() {
+  configWatcher?.close();
+  configWatcher = null;
+  if (!workspace.CONFIG) return;
+  configWatcher = chokidar
+    .watch(workspace.CONFIG, {ignoreInitial: true, depth: 0, awaitWriteFinish: {stabilityThreshold: 300}})
+    .on('all', (_ev, p) => {
+      if (!/^(audience|profile)\.json$/.test(path.basename(p))) return;
+      clearTimeout(configPending);
+      configPending = setTimeout(() => send({type: 'audience'}), 400);
+    });
+}
+watchConfig();
+
 const STUDIO = path.resolve(import.meta.dirname, '..');
 const vite = await createVite({
   root: STUDIO,
@@ -720,6 +739,7 @@ workspace.onChange(() => {
   watchVideos();
   watchStyles();
   watchFormats();
+  watchConfig();
   serveWorkspace();
   syncQueue.resetSync();
   send({type: 'workspace'});
@@ -742,6 +762,7 @@ workspace.onProjectChange((id) => {
   inspiration.reset();
   account.reset();
   watchVideos();
+  watchConfig();
   serveWorkspace();
   send({type: 'workspace'});
 });

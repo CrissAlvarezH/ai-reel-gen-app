@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {AlertCircle, CalendarClock, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Newspaper, Palette, Plus, ShieldCheck, Sparkles, Target, UserRound} from 'lucide-react';
+import {AlertCircle, CalendarClock, CalendarDays, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Newspaper, Palette, Plus, ShieldCheck, Sparkles, Target, UserRound} from 'lucide-react';
 import {cn} from '@/lib/utils';
 import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState, type ProgressStep, type ReelSummary} from './api';
 import {ReelProgressRing} from './ReelProgress';
@@ -81,13 +81,19 @@ function Posted({p}: {p: NonNullable<ReelSummary['instagram']>}) {
   const views = p.views == null ? '' : ` · ${p.views.toLocaleString('es')} vistas`;
   return (
     <a href={p.url} target="_blank" rel="noreferrer" title={`Publicado en Instagram${when}${views}`} aria-label="Publicado en Instagram" className="grid size-6 place-items-center rounded-md text-pink-400 hover:bg-background/60">
-      {/* Instagram's glyph: a rounded square, a lens and the flash dot. */}
-      <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-        <rect x="3" y="3" width="18" height="18" rx="5" />
-        <circle cx="12" cy="12" r="4" />
-        <circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" />
-      </svg>
+      <InstagramGlyph className="size-4" />
     </a>
+  );
+}
+
+// Instagram's glyph: a rounded square, a lens and the flash dot.
+export function InstagramGlyph({className}: {className?: string}) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" />
+    </svg>
   );
 }
 
@@ -97,6 +103,7 @@ const GROUPS: {label: string; pages: {href: string; icon: typeof UserRound; labe
     label: 'Crear',
     pages: [
       {href: '#/', icon: LayoutGrid, label: 'Biblioteca', is: ['library']},
+      {href: '#/programados', icon: CalendarDays, label: 'Videos programados', is: ['scheduled']},
       {href: '#/ideas', icon: Lightbulb, label: 'Ideas de contenido', is: ['ideas']},
       {href: '#/estilos', icon: Palette, label: 'Estilos y formatos', is: ['styles', 'formats']},
     ],

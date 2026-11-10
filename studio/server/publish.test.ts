@@ -138,6 +138,19 @@ test('scheduled: waits in the account, and can be moved and canceled', async () 
   assert.deepEqual([view.account, view.cover, view.items[0].status], ['entiende.finanzas.ya', true, 'canceled']);
 });
 
+test('the calendar lists the publications of every video on their day, without the canceled ones', async () => {
+  fs.writeFileSync(path.join(video, 'title.txt'), 'Mi video\n');
+  const at = new Date(Date.now() + 3600_000).toISOString();
+  const kept = await publish.publish('mi-video', {version: 'mi-video', scheduledAt: at});
+  const gone = await publish.publish('mi-video', {version: 'mi-video', scheduledAt: at});
+  await until(() => records().every((r) => r.status === 'scheduled'));
+  await publish.cancel('mi-video', gone.id);
+  const cal = await publish.calendar();
+  assert.deepEqual(cal.map((p) => [p.id, p.slug, p.title, p.at, p.status, p.caption]), [[kept.id, 'mi-video', 'Mi video', at, 'scheduled', 'Guárdalo #ahorro']]);
+  assert.match(cal[0].cover!, /^\/files\/mi-video\/out\/miniatura\.jpg\?v=/);
+  fs.rmSync(path.join(video, 'title.txt'));
+});
+
 test('a server that does not schedule gets nothing uploaded (it would publish at once)', async () => {
   ctl.old = true;
   await assert.rejects(publish.publish('mi-video', {version: 'mi-video', scheduledAt: new Date(Date.now() + 3600_000).toISOString()}), /aún no permite programar/);

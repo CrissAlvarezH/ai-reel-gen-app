@@ -13,9 +13,9 @@ import * as account from './account.ts';
 import * as cloud from './cloud.ts';
 import type {CloudPublication, PresignedPut} from './cloud.ts';
 import {readJson, writeJson} from './platform.ts';
-import {httpError} from './reels.ts';
+import {coverUrl, httpError, title as titleOf} from './reels.ts';
 import {VIDEOS} from './workspace.ts';
-import type {PublicationStatus, PublishInput, VideoPublication, VideoPublications} from '../shared/types.ts';
+import type {CalendarPublication, PublicationStatus, PublishInput, VideoPublication, VideoPublications} from '../shared/types.ts';
 
 const FILE = 'publicaciones.json';
 const KEEP = 20;
@@ -111,6 +111,26 @@ export async function list(slug: string): Promise<VideoPublications> {
     }),
   );
   return {signedIn, account: cloud.linkedAccount()?.username ?? null, caption: captionOf(dir), cover: !!coverIn(dir), items: items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))};
+}
+
+// Videos programados: what every video of the project sent, each refreshed like its page does. Canceled ones stay out.
+export async function calendar(): Promise<CalendarPublication[]> {
+  let slugs: string[] = [];
+  try {
+    slugs = fs.readdirSync(VIDEOS, {withFileTypes: true}).filter((d) => d.isDirectory() && fs.existsSync(path.join(VIDEOS, d.name, FILE))).map((d) => d.name);
+  } catch {
+    return [];
+  }
+  const all = await Promise.all(
+    slugs.map(async (slug) => {
+      const {items} = await list(slug);
+      const shown = items.filter((p) => p.status !== 'canceled');
+      if (!shown.length) return [];
+      const head = {slug, title: titleOf(slug) ?? slug, cover: coverUrl(slug), caption: captionOf(path.join(VIDEOS, slug))};
+      return shown.map((p) => ({...p, ...head, at: p.scheduledAt ?? p.createdAt}));
+    }),
+  );
+  return all.flat().sort((a, b) => a.at.localeCompare(b.at));
 }
 
 /* ───── Sending ───── */
