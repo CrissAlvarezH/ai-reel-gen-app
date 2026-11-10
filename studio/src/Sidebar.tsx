@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {AlertCircle, CalendarClock, CalendarDays, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Newspaper, Palette, Plus, ShieldCheck, Sparkles, Target, UserRound} from 'lucide-react';
 import {cn} from '@/lib/utils';
+import {Tooltip, TooltipContent, TooltipTrigger} from '@/components/ui/tooltip';
 import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState, type ProgressStep, type ReelSummary} from './api';
 import {ReelProgressRing} from './ReelProgress';
 import {AgentLogo} from './AgentLogo';
@@ -86,13 +87,19 @@ function Posted({p}: {p: NonNullable<ReelSummary['instagram']>}) {
   );
 }
 
-// Scheduled on Instagram (publicaciones.json): opens Videos programados.
+// Scheduled on Instagram (publicaciones.json): opens Videos programados. Its time in a tooltip that waits a moment
+// (a quick one gets in the way while moving over the list).
 function Scheduled({at}: {at: string}) {
   const when = new Date(at).toLocaleString('es', {weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit'});
   return (
-    <a href="#/programados" title={`Programado: sale en Instagram el ${when}`} aria-label={`Programado para el ${when}`} className="grid size-6 place-items-center rounded-md text-sky-600 hover:bg-background/60 dark:text-sky-400">
-      <CalendarClock className="size-4" />
-    </a>
+    <Tooltip delayDuration={1500}>
+      <TooltipTrigger asChild>
+        <a href="#/programados" aria-label={`Programado para el ${when}`} className="grid size-6 place-items-center rounded-md text-sky-600 hover:bg-background/60 dark:text-sky-400">
+          <CalendarClock className="size-4" />
+        </a>
+      </TooltipTrigger>
+      <TooltipContent side="right">Programado para el {when}</TooltipContent>
+    </Tooltip>
   );
 }
 
