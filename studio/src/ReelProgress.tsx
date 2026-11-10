@@ -35,8 +35,7 @@ export function ReelProgress({steps}: {steps: ProgressStep[]}) {
 }
 
 // The same, small, for the library cards.
-// noDone: without the word «listo» once every step is done (the library's table: the full bar says it).
-export function ReelProgressMini({steps, noDone}: {steps: ProgressStep[]; noDone?: boolean}) {
+export function ReelProgressMini({steps}: {steps: ProgressStep[]}) {
   const done = steps.filter((s) => s.done).length;
   const next = nextOf(steps);
   return (
@@ -54,7 +53,7 @@ export function ReelProgressMini({steps, noDone}: {steps: ProgressStep[]; noDone
           </Tooltip>
         ))}
       </div>
-      {!(noDone && done === steps.length) && <span className="text-xs text-muted-foreground tabular-nums">{done === steps.length ? 'listo' : `${done}/${steps.length}`}</span>}
+      <span className="text-xs text-muted-foreground tabular-nums">{done === steps.length ? 'listo' : `${done}/${steps.length}`}</span>
     </div>
   );
 }

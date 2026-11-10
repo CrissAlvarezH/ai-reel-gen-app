@@ -9,7 +9,7 @@ import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/c
 import {fmtAgo, fmtTime, type ReelSummary} from './api';
 import {useColumns} from './Columns';
 import {FilterSelect, SortHead} from './Inspiration';
-import {ReelProgressMini} from './ReelProgress';
+import {ReelProgressRing} from './ReelProgress';
 import {ReleaseLine} from './Release';
 
 const PAGE = 15;
@@ -212,8 +212,8 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
                     <TableCell className="whitespace-nowrap">{r.release && <ReleaseLine r={r.release} compact />}</TableCell>
                   )}
                   {show.progress && (
-                    <TableCell className="w-36 min-w-36">
-                      <ReelProgressMini steps={r.progress} noDone />
+                    <TableCell>
+                      <ReelProgressRing steps={r.progress} className="size-5" />
                     </TableCell>
                   )}
                   {show.style && (
