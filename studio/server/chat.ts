@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type {ChildProcess} from 'node:child_process';
 import {ROOT, VIDEOS, formatOf, httpError, listSlugs, styleOf, summary, title as videoTitle, validSlug, videoFormatOf} from './reels.ts';
-import {CONFIG, DATA, PROJECT, PROJECT_DIR, inProject, projectName, rel as relPath, resource} from './workspace.ts';
+import {CONFIG, DATA, PROJECT, PROJECT_DIR, inProject, projectName, rel as relPath, resource, withProject} from './workspace.ts';
 import {AGENTS, EFFORT_LABELS, agentById, agentCli, currentAgent, type AgentCli, type AgentEvent} from './agent.ts';
 import {IS_WIN, PY, VENV_BIN, readJson, writeJson} from './platform.ts';
 import {getKey} from './settings.ts';
@@ -48,7 +48,8 @@ type PendingPermission = {answer: (allow: boolean) => void; expire: () => void; 
 // moveTo: the video its agent asked to go on in (a general conversation), once the turn ends. moveAuto: it was set by
 // scripts/new-video.sh when its agent created that video ('many': it created more than one, so it stays).
 // created: every video scripts/new-video.sh made for this turn, in order (an automation's next steps are told them).
-type Run = {dir: string; proc: ChildProcess; pending: Map<string, PendingPermission>; started: number; live: string; tool: string | null; stderr: string; result?: {ok: boolean; text?: string}; stopped?: boolean; context?: ChatContext; said?: boolean; moveTo?: string; moveAuto?: 'one' | 'many'; created?: string[]};
+// project: the one it works in (open when it started; he may open another meanwhile, or it's an automation of another).
+type Run = {dir: string; project: string; proc: ChildProcess; pending: Map<string, PendingPermission>; started: number; live: string; tool: string | null; stderr: string; result?: {ok: boolean; text?: string}; stopped?: boolean; context?: ChatContext; said?: boolean; moveTo?: string; moveAuto?: 'one' | 'many'; created?: string[]};
 
 let seq = 0;
 const id = () => `${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -607,6 +608,17 @@ export function instructions(key: string, project?: string) {
   return inProject(project, own);
 }
 
+// fn in the project a turn works in, open or not; undefined when that project isn't in this workspace anymore.
+function inProjectOf<T>(r: Pick<Run, 'project' | 'dir'>, fn: () => T): T | undefined {
+  let same = false;
+  try {
+    same = withProject(r.project, () => DATA === r.dir);
+  } catch {
+    return undefined;
+  }
+  return same ? withProject(r.project, fn) : undefined;
+}
+
 // How a general conversation moves to a video. Also told in the prompt to a conversation that started before (a resumed
 // Claude Code session keeps the system prompt it started with).
 const MOVE_LINE =
@@ -834,7 +846,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
 
   const proc = cli.turn({prompt, systemPrompt: unattended ? `${SYSTEM(key)}\n${unattended.system}` : SYSTEM(key), resume, cwd: ROOT, env: {REEL_STUDIO: key, REEL_STUDIO_CHAT: chat, REEL_STUDIO_ROOT: ROOT, REEL_STUDIO_PROJECT: PROJECT_DIR, REEL_STUDIO_PROJECT_ID: PROJECT, ...unattended?.env}, model, effort, chrome: !unattended && getChromeAccess(), mode: unattended ? '' : modeOf(prev, cli)});
   // Starts from what it was (a new session from another agent starts empty).
-  const run: Run = {dir, proc, pending: new Map(), started: Date.now(), live: '', tool: null, stderr: '', context: resume ? prev.context : undefined};
+  const run: Run = {dir, project: PROJECT, proc, pending: new Map(), started: Date.now(), live: '', tool: null, stderr: '', context: resume ? prev.context : undefined};
   const setContext = (ctx: ChatContext) => {
     if (run.context?.used === ctx.used && run.context?.window === ctx.window) return;
     run.context = ctx;
@@ -937,12 +949,12 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
 
   // Once: a CLI that couldn't start gives both 'error' and 'close'.
   let ended = false;
-  const end = (ok: boolean, stopped: boolean) =>
+  const end = (ok: boolean, stopped: boolean, video?: string) =>
     safe(() => {
       if (ended) return;
       ended = true;
       const said = find(load(key, dir), chat).items.findLast((i) => i.role === 'assistant');
-      unattended?.onDone({ok, stopped, text: said?.role === 'assistant' ? said.text : '', video: run.moveTo && here() ? run.moveTo : undefined, created: run.created ?? []});
+      unattended?.onDone({ok, stopped, text: said?.role === 'assistant' ? said.text : '', video, created: run.created ?? []});
     });
 
   proc.on('close', (code, signal) => {
@@ -969,11 +981,13 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
     tell({op: 'state', running: false});
     tellList();
     const stopped = !!signal || !!run.stopped;
-    end(!stopped && !!r?.ok, stopped);
-    const to = run.moveTo;
-    if (to && here())
+    // It goes on in that video, in its own project, whether that's the open one or not (its pages hear it if it is).
+    const to = run.moveTo && videoOfChats(dir, run.moveTo) && inProjectOf(run, () => true) ? run.moveTo : undefined;
+    end(!stopped && !!r?.ok, stopped, to);
+    if (to)
       safe(() => {
-        moveToVideo(chat, to, dir);
+        inProjectOf(run, () => moveToVideo(chat, to, dir));
+        if (!here()) return;
         tell({op: 'moved', to});
         tellList();
         emitList(to);
