@@ -32,14 +32,20 @@ const run = promisify(execFile);
 // Uploads going on in this process: their record isn't refreshed from the account until they end.
 const sending = new Set<string>();
 
-const recordsOf = (dir: string) => {
+// Every record with an id, as it is in the file (one this version can't show is kept when the file is rewritten), and
+// those the pages can show: with the fields the calendar and its ordering read. The file travels with the video's sync
+// and can be edited by hand, so one record that lacks them can't take the whole calendar down.
+const rawOf = (dir: string) => {
   const raw = readJson<unknown>(path.join(dir, FILE));
-  return Array.isArray(raw) ? (raw as VideoPublication[]).filter((r) => r && typeof r.id === 'string') : [];
+  return Array.isArray(raw) ? (raw as VideoPublication[]).filter((r) => r && typeof r === 'object' && typeof r.id === 'string') : [];
 };
+const shown = (r: VideoPublication) =>
+  typeof r.version === 'string' && typeof r.createdAt === 'string' && typeof r.status === 'string' && (r.scheduledAt == null || typeof r.scheduledAt === 'string');
+const recordsOf = (dir: string) => rawOf(dir).filter(shown);
 
 // Re-read and rewritten on every change: the file is shared by the uploads and the page's refreshes.
 function update(dir: string, id: string, set: Partial<VideoPublication>) {
-  const list = recordsOf(dir);
+  const list = rawOf(dir);
   const i = list.findIndex((r) => r.id === id);
   if (i < 0) return null;
   const next = {...list[i], ...set};
@@ -198,7 +204,7 @@ export async function publish(slug: string, input: unknown): Promise<VideoPublic
     throw httpError(409, 'tu cuenta de Reel Studio aún no permite programar: publícalo ahora o inténtalo más tarde');
   }
   const rec: VideoPublication = {id: r.id, version: v.version, account: link.username, scheduledAt: r.scheduledAt ?? null, createdAt: new Date().toISOString(), status: 'uploading', error: null, permalink: null};
-  writeJson(path.join(dir, FILE), [rec, ...recordsOf(dir)].slice(0, KEEP));
+  writeJson(path.join(dir, FILE), [rec, ...rawOf(dir)].slice(0, KEEP));
   sending.add(r.id);
   void send(dir, r.id, r.upload, file, r.cover, cover?.file ?? null)
     .catch((e) => {
