@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 // confirm() as a shadcn AlertDialog: `if (await confirm({title, description})) …`
-type Opts = {title: string; description?: string; action?: string; destructive?: boolean};
+type Opts = {title: string; description?: string; action?: string; cancel?: string; destructive?: boolean};
 const Ctx = createContext<(o: Opts) => Promise<boolean>>(async () => false);
 
 export function ConfirmProvider({children}: {children: React.ReactNode}) {
@@ -39,7 +39,7 @@ export function ConfirmProvider({children}: {children: React.ReactNode}) {
             {opts?.description && <AlertDialogDescription className="whitespace-pre-line">{opts.description}</AlertDialogDescription>}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => close(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => close(false)}>{opts?.cancel ?? 'Cancelar'}</AlertDialogCancel>
             <AlertDialogAction variant={opts?.destructive ? 'destructive' : 'default'} onClick={() => close(true)}>
               {opts?.action ?? 'Continuar'}
             </AlertDialogAction>

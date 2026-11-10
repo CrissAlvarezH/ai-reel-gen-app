@@ -23,6 +23,7 @@ import {ConflictNote, SaveBar, saveOnCmdS, useEditable} from './Editable';
 import {ScriptEditor, StructureBar, parts, taggedScript, type ScriptValue} from './ScriptEditor';
 import {LivePreview, type PreviewControls} from './Preview';
 import {SocialPreview} from './SocialPreview';
+import {PublicationList, PublishButton, usePublications} from './Publish';
 import {ReelProgress} from './ReelProgress';
 import {StyleDialog, useStyles} from './StylePicker';
 import {Poster} from './Styles';
@@ -323,6 +324,7 @@ type PlayerProps = {
 function Player({reel, comments, onComment, seekRef}: PlayerProps) {
   const [sel, setSel] = useState(reel.versions[0]?.url ?? (reel.previewEntry ? LIVE : ''));
   const live = sel === LIVE;
+  const pubs = usePublications(reel.slug);
   const video = useRef<HTMLVideoElement>(null);
   const preview = useRef<PreviewControls | null>(null);
   const [t, setT] = useState(0);
@@ -455,6 +457,7 @@ function Player({reel, comments, onComment, seekRef}: PlayerProps) {
             {revealBusy ? <Loader2 className="animate-spin" /> : <Download />}
           </Button>
           <SocialPreview reel={reel} src={videoSrc} live={live} version={live ? 'En vivo · código actual' : current?.name ?? 'Video'} initialTime={t} onOpen={() => { video.current?.pause(); preview.current?.pause(); }} />
+          <PublishButton slug={reel.slug} version={current?.name ?? null} data={pubs.data} onDone={pubs.load} />
           </div>
         )}
         {revealError && <p role="alert" className="text-sm text-destructive">{revealError}</p>}
@@ -470,6 +473,7 @@ function Player({reel, comments, onComment, seekRef}: PlayerProps) {
             <span className="text-sm text-muted-foreground">Aquí aparecerá el render</span>
           )}
         </div>
+        <PublicationList slug={reel.slug} data={pubs.data} onChange={pubs.load} />
         {sel && !draft && (
           <Button variant="secondary" onClick={startComment}>
             <MessageSquarePlus /> Comentar aquí · {fmtTime(t)}

@@ -13,7 +13,7 @@ import {CONFIG, CONFIG_DIR, PROJECT_DIR, listProjects, projectDir, setProjectClo
 import {readJson, writeJson} from './platform.ts';
 import {httpError} from './reels.ts';
 import {KEYS, getKey, setKey} from './settings.ts';
-import type {CloudAccount, CloudKey, CloudKeyState, CloudKeys, CloudKeysMoved, CloudProjectMatch, CloudProjectState, CloudProjectView, CloudProjects, CloudReelInsights, CloudSession, CloudStatus, LocalCloudProject, SyncGroupId, SyncRemoteState} from '../shared/types.ts';
+import type {CloudAccount, CloudKey, CloudKeyState, CloudKeys, CloudKeysMoved, CloudProjectMatch, CloudProjectState, CloudProjectView, CloudProjects, CloudReelInsights, CloudSession, CloudStatus, LocalCloudProject, PublicationStatus, SyncGroupId, SyncRemoteState} from '../shared/types.ts';
 
 // REEL_STUDIO_CLOUD_URL wins over it, to develop against a local copy of the cloud.
 const DEFAULT_URL = 'https://ai-reel-gen.socialsannin.com';
@@ -667,6 +667,20 @@ export const syncApi = {
   conflictContent: (id: string, conflict: string) => call<{content?: string; url?: string}>(`${syncBase(id)}/conflicts/${encodeURIComponent(conflict)}/content`, {timeout: 30_000, routeIsNew: true}),
   dismiss: (id: string, conflict: string) => call<{ok: true}>(`${syncBase(id)}/conflicts/${encodeURIComponent(conflict)}/dismiss`, {body: {}, timeout: 20_000, routeIsNew: true}),
   shared: () => call<{project: {id: string}}>('/api/studio/shared-project', {timeout: 20_000, routeIsNew: true}),
+};
+
+// Publishing (publish.ts). A PUT the account presigned: send exactly these headers.
+export type PresignedPut = {url: string; method: string; headers: Record<string, string>};
+export type CloudPublication = {id: string; status: PublicationStatus; scheduledAt?: string | null; error: string | null; permalink: string | null};
+const pubPath = (id: string) => `/api/studio/publications/${encodeURIComponent(id)}`;
+export const publicationsApi = {
+  // scheduledAt is echoed only by a server that schedules; an older one would publish at once.
+  create: (b: {accountId: number; size: number; caption: string; title?: string; coverSize: number | null; shareToFeed: boolean; scheduledAt: string | null}) =>
+    call<{id: string; scheduledAt?: string | null; upload: PresignedPut; cover: PresignedPut | null}>('/api/studio/publications', {body: b, timeout: 30_000}),
+  uploaded: (id: string) => call<CloudPublication>(`${pubPath(id)}/uploaded`, {body: {}, timeout: 60_000}),
+  get: (id: string) => call<CloudPublication>(pubPath(id), {timeout: 30_000}),
+  reschedule: (id: string, at: string) => call<CloudPublication>(pubPath(id), {method: 'PATCH', body: {scheduledAt: at}, timeout: 30_000, routeIsNew: true}),
+  cancel: (id: string) => call<CloudPublication>(pubPath(id), {method: 'DELETE', timeout: 30_000, routeIsNew: true}),
 };
 
 // The project as the account has it, to bring it here.

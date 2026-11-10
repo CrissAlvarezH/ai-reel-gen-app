@@ -36,6 +36,7 @@ const LOCAL_ONLY: Group[] = [
 const SECRETS: Group = {id: 'secrets', icon: KeyRound, title: 'Secretos', text: 'Las API keys de tus servicios, cifradas en tu cuenta.'};
 
 const NEVER = 'Nunca';
+const QUEUE_PAGE = 10;
 const GROUP_TITLE = Object.fromEntries(SYNCED.map((g) => [g.id, g.title])) as Record<SyncGroupId, string>;
 
 // While loading, each text keeps its real size under the skeleton, so it wraps like the card that replaces it.
@@ -124,6 +125,7 @@ export function SyncCard({loading: outerLoading}: {loading?: boolean}) {
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [queuePage, setQueuePage] = useState(0);
   const [view, setView] = useState<{path: string; content?: string; url?: string; deleted: boolean} | null>(null);
   const confirm = useConfirm();
   const seen = useRef(false);
@@ -218,7 +220,11 @@ export function SyncCard({loading: outerLoading}: {loading?: boolean}) {
 
   const loading = !!outerLoading || !detail;
   const running = detail?.status.state === 'syncing';
-  const history = useMemo(() => detail?.queue.history.slice(0, 5) ?? [], [detail]);
+  const queue = useMemo(() => (detail ? [...detail.queue.jobs, ...detail.queue.history] : []), [detail]);
+  const lastPage = Math.max(0, Math.ceil(queue.length / QUEUE_PAGE) - 1);
+  // The list shrinks as jobs are cancelled or fall off the history: never stay on a page that's gone.
+  const page = Math.min(queuePage, lastPage);
+  const shown = queue.slice(page * QUEUE_PAGE, (page + 1) * QUEUE_PAGE);
   const active = detail ? SYNCED.filter((g) => detail.groups[g.id]).length : 0;
   const remote = detail?.remote;
   const unavailable = !detail && !!err;
@@ -355,11 +361,11 @@ export function SyncCard({loading: outerLoading}: {loading?: boolean}) {
           </div>
         )}
 
-        {!!detail && (detail.queue.jobs.length > 0 || history.length > 0) && (
+        {queue.length > 0 && (
           <div className="flex flex-col gap-1">
             <h4 className="text-xs font-medium text-muted-foreground">Cola</h4>
             <ul className="flex flex-col divide-y">
-              {[...detail.queue.jobs, ...history].map((j) => (
+              {shown.map((j) => (
                 <li key={j.id} className="flex items-center gap-2 py-2">
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-sm">{scopeLabel(j.scope)}</span>
@@ -389,6 +395,21 @@ export function SyncCard({loading: outerLoading}: {loading?: boolean}) {
                 </li>
               ))}
             </ul>
+            {lastPage > 0 && (
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {page * QUEUE_PAGE + 1}–{page * QUEUE_PAGE + shown.length} de {queue.length}
+                </span>
+                <span className="flex gap-1">
+                  <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setQueuePage(page - 1)}>
+                    Anterior
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={page === lastPage} onClick={() => setQueuePage(page + 1)}>
+                    Siguiente
+                  </Button>
+                </span>
+              </div>
+            )}
           </div>
         )}
         {err && !unavailable && <p className="text-sm text-destructive">{err}</p>}

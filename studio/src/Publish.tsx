@@ -1,0 +1,306 @@
+// Publicar: a version of the video to the project's Instagram account, now or at a time (server/publish.ts). The
+// button opens the form; under the player, what was sent from this video and how it's going. A scheduled one goes out
+// from the account at its time, with the app closed; until then it can be moved or canceled.
+import {useCallback, useEffect, useState} from 'react';
+import {CalendarClock, ExternalLink, Loader2, Send} from 'lucide-react';
+import {api, type PublicationStatus, type VideoPublication, type VideoPublications} from './api';
+import {useConfirm} from './confirm';
+import {Badge} from '@/components/ui/badge';
+import {Button} from '@/components/ui/button';
+import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from '@/components/ui/dialog';
+import {Input} from '@/components/ui/input';
+import {Label} from '@/components/ui/label';
+import {Switch} from '@/components/ui/switch';
+import {cn} from '@/lib/utils';
+
+const MOVING: ReadonlySet<PublicationStatus> = new Set(['uploading', 'processing', 'publishing']);
+
+const STATUS: Record<PublicationStatus, {label: string; tone: string}> = {
+  uploading: {label: 'Subiendo', tone: 'text-sky-600 dark:text-sky-400'},
+  scheduled: {label: 'Programada', tone: 'text-violet-600 dark:text-violet-400'},
+  processing: {label: 'Instagram lo procesa', tone: 'text-sky-600 dark:text-sky-400'},
+  publishing: {label: 'Publicando', tone: 'text-sky-600 dark:text-sky-400'},
+  published: {label: 'Publicado', tone: 'text-emerald-600 dark:text-emerald-400'},
+  error: {label: 'No se publicó', tone: 'text-destructive'},
+  canceled: {label: 'Cancelada', tone: 'text-muted-foreground'},
+};
+
+// <input type="datetime-local"> speaks local time without a zone.
+const localInput = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+// The next o'clock at least 30 minutes away: a sensible first time to offer.
+const nextHour = () => {
+  const d = new Date(Date.now() + 30 * 60_000);
+  d.setMinutes(0, 0, 0);
+  d.setHours(d.getHours() + 1);
+  return d;
+};
+const fmtWhen = (iso: string) => new Date(iso).toLocaleString('es', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+
+// The video's publications, refreshed every few seconds while one is on its way, every minute while one waits.
+export function usePublications(slug: string) {
+  const [data, setData] = useState<VideoPublications | null>(null);
+  const load = useCallback(() => api.publications(slug).then(setData, () => {}), [slug]);
+  useEffect(() => {
+    setData(null);
+    void load();
+  }, [load]);
+  const moving = data?.items.some((p) => MOVING.has(p.status));
+  const waiting = data?.items.some((p) => p.status === 'scheduled');
+  useEffect(() => {
+    if (!moving && !waiting) return;
+    const t = setInterval(load, moving ? 4000 : 60_000);
+    return () => clearInterval(t);
+  }, [moving, waiting, load]);
+  return {data, load};
+}
+
+export function PublishButton({slug, version, data, onDone}: {slug: string; version: string | null; data: VideoPublications | null; onDone: () => void}) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'now' | 'later'>('now');
+  const [when, setWhen] = useState(() => localInput(nextHour()));
+  const [feed, setFeed] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const ready = !!data?.signedIn && !!data.account;
+
+  const submit = async () => {
+    if (!version) return;
+    let scheduledAt: string | null = null;
+    if (mode === 'later') {
+      const d = new Date(when);
+      if (Number.isNaN(d.getTime())) return setError('Elige una fecha y una hora.');
+      if (d.getTime() < Date.now() + 60_000) return setError('Elige una hora al menos un minuto en el futuro.');
+      scheduledAt = d.toISOString();
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await api.publish(slug, {version, scheduledAt, shareToFeed: feed});
+      setOpen(false);
+      onDone();
+    } catch (e) {
+      setError((e as Error).message.replace(/^./, (c) => c.toUpperCase()));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        className="shrink-0"
+        disabled={!version}
+        title={version ? 'Publicar esta versión en Instagram, ahora o programada' : 'Renderiza el video para publicarlo'}
+        onClick={() => {
+          setMode('now');
+          setWhen(localInput(nextHour()));
+          setError('');
+          setOpen(true);
+        }}
+      >
+        <Send /> Publicar
+      </Button>
+      <Dialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Publicar en Instagram</DialogTitle>
+            <DialogDescription>
+              {ready ? (
+                <>
+                  Versión <span className="font-medium text-foreground">{version}</span> en <span className="font-medium text-foreground">@{data!.account}</span>.
+                </>
+              ) : (
+                'Para publicar, inicia sesión con tu cuenta y elige la cuenta de Instagram de este proyecto.'
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!ready ? (
+            <Button asChild variant="outline" className="self-start">
+              <a href="#/ajustes/cuenta" onClick={() => setOpen(false)}>
+                Ir a Ajustes → Cuenta
+              </a>
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <div role="radiogroup" aria-label="Cuándo" className="grid grid-cols-2 gap-2">
+                {(['now', 'later'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={mode === m}
+                    onClick={() => setMode(m)}
+                    className={cn('flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors', mode === m ? 'border-primary bg-primary/5 font-medium' : 'text-muted-foreground hover:bg-muted/50')}
+                  >
+                    {m === 'now' ? <Send className="size-4" /> : <CalendarClock className="size-4" />}
+                    {m === 'now' ? 'Ahora' : 'Programar'}
+                  </button>
+                ))}
+              </div>
+              {mode === 'later' && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="publish-when">Fecha y hora</Label>
+                  <Input id="publish-when" type="datetime-local" value={when} min={localInput(new Date())} onChange={(e) => setWhen(e.target.value)} />
+                  <p className="text-xs text-muted-foreground">Sale a esa hora desde tu cuenta, aunque Reel Studio esté cerrado. Hasta entonces puedes cambiarla o cancelarla.</p>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">Caption</span>
+                {data!.caption ? (
+                  <p className="max-h-28 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">{data!.caption}</p>
+                ) : (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">Este video no tiene caption: saldrá sin texto. Escríbelo en la pestaña Caption IG.</p>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">{data!.cover ? 'Portada: la miniatura del video.' : 'Sin miniatura: Instagram elige la portada del video.'}</p>
+              <label className="flex items-center justify-between gap-3 text-sm">
+                Mostrar también en el feed
+                <Switch checked={feed} onCheckedChange={setFeed} />
+              </label>
+            </div>
+          )}
+
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" disabled={busy} onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            {ready && (
+              <Button disabled={busy || !version} onClick={submit}>
+                {busy && <Loader2 className="animate-spin" />}
+                {mode === 'now' ? 'Publicar ahora' : 'Programar'}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// What was sent from this video, newest first: the ones done long ago stay out of the way (the last 3 finished).
+export function PublicationList({slug, data, onChange}: {slug: string; data: VideoPublications | null; onChange: () => void}) {
+  const confirm = useConfirm();
+  const [moving, setMoving] = useState<VideoPublication | null>(null);
+  const [when, setWhen] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  if (!data?.items.length) return null;
+  const open = data.items.filter((p) => p.status === 'scheduled' || MOVING.has(p.status));
+  const done = data.items.filter((p) => !open.includes(p)).slice(0, 3);
+
+  const act = async (id: string, fn: () => Promise<unknown>) => {
+    setBusy(id);
+    setError('');
+    try {
+      await fn();
+      onChange();
+      return true;
+    } catch (e) {
+      setError((e as Error).message.replace(/^./, (c) => c.toUpperCase()));
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+  const cancel = async (p: VideoPublication) => {
+    if (!(await confirm({title: '¿Cancelar esta publicación?', description: 'No saldrá en Instagram y su copia en tu cuenta se borra.', action: 'Sí, cancelarla', cancel: 'No', destructive: true}))) return;
+    await act(p.id, () => api.cancelPublication(slug, p.id));
+  };
+  const saveTime = async (at: string) => {
+    if (!moving) return;
+    if (at !== 'now') {
+      const d = new Date(when);
+      if (Number.isNaN(d.getTime())) return setError('Elige una fecha y una hora.');
+      at = d.toISOString();
+    }
+    if (await act(moving.id, () => api.reschedulePublication(slug, moving.id, at))) setMoving(null);
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm text-muted-foreground">Publicaciones</span>
+      <ul className="divide-y rounded-lg border">
+        {[...open, ...done].map((p) => {
+          const s = STATUS[p.status];
+          const pending = p.status === 'scheduled' || (p.status === 'uploading' && p.scheduledAt);
+          return (
+            <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
+              <Badge variant="outline" className={cn('gap-1', s.tone)}>
+                {MOVING.has(p.status) && <Loader2 className="size-3 animate-spin" />}
+                {s.label}
+              </Badge>
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                {p.status === 'scheduled' && p.scheduledAt ? `Sale el ${fmtWhen(p.scheduledAt)}` : fmtWhen(p.createdAt)} · {p.version} · @{p.account}
+              </span>
+              {pending && p.status === 'scheduled' && (
+                <span className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy === p.id}
+                    onClick={() => {
+                      setWhen(localInput(new Date(p.scheduledAt!)));
+                      setError('');
+                      setMoving(p);
+                    }}
+                  >
+                    Cambiar hora
+                  </Button>
+                  <Button variant="ghost" size="sm" disabled={busy === p.id} onClick={() => cancel(p)}>
+                    {busy === p.id && <Loader2 className="animate-spin" />}
+                    Cancelar
+                  </Button>
+                </span>
+              )}
+              {p.permalink && (
+                <a href={p.permalink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+                  Ver en Instagram <ExternalLink className="size-3" />
+                </a>
+              )}
+              {p.status === 'error' && p.error && <p className="w-full text-xs text-destructive">{p.error}</p>}
+            </li>
+          );
+        })}
+      </ul>
+      {error && !moving && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <Dialog open={!!moving} onOpenChange={(o) => !busy && !o && setMoving(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Cambiar la hora</DialogTitle>
+            <DialogDescription>Sale a esa hora desde tu cuenta, aunque Reel Studio esté cerrado.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="publish-move">Fecha y hora</Label>
+            <Input id="publish-move" type="datetime-local" value={when} min={localInput(new Date())} onChange={(e) => setWhen(e.target.value)} />
+          </div>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" disabled={!!busy} onClick={() => saveTime('now')}>
+              Publicar ahora
+            </Button>
+            <Button disabled={!!busy} onClick={() => saveTime(when)}>
+              {busy && <Loader2 className="animate-spin" />}
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

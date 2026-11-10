@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView} from '../shared/types';
+import type {PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationsView, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -40,6 +40,12 @@ export const api = {
   reveal: (slug: string) => fetch(`/api/reels/${slug}/reveal`, {method: 'POST'}).then((r) => json(r)),
   revealVersion: (slug: string, url: string) => post(`/api/reels/${slug}/reveal-version`, {url}),
   revealThumbnail: (slug: string) => post(`/api/reels/${slug}/reveal-thumbnail`),
+  // Publicar (server/publish.ts): what was sent to Instagram from this video, and sending a version now or at a time.
+  publications: (slug: string) => fetch(`/api/reels/${slug}/publications`).then((r) => json<VideoPublications>(r)),
+  publish: (slug: string, input: PublishInput) => post(`/api/reels/${slug}/publications`, input) as Promise<VideoPublication>,
+  reschedulePublication: (slug: string, id: string, scheduledAt: string) =>
+    fetch(`/api/reels/${slug}/publications/${id}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({scheduledAt})}).then((r) => json<VideoPublication>(r)),
+  cancelPublication: (slug: string, id: string) => fetch(`/api/reels/${slug}/publications/${id}`, {method: 'DELETE'}).then((r) => json<VideoPublication>(r)),
   // Structure tags for a script, suggested by the agent (not saved until the script is).
   suggestBeats: (slug: string, text: string) =>
     fetch(`/api/reels/${slug}/beats/suggest`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text})}).then((r) => json<Beat[]>(r)),

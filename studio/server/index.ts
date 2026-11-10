@@ -37,6 +37,7 @@ import * as automations from './automations.ts';
 import * as factAudit from './fact-audit.ts';
 import * as db from './db.ts';
 import * as uploads from './uploads.ts';
+import * as publish from './publish.ts';
 import type {Agent, IdeasBoard, ServerEvent} from '../shared/types.ts';
 
 const PORT = Number(process.env.PORT ?? 4000);
@@ -215,6 +216,11 @@ app.post('/api/reels/:slug/reveal-version', reel, handle((req) => {
   const filename = decodeURIComponent(version.url.split('/').pop()!);
   reveal(path.join(VIDEOS, req.params.slug, 'out', filename), true);
 }));
+// Publicar: to the project's Instagram account, now or at a time (publish.ts).
+app.get('/api/reels/:slug/publications', reel, handle((req) => publish.list(req.params.slug)));
+app.post('/api/reels/:slug/publications', reel, handle((req) => publish.publish(req.params.slug, req.body)));
+app.patch('/api/reels/:slug/publications/:id', reel, handle((req) => publish.reschedule(req.params.slug, req.params.id, req.body?.scheduledAt)));
+app.delete('/api/reels/:slug/publications/:id', reel, handle((req) => publish.cancel(req.params.slug, req.params.id)));
 // The thumbnail (out/miniatura.png) selected in its folder, like a version.
 app.post('/api/reels/:slug/reveal-thumbnail', reel, handle((req) => {
   const thumb = detail(req.params.slug).thumbnail;

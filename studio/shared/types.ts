@@ -801,3 +801,20 @@ export type SyncConflict = {
   loserStorage: 'doc' | 'blob' | null;
   created: string | null;
 };
+
+// Publicar: one time a version of a video went to Instagram from here (videos/<slug>/publicaciones.json). The account
+// has the truth; this is what was sent and its last known state. scheduledAt null: as soon as it was uploaded.
+export type PublicationStatus = 'uploading' | 'scheduled' | 'processing' | 'publishing' | 'published' | 'error' | 'canceled';
+export type VideoPublication = {
+  id: string;
+  version: string;
+  account: string;
+  scheduledAt: string | null;
+  createdAt: string;
+  status: PublicationStatus;
+  error: string | null;
+  permalink: string | null;
+};
+// account: the project's Instagram account (null: none chosen); cover: out/miniatura.* exists and goes as the cover.
+export type VideoPublications = {signedIn: boolean; account: string | null; caption: string; cover: boolean; items: VideoPublication[]};
+export type PublishInput = {version: string; scheduledAt: string | null; shareToFeed: boolean};
