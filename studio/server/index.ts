@@ -745,6 +745,9 @@ function serveWorkspace() {
   vite.watcher.add(path.join(VIDEOS, '*/src').replace(/\\/g, '/'));
 }
 serveWorkspace();
+// An /api route that doesn't exist is a mistake (a typo, the wrong method, a route from an older version): it answers
+// 404 in JSON, like the others, instead of falling through to the app's page, which an agent's curl reads as success.
+app.use('/api', (req: Req, res: Response) => void res.status(404).json({error: `no existe la ruta ${req.method} ${req.originalUrl.split('?')[0]}`}));
 app.use(vite.middlewares);
 
 // A new workspace (welcome page or Ajustes): stop the agents and Inspiración's work in the old one, watch the
