@@ -14,7 +14,7 @@ import {MEMORY_KINDS, type AutomationMemory, type MemoryEntry, type MemoryInput,
 import {register, open as openIndex, sync as syncIndex, mtime, norm, row, words, type DB} from './db.ts';
 import {readJson, writeJson} from './platform.ts';
 import {httpError} from './reels.ts';
-import {listProjects, projectDir} from './workspace.ts';
+import {listProjects, projectDir, rel} from './workspace.ts';
 
 export const MAX_TEXT = 2000;
 const MAX_KEY = 200;
@@ -33,8 +33,11 @@ const valid = (e: unknown): e is MemoryEntry => {
   return !!x && typeof x === 'object' && typeof x.id === 'string' && MEMORY_KINDS.includes(x.kind) && typeof x.text === 'string';
 };
 
-function load(project: string, automation: string): MemoryEntry[] {
-  const raw = readJson<{entries?: unknown}>(fileOf(project, automation));
+// strict, before a change: a file that's there but can't be read stops it, so its entries aren't written over.
+function load(project: string, automation: string, strict = false): MemoryEntry[] {
+  const file = fileOf(project, automation);
+  const raw = readJson<{entries?: unknown}>(file);
+  if (strict && fs.existsSync(file) && !Array.isArray(raw?.entries)) throw httpError(500, `no se puede leer ${rel(file)}: arréglalo o bórralo`);
   return Array.isArray(raw?.entries) ? raw.entries.filter(valid) : [];
 }
 
@@ -234,7 +237,7 @@ export function add(project: string, automation: string, input: MemoryInput, by:
     if (kind !== 'done') throw httpError(400, 'solo se fijan los hechos y las ejecuciones');
     fields.pinned = input.pinned === true;
   }
-  const entries = load(project, automation);
+  const entries = load(project, automation, true);
   const now = Date.now();
   const same = kind === 'done' && fields.key ? entries.find((e) => e.kind === 'done' && e.key && sameKey(e.key, fields.key!)) : undefined;
   if (same) {
@@ -259,7 +262,7 @@ const found = (entries: MemoryEntry[], id: string) => {
 
 // text, key ('' clears it), pinned, closed (a pending: true resolves it, false opens it again) and kind (not to or from run).
 export function edit(project: string, automation: string, id: string, input: MemoryInput, by: MemoryEntry['by']): MemoryEntry {
-  const entries = load(project, automation);
+  const entries = load(project, automation, true);
   const e = found(entries, id);
   const kind = input.kind === undefined ? e.kind : e.kind === 'run' ? (input.kind === 'run' ? 'run' : writable('run')) : writable(input.kind);
   if (input.text !== undefined) e.text = text(input.text);
@@ -289,7 +292,7 @@ export function edit(project: string, automation: string, id: string, input: Mem
 }
 
 export function remove(project: string, automation: string, id: string) {
-  const entries = load(project, automation);
+  const entries = load(project, automation, true);
   found(entries, id);
   save(project, automation, entries.filter((e) => e.id !== id));
 }
@@ -298,7 +301,7 @@ export const clear = (project: string, automation: string) => save(project, auto
 
 // The studio's summary of a run, when it ends. The oldest unpinned ones go past KEEP_RUNS.
 export function logRun(project: string, automation: string, run: string, summary: string) {
-  const entries = load(project, automation);
+  const entries = load(project, automation, true);
   const now = Date.now();
   entries.push({id: newId(), kind: 'run', text: summary.slice(0, MAX_TEXT), by: 'studio', run, created: now, updated: now});
   const runs = entries.filter((e) => e.kind === 'run' && !e.pinned).sort((a, b) => a.created - b.created);
