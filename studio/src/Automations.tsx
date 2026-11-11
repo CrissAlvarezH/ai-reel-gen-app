@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {Bot, BrainCircuit, CalendarClock, Check, ChevronDown, CircleCheck, Clapperboard, Ellipsis, Loader2, MessageSquare, Newspaper, Pencil, Pin, PinOff, Play, Plus, RefreshCw, RotateCcw, Search, Sparkles, Square, Trash2, Users, X, type LucideIcon} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -917,33 +917,90 @@ function SourcesStepFields({n, chosen, onChange}: {n: number; chosen: string[]; 
   );
 }
 
-// The schedule's shortcuts: IA first (he says when in words and the agent writes the cron into the field, with a line
-// on what it does), then the usual ones.
-function CronPresets({onCron}: {onCron: (cron: string) => void}) {
-  const [open, setOpen] = useState(false);
+// The schedule: the cron, when it runs next and its shortcuts. IA first: the field and shortcuts give way to one input
+// where he says when in words; the agent writes the cron, and they come back with it set and a line on what it does.
+function CronField({cron, onCron, next}: {cron: string; onCron: (cron: string) => void; next: Date | null}) {
+  const [ai, setAi] = useState(false);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState<{cron: string; text: string} | null>(null);
+  // Cancelling, even mid-conversion, goes back to the cron as it was: an answer that arrives later is dropped.
+  const turn = useRef(0);
   const convert = async () => {
     if (!text.trim() || busy) return;
+    const mine = ++turn.current;
     setBusy(true);
     setErr('');
-    setNote('');
     try {
       const r = await automationsApi.cron(text);
+      if (mine !== turn.current) return;
       onCron(r.cron);
-      setNote(r.note);
+      setNote({cron: r.cron, text: r.note});
+      setAi(false);
     } catch (e) {
-      setErr((e as Error).message.replace(/^./, (c) => c.toUpperCase()));
+      if (mine === turn.current) setErr((e as Error).message.replace(/^./, (c) => c.toUpperCase()));
     } finally {
-      setBusy(false);
+      if (mine === turn.current) setBusy(false);
     }
   };
+  const cancel = () => {
+    turn.current++;
+    setBusy(false);
+    setErr('');
+    setAi(false);
+  };
+  if (ai)
+    return (
+      <>
+        <Label htmlFor="automation-cron-ai" className="flex items-center gap-1.5">
+          <Sparkles className="size-3.5" /> Horario, en tus palabras
+        </Label>
+        <div className="flex gap-1.5">
+          <Input
+            id="automation-cron-ai"
+            autoFocus
+            value={text}
+            maxLength={300}
+            disabled={busy}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              void convert();
+            }}
+            placeholder="Martes y jueves a las 7 de la noche"
+          />
+          <Button type="button" disabled={busy || !text.trim()} onClick={() => void convert()}>
+            {busy ? <Loader2 className="animate-spin" /> : <Sparkles />} {busy ? 'Convirtiendo…' : 'Convertir'}
+          </Button>
+          <Button type="button" variant="ghost" onClick={cancel}>
+            Cancelar
+          </Button>
+        </div>
+        <p className={err ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>{err || 'La IA escribe el cron, en la hora de este equipo.'}</p>
+      </>
+    );
   return (
-    <div className="flex flex-col gap-2">
+    <>
+      <Label htmlFor="automation-cron">Horario (cron)</Label>
+      <Input id="automation-cron" value={cron} onChange={(e) => onCron(e.target.value)} className="font-mono" aria-describedby="automation-cron-next" />
+      <p id="automation-cron-next" className={next ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
+        {next ? `Próxima: ${fmtWhen(next)}` : 'Expresión no válida o que nunca ocurre. Son cinco campos: minuto, hora, día, mes y día de la semana.'}
+        {next && (
+          <>
+            {' · '}
+            <UpcomingRuns cron={cron} />
+          </>
+        )}
+      </p>
+      {note?.cron === cron && note.text && (
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Sparkles className="mt-0.5 size-3 flex-none" /> {note.text}
+        </p>
+      )}
       <div className="flex flex-wrap gap-1.5">
-        <Button type="button" variant={open ? 'secondary' : 'outline'} size="xs" aria-expanded={open} onClick={() => setOpen(!open)} title="Dilo con tus palabras y la IA escribe el cron">
+        <Button type="button" variant="outline" size="xs" onClick={() => (setAi(true), setErr(''))} title="Dilo con tus palabras y la IA escribe el cron">
           <Sparkles /> IA
         </Button>
         {PRESETS.map((p) => (
@@ -952,32 +1009,7 @@ function CronPresets({onCron}: {onCron: (cron: string) => void}) {
           </Button>
         ))}
       </div>
-      {open && (
-        <div className="flex flex-col gap-1.5 rounded-md border bg-muted/30 p-2">
-          <div className="flex gap-1.5">
-            <Input
-              autoFocus
-              value={text}
-              maxLength={300}
-              disabled={busy}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter') return;
-                e.preventDefault();
-                void convert();
-              }}
-              placeholder="Martes y jueves a las 7 de la noche"
-              aria-label="Cuándo, en tus palabras"
-              className="h-8 text-sm"
-            />
-            <Button type="button" size="sm" disabled={busy || !text.trim()} onClick={() => void convert()}>
-              {busy ? <Loader2 className="animate-spin" /> : <Sparkles />} Convertir
-            </Button>
-          </div>
-          {err ? <p className="text-xs text-destructive">{err}</p> : note ? <p className="text-xs text-muted-foreground">{note}</p> : <p className="text-xs text-muted-foreground">Dilo con tus palabras; el cron queda en el horario de arriba.</p>}
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -1028,18 +1060,7 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
           <ol>
             <Point icon={CalendarClock}>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="automation-cron">Horario (cron)</Label>
-                <Input id="automation-cron" value={cron} onChange={(e) => setCron(e.target.value)} className="font-mono" aria-describedby="automation-cron-next" />
-                <p id="automation-cron-next" className={next ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
-                  {next ? `Próxima: ${fmtWhen(next)}` : 'Expresión no válida o que nunca ocurre. Son cinco campos: minuto, hora, día, mes y día de la semana.'}
-                  {next && (
-                    <>
-                      {' · '}
-                      <UpcomingRuns cron={cron} />
-                    </>
-                  )}
-                </p>
-                <CronPresets onCron={setCron} />
+                <CronField cron={cron} onCron={setCron} next={next} />
               </div>
             </Point>
             {steps.map((s, i) => (
