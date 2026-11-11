@@ -1,0 +1,123 @@
+{
+  "name": "Panel de cifras",
+  "summary": "Interfaz oscura tipo app: mitad tarjetas, recibos y contadores que suben, se tachan y se suman; mitad un mundo de dibujos de línea recorrido por una cámara. Con subtítulos palabra por palabra. Para explicar finanzas con números concretos.",
+  "skill": "styles/panel-de-cifras/SKILL.md",
+  "template": null,
+  "cutouts": false,
+  "palette": [
+    {
+      "name": "Fondo",
+      "hex": "#111111",
+      "meaning": "la pantalla, casi negra y lisa"
+    },
+    {
+      "name": "Blanco",
+      "hex": "#F5F5F5",
+      "meaning": "el texto y las cifras sobre fondo oscuro"
+    },
+    {
+      "name": "Tarjeta",
+      "hex": "#1C1C1E",
+      "meaning": "los paneles oscuros con borde sutil"
+    },
+    {
+      "name": "Amarillo",
+      "hex": "#FFD60A",
+      "meaning": "la palabra clave, la parte actual de la serie, la fila que estás mirando"
+    },
+    {
+      "name": "Rojo",
+      "hex": "#FF4D5E",
+      "meaning": "lo que de verdad pagas, lo que te cobran, lo que sube"
+    },
+    {
+      "name": "Verde",
+      "hex": "#32D27C",
+      "meaning": "lo que está bien, lo ya visto, la opción que te conviene"
+    },
+    {
+      "name": "Recibo",
+      "hex": "#EFE9DF",
+      "meaning": "la cuenta que se va llenando (tu cuota, lo que de verdad pagas)"
+    }
+  ],
+  "fonts": [
+    {
+      "family": "Inter 800",
+      "css": "Inter, sans-serif",
+      "weight": 800,
+      "google": "Inter:wght@800",
+      "use": "cifras (con números tabulares) y palabras clave",
+      "sample": "$310.001.097+"
+    },
+    {
+      "family": "Inter 500",
+      "css": "Inter, sans-serif",
+      "weight": 500,
+      "google": "Inter:wght@500",
+      "use": "subtítulos palabra por palabra, etiquetas y notas de fuente",
+      "sample": "Una casa de 300 millones no te cuesta 300 millones."
+    }
+  ],
+  "look": [
+    "Fondo liso casi negro; sin texturas ni fotos.",
+    "Arriba, subtítulos palabra por palabra en gris claro; la palabra clave en blanco con un bloque amarillo detrás. Empiezan en top 260 del lienzo de 1920 (no en 130): debajo de la barra superior de Instagram (0–220 px), y el contenido va de ~440 hacia abajo.",
+    "En el centro, una sola tarjeta protagonista: contador de precio, recibo crema que se llena por filas, comparativa de dos tarjetas o línea de tiempo.",
+    "El recibo tiene filas con etiqueta y subetiqueta pequeña a la izquierda y la cifra a la derecha; la fila activa se resalta en amarillo y el total va en una barra negra con la cifra en rojo.",
+    "Las series llevan una barra de progreso de partes: verde las vistas, amarillo la actual, gris las que faltan, y una pastilla amarilla «Parte N: …».",
+    "Pastillas redondeadas como avisos («La prima de vida se recalcula», «Sí cubre lo mismo») y notas de fuente abajo, de 28 px como mínimo.",
+    "Esquinas redondeadas, sombras suaves y márgenes amplios, como una app financiera.",
+    "Mitad y mitad: más o menos la mitad del video son tarjetas y cifras; la otra mitad, un mundo ancho de dibujos de línea (personas, la empresa, el banco, edificios, objetos que son la idea: un frasco que es el fondo, un sobre que es el sueldo) donde pasa la historia.",
+    "En el mundo, las pastillas y cifras usan los mismos colores que en las tarjetas."
+  ],
+  "motion": [
+    "Movimiento suave a 30 fps, con entradas de opacidad y escala corta (0,95 → 1) y easing de salida.",
+    "Las cifras ruedan con contador hasta su valor; cuando algo no es lo que parece, se tacha en rojo y aparece la cifra real debajo.",
+    "La misma tarjeta se actualiza (filas nuevas, «?» que se vuelven cifras, totales que cambian) en vez de cortar a otra.",
+    "Un cambio cada 1 a 3 s, al ritmo de la voz; entre actos la tarjeta sale con un fundido corto y entra la siguiente.",
+    "El CTA simula un comentario de Instagram con la palabra clave y el mensaje directo que llega.",
+    "En el mundo, una cámara con movimientos amarrados a la voz: plano abierto, se acerca a lo que se dice, se aleja para mostrar la relación, panea al siguiente lugar y se mete en un objeto para pasar a la tarjeta siguiente.",
+    "Los objetos cuentan la historia: el sobre vuela en arco al frasco, los fajos entran con rebote, el frasco se vacía en lo que paga; un «?» espera hasta que la voz nombra la idea.",
+    "Cada movimiento de cámara y cada objeto que cae o vuela tiene su sonido (whoosh, pop)."
+  ],
+  "sources": [
+    "Sin fotos: todo se dibuja en código.",
+    "Iconos de línea simples y blancos (edificio, banco, escudo, persona, casa, calendario), con un acento de color si significa algo.",
+    "Gráficos propios: barras, cuadrículas de cuotas, líneas de tiempo y comparativas, siempre con los colores de la paleta."
+  ],
+  "avoid": [
+    "Fotos, texturas de papel o recortes: rompen la sensación de app limpia.",
+    "Más de una tarjeta protagonista a la vez: el ojo no sabe qué cifra mirar.",
+    "Usar el rojo, el amarillo o el verde fuera de su significado.",
+    "Notas de fuente o subetiquetas ilegibles en el móvil (menos de 28 px).",
+    "Cortes duros o transiciones llamativas: el ritmo lo marcan las cifras y la cámara, no los efectos.",
+    "Un video solo de tarjetas (parece presentación) o solo de mundo (se pierden las cifras exactas).",
+    "Un plano abierto tan lejos que el texto no se lee en el celular.",
+    "Subtítulos por encima de top 260: en el iPhone quedan tapados por la barra superior de Instagram."
+  ],
+  "thumbnail": {
+    "look": [
+      "Fondo liso casi negro, como el video.",
+      "Arriba, de qué va el video en pocas palabras (5 a 8), en Inter 800 blanco y grande (≈110 px), centrado; la palabra clave en negro sobre un bloque amarillo, como en los subtítulos.",
+      "Debajo, una sola imagen sencilla: un dibujo de línea del mundo del video (el frasco, el sobre, el edificio, las personas) o uno nuevo que lo ilustre, con un acento de color si significa algo.",
+      "Mucho espacio vacío: solo el título y el dibujo, sin tarjetas, recibos ni notas.",
+      "Todo dentro del centro 3:4, que es lo que se ve en la cuadrícula del perfil."
+    ],
+    "avoid": [
+      "Más de una idea o más de una imagen: en la cuadrícula se ve pequeña y no se entiende.",
+      "Cifras exactas o frases largas: el título dice el tema, no la respuesta.",
+      "Fotos, flechas gruesas, emojis o texto pegado a los bordes."
+    ],
+    "example": "styles/panel-de-cifras/examples/miniatura-cesantias.png"
+  },
+  "examples": [],
+  "references": [
+    "styles/panel-de-cifras/refs/Dewx2OxBqY6.jpg",
+    "styles/panel-de-cifras/refs/DepAM97sVlr.jpg",
+    "styles/panel-de-cifras/refs/DewxocjR3dK.jpg",
+    "styles/panel-de-cifras/refs/De7KQtWJWWr.jpg",
+    "styles/panel-de-cifras/refs/DewxQMkpCnn.jpg",
+    "styles/panel-de-cifras/refs/DevKYseBiGF.jpg",
+    "styles/panel-de-cifras/refs/De-22Xgx2pT-sheet.jpg"
+  ]
+}

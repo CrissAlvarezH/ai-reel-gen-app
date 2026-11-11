@@ -143,7 +143,7 @@ scripts/          new-video.sh (into the open project, REEL_STUDIO_PROJECT)
 
 This is the application source repository. Customer projects, generated videos, configuration, ideas,
 accounts, conversations, custom styles and personal lessons stay on disk and are not committed here.
-Only the built-in styles (`collage-semitono`, `cuaderno-apuntes`, `plano-tecnico`) ship with the application.
+Only the built-in styles (`collage-semitono`, `cuaderno-apuntes`, `panel-de-cifras`, `plano-tecnico`) ship with the application.
 Use a separate repository if you explicitly want to version your content. Ignoring existing data does not
 remove it from older commits.
 
