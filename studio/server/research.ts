@@ -30,8 +30,8 @@ import * as insp from './inspiration.ts';
 import * as pf from './research-platforms.ts';
 import * as sc from './scrapecreators.ts';
 import {transcriberReady, ytdlpReady} from './requirements.ts';
-import {RESEARCH_MAX_ANALYSE, RESEARCH_PLATFORMS, RESEARCH_SINCE} from '../shared/types.ts';
-import type {ReelAnalysis, ReelTranscript, Research, ResearchDetail, ResearchEstimate, ResearchJob, ResearchOptions, ResearchPlatform, ResearchRun, ResearchStatus, ResearchVideo, ResearchVideoDetail, ServerEvent} from '../shared/types.ts';
+import {RESEARCH_MAX_ANALYSE, RESEARCH_PLATFORMS, RESEARCH_SINCE, RESEARCH_TASKS} from '../shared/types.ts';
+import type {ReelAnalysis, ReelTranscript, Research, ResearchDetail, ResearchSettings, ResearchSettingsView, ResearchTask, ResearchEstimate, ResearchJob, ResearchOptions, ResearchPlatform, ResearchRun, ResearchStatus, ResearchVideo, ResearchVideoDetail, ServerEvent} from '../shared/types.ts';
 
 export const ID = /^[a-f0-9]{8}$/;
 export const KEY = /^(tiktok|youtube|instagram)-[A-Za-z0-9_-]{3,40}$/;
@@ -305,6 +305,60 @@ const DEFAULTS = (): ResearchOptions => {
   return {platforms: on.length ? on : PLATFORMS, sinceDays: 90, maxSeconds: 180, perQuery: 30, country: null};
 };
 
+/* ───── Configuración: the model and effort of each of the agent's tasks, per project ───── */
+
+const TIER: Record<ResearchTask, 'fast' | 'smart'> = {queries: 'fast', relevance: 'fast', analysis: 'smart', report: 'smart'};
+const settingsFile = () => path.join(PROJECT_DIR, 'config', 'research.json');
+type Ask = {model: 'fast' | 'smart'; use?: string; effort?: string};
+
+function readSettings(): ResearchSettings {
+  const raw = (readJson<Record<string, {model?: unknown; effort?: unknown}>>(settingsFile()) ?? {}) as Record<string, {model?: unknown; effort?: unknown} | undefined>;
+  return Object.fromEntries(RESEARCH_TASKS.map((t) => [t, {model: typeof raw[t]?.model === 'string' ? raw[t]!.model : '', effort: typeof raw[t]?.effort === 'string' ? raw[t]!.effort : ''}])) as ResearchSettings;
+}
+// How the agent is asked for a task (in the open project): the chosen model if the agent in Ajustes still offers it
+// (else the task's tier: Haiku or Sonnet with Claude), and the chosen effort if that model has it (else the CLI's own).
+function askFor(task: ResearchTask): Ask {
+  const s = readSettings()[task];
+  const models = agentCli.models();
+  const use = s.model && models.some((m) => m.id === s.model) ? s.model : '';
+  const efforts = models.find((m) => m.id === use)?.efforts ?? [];
+  return {model: TIER[task], ...(use ? {use} : {}), ...(s.effort && efforts.includes(s.effort) ? {effort: s.effort} : {})};
+}
+function defaultLabel(task: ResearchTask) {
+  const models = agentCli.models();
+  const tier = agentCli.id === 'claude' ? models.find((m) => m.id === (TIER[task] === 'fast' ? 'haiku' : 'sonnet')) : undefined;
+  return tier ? `Predeterminado (${tier.label})` : (models.find((m) => m.id === '')?.label ?? 'Predeterminado');
+}
+
+export function settings(project: string | undefined): ResearchSettingsView {
+  return inProject(project, () => ({
+    agent: agentCli.label,
+    settings: readSettings(),
+    models: agentCli.models().map((m) => ({id: m.id, label: m.label, efforts: m.efforts})),
+    defaults: Object.fromEntries(RESEARCH_TASKS.map((t) => [t, defaultLabel(t)])) as Record<ResearchTask, string>,
+  }));
+}
+
+export function setSettings(project: string | undefined, input: unknown): ResearchSettingsView {
+  const i = (input && typeof input === 'object' ? input : {}) as Record<string, {model?: unknown; effort?: unknown} | undefined>;
+  inProject(project, () => {
+    const s = readSettings();
+    const models = agentCli.models();
+    for (const t of RESEARCH_TASKS) {
+      const x = i[t];
+      if (!x) continue;
+      const model = typeof x.model === 'string' ? x.model : s[t].model;
+      const m = models.find((y) => y.id === model);
+      if (!m) throw httpError(400, `${agentCli.label} no tiene ese modelo`);
+      const effort = typeof x.effort === 'string' ? x.effort : '';
+      if (effort && !m.efforts.includes(effort)) throw httpError(400, `${m.label} no tiene ese nivel de esfuerzo`);
+      s[t] = {model, effort};
+    }
+    writeJson(settingsFile(), s);
+  });
+  return settings(project);
+}
+
 // A new research: saved now with the topic as its only search; the agent's searches (and country) arrive in the
 // background unless they were given (queries).
 export function create(project: string | undefined, input: unknown): Research {
@@ -319,9 +373,9 @@ export function create(project: string | undefined, input: unknown): Research {
   const base = path.join(root, id);
   saveResearch(base, {id, topic, queries: given ?? [topic], options, created: Date.now(), searched: null, runs: [], report: null, error: null});
   if (!given) {
-    const prompt = inProject(project, () => queriesPrompt(topic));
+    const [prompt, ask] = inProject(project, () => [queriesPrompt(topic), askFor('queries')] as const);
     start(base, 'queries', async (w) => {
-      const answer = await agentCli.ask(prompt, 'You answer only with the JSON asked for, nothing else.', {timeout: 3 * 60_000, signal: w.ctrl.signal});
+      const answer = await agentCli.ask(prompt, 'You answer only with the JSON asked for, nothing else.', {...ask, timeout: 3 * 60_000, signal: w.ctrl.signal});
       live(w);
       const o = audience.parseJson(answer) as {queries?: unknown; country?: unknown};
       const r = readResearch(base);
@@ -363,6 +417,8 @@ export function edit(project: string | undefined, id: string, input: unknown): R
   if (works.has(base)) throw httpError(409, 'espera a que termine lo que está haciendo');
   const i = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
   const r = readResearch(base)!;
+  // Once searched, its searches and options are what its videos came from: to change them, a copy (create with them).
+  if (r.searched) throw httpError(409, 'ya se buscó y no cambia: para cambiarla, duplícala en una nueva');
   const topic = i.topic === undefined ? r.topic : text(i.topic, 200);
   if (!topic) throw httpError(400, 'escribe el tema que quieres investigar');
   saveResearch(base, {...r, topic, queries: i.queries === undefined ? r.queries : cleanQueries(i.queries), options: cleanOptions(i.options ?? {}, r.options)});
@@ -422,15 +478,17 @@ async function estimateFor(r: ResearchFile): Promise<ResearchEstimate> {
 export function search(project: string | undefined, id: string) {
   const base = baseOf(project, id);
   const r = readResearch(base)!;
+  // Searched once: what it found is what it is. Another search is a copy's (create with its searches).
+  if (r.searched) throw httpError(409, 'ya se buscó: para buscar otra vez, duplícala en una nueva');
   const missing = r.options.platforms.filter((p) => !ready()[p]);
   if (missing.length === r.options.platforms.length)
     throw httpError(400, `falta la clave de ${[...new Set(missing.map((p) => RESEARCH_PLATFORMS.find((x) => x.id === p)!.via))].join(' y ')}: ponla en Ajustes → Extracción de datos`);
-  const ctx = inProject(project, () => ({audience: audienceText(), language: getProfile().language}));
+  const ctx = inProject(project, () => ({audience: audienceText(), language: getProfile().language, ask: askFor('relevance')}));
   start(base, 'searching', (w) => runSearch(base, w, ctx));
   return summary(base)!;
 }
 
-type JudgeCtx = {audience: string; language: string};
+type JudgeCtx = {audience: string; language: string; ask: Ask};
 async function runSearch(base: string, w: Work, ctx: JudgeCtx) {
   const r = readResearch(base)!;
   const {queries, options: o} = r;
@@ -572,7 +630,7 @@ Answer with a JSON object: keys are the video keys, values are [true or false, "
 
 ${lines.join('\n')}`;
     try {
-      const o = audience.parseJson(await agentCli.ask(prompt, 'You answer only with the JSON asked for, nothing else.', {timeout: 4 * 60_000, signal: w.ctrl.signal})) as Record<string, unknown>;
+      const o = audience.parseJson(await agentCli.ask(prompt, 'You answer only with the JSON asked for, nothing else.', {...ctx.ask, timeout: 4 * 60_000, signal: w.ctrl.signal})) as Record<string, unknown>;
       live(w);
       for (const v of batch) {
         const a = o[v.key];
@@ -633,10 +691,10 @@ export async function analyse(project: string | undefined, id: string, input: un
   if (pick.some((v) => !processed(base, v.key)) && !(await transcriberReady())) throw httpError(400, 'falta la transcripción: instálala en Ajustes → Requisitos → Transcripción');
   if (pick.some((v) => v.platform === 'youtube' && !processed(base, v.key)) && !(await ytdlpReady()))
     throw httpError(400, 'para analizar YouTube Shorts falta yt-dlp: instálalo en Ajustes → Requisitos → Descarga de YouTube');
-  const ctx = inProject(project, () => ({system: analystPrompt(readResearch(base)!.topic), report: reportPrompt(readResearch(base)!)}));
+  const ctx = inProject(project, () => ({system: analystPrompt(readResearch(base)!.topic), report: reportPrompt(readResearch(base)!), ask: askFor('analysis'), reportAsk: askFor('report')}));
   start(base, 'processing', async (w) => {
-    await runAnalyse(base, w, pick, ctx.system);
-    await runReport(base, w, ctx.report);
+    await runAnalyse(base, w, pick, ctx.system, ctx.ask);
+    await runReport(base, w, ctx.report, ctx.reportAsk);
   });
   return summary(base)!;
 }
@@ -650,7 +708,7 @@ const analystPrompt = (topic: string) => {
   ].join('\n');
 };
 
-async function runAnalyse(base: string, w: Work, pick: ResearchVideo[], system: string) {
+async function runAnalyse(base: string, w: Work, pick: ResearchVideo[], system: string, ask: Ask) {
   const errors: string[] = [];
   const fail = (key: string, e: unknown) => {
     errors.push((e as Error).message);
@@ -702,7 +760,7 @@ async function runAnalyse(base: string, w: Work, pick: ResearchVideo[], system: 
           ].join('\n\n');
           const sheets = fs.readdirSync(d).filter((f) => /^sheet_\d{2}\.jpg$/.test(f)).sort().slice(0, 4);
           const images = [...(has(base, v.key, 'hook.jpg') ? [path.join(d, 'hook.jpg')] : []), ...sheets.map((s) => path.join(d, s))];
-          const reply = await agentCli.ask(prompt, system, {model: 'smart', images, timeout: 4 * 60_000, signal: w.ctrl.signal});
+          const reply = await agentCli.ask(prompt, system, {...ask, images, timeout: 4 * 60_000, signal: w.ctrl.signal});
           live(w);
           writeJson(path.join(d, 'analysis.json'), insp.parseAnalysis(reply));
         } catch (e) {
@@ -742,12 +800,12 @@ const reportPrompt = (r: ResearchFile) => {
 export function report(project: string | undefined, id: string) {
   const base = baseOf(project, id);
   if (!videos(base).length) throw httpError(400, 'primero busca videos');
-  const system = inProject(project, () => reportPrompt(readResearch(base)!));
-  start(base, 'report', (w) => runReport(base, w, system));
+  const [system, ask] = inProject(project, () => [reportPrompt(readResearch(base)!), askFor('report')] as const);
+  start(base, 'report', (w) => runReport(base, w, system, ask));
   return summary(base)!;
 }
 
-async function runReport(base: string, w: Work, system: string) {
+async function runReport(base: string, w: Work, system: string, ask: Ask) {
   stage(w, 'report', 1);
   const all = scored(base).filter((v) => v.relevant !== false && v.score != null);
   if (!all.length) throw new Error('no hay videos útiles para el informe: revisa las búsquedas o marca a mano los que sirven');
@@ -767,7 +825,7 @@ async function runReport(base: string, w: Work, system: string) {
     ].join('\n');
   });
   const prompt = `${all.length} videos útiles (los ${top.length} mejores):\n\n${lines.join('\n\n')}\n\n${details.length ? `Análisis de los ${details.length} analizados:\n\n${details.join('\n\n')}` : 'Todavía no se analizó ninguno: básate en las métricas y los captions, y dilo.'}`;
-  const text = await agentCli.ask(prompt, system, {model: 'smart', timeout: 6 * 60_000, signal: w.ctrl.signal});
+  const text = await agentCli.ask(prompt, system, {...ask, timeout: 6 * 60_000, signal: w.ctrl.signal});
   live(w);
   const r = readResearch(base);
   if (r) saveResearch(base, {...r, report: {text: text.trim(), at: Date.now(), keys: analysed.map((v) => v.key)}});
@@ -798,5 +856,5 @@ export function ideasRequest(project: string | undefined, id: string) {
 // For the general conversation's instructions.
 export const agentNote = (tool: string) => {
   const d = rel(DIR());
-  return `Investigación (página de la app; ${d}/, solo de este proyecto): qué videos cortos funcionan sobre un tema en TikTok, YouTube Shorts e Instagram, para su audiencia. Cada investigación en ${d}/<id>/: research.json (tema, búsquedas, opciones, runs: cómo fue cada plataforma, report.text: el informe) y videos/<plataforma>-<id>/ con reel.json (métricas, autor y sus seguidores, caption, relevant y reason: si le sirve a su audiencia), meta.json (lo que devolvió la plataforma) y, los analizados, transcript.json, analysis.json, hook.jpg y sheet_NN.jpg. Con ${tool} (nunca a mano): list · show <id> [--top N] [--json] · new "tema" [--platform tiktok,youtube,instagram] [--since días] [--query "…"]… · edit <id> [--query "…"]… [--platform …] [--since días] · cost <id> · search <id> [--wait] (gasta saldo de ScrapeCreators y de Apify: dile antes el costo de cost y espera su sí) · analyse <id> [--top N | clave…] [--wait] (su suscripción: pregunta antes de más de 5) · report <id> [--wait] · status <id>. Úsala cuando te pida investigar qué funciona sobre un tema o buscar los mejores videos de algo; mira primero si ya hay una investigación de ese tema. Adapta lo que funciona, nunca copies guiones.`;
+  return `Investigación (página de la app; ${d}/, solo de este proyecto): qué videos cortos funcionan sobre un tema en TikTok, YouTube Shorts e Instagram, para su audiencia. Cada investigación en ${d}/<id>/: research.json (tema, búsquedas, opciones, runs: cómo fue cada plataforma, report.text: el informe) y videos/<plataforma>-<id>/ con reel.json (métricas, autor y sus seguidores, caption, relevant y reason: si le sirve a su audiencia), meta.json (lo que devolvió la plataforma) y, los analizados, transcript.json, analysis.json, hook.jpg y sheet_NN.jpg. Con ${tool} (nunca a mano): list · show <id> [--top N] [--json] · new "tema" [--platform tiktok,youtube,instagram] [--since días] [--query "…"]… · new --from <id> ["otro tema"] [--query "…"]… […] (una copia con sus búsquedas y opciones, cambiando lo que digas: una investigación ya buscada no cambia ni se vuelve a buscar) · edit <id> [--query "…"]… [--platform …] [--since días] (solo antes de buscar) · cost <id> · search <id> [--wait] (una sola vez; gasta saldo de ScrapeCreators y de Apify: dile antes el costo de cost y espera su sí) · analyse <id> [--top N | clave…] [--wait] (su suscripción: pregunta antes de más de 5) · report <id> [--wait] · status <id>. Úsala cuando te pida investigar qué funciona sobre un tema o buscar los mejores videos de algo; mira primero si ya hay una investigación de ese tema. Adapta lo que funciona, nunca copies guiones.`;
 };

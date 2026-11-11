@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {CalendarPublication, PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationMemory, AutomationsView, MemoryInput, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView, Research, ResearchDetail, ResearchEstimate, ResearchOptions, ResearchStatus, ResearchVideoDetail} from '../shared/types';
+import type {CalendarPublication, PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationMemory, AutomationsView, MemoryInput, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView, Research, ResearchDetail, ResearchEstimate, ResearchOptions, ResearchSettings, ResearchSettingsView, ResearchStatus, ResearchVideoDetail} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -498,6 +498,9 @@ export const researchApi = {
   status: () => fetch('/api/research').then((r) => json<ResearchStatus>(r)),
   // A new research: the agent proposes its searches in the background (unless queries are given).
   create: (topic: string, options: Partial<ResearchOptions>, queries?: string[]) => post('/api/research', {topic, ...options, queries}) as Promise<Research>,
+  // Configuración: the model and effort of each task.
+  settings: () => fetch('/api/research-settings').then((r) => json<ResearchSettingsView>(r)),
+  saveSettings: (s: Partial<ResearchSettings>) => put<ResearchSettingsView>('/api/research-settings', s),
   detail: (id: string) => fetch(`/api/research/${id}`).then((r) => json<ResearchDetail>(r)),
   edit: (id: string, input: {topic?: string; queries?: string[]; options?: Partial<ResearchOptions>}) => put<Research>(`/api/research/${id}`, input),
   remove: (id: string) => del(`/api/research/${id}`),

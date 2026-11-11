@@ -5,10 +5,14 @@ project's audience, through Reel Studio (the page follows every change).
     research.py list                                  (the project's researches)
     research.py show <id> [--top N] [--all] [--json]  (its searches, how each platform went, the ranking and the report)
     research.py new "tema" [--platform tiktok,youtube,instagram] [--since DÍAS] [--max-seconds S] [--per-query N]
-                           [--query "…"]…              (without --query, Reel Studio's agent proposes the searches)
+                           [--country CO] [--query "…"]… (without --query, Reel Studio's agent proposes the searches)
+    research.py new --from <id> ["otro tema"] [--query "…"]… [--platform …] […]
+                                                      (a copy: its topic, searches and options, with what you change)
     research.py edit <id> [--topic "…"] [--query "…"]… (replaces them) [--platform …] [--since DÍAS] [--country CO]
+                                                      (only before its search: a searched one doesn't change nor
+                                                      search again, new --from makes another)
     research.py cost <id>                             (what a search would cost at most; spends nothing)
-    research.py search <id> [--wait]                  (spends: ScrapeCreators' credits, Apify's balance)
+    research.py search <id> [--wait]                  (once; spends: ScrapeCreators' credits, Apify's balance)
     research.py analyse <id> [--top N | KEY…] [--wait] (downloads, transcribes and analyses; then the report)
     research.py report <id> [--wait]                  (the report again, from what's there)
     research.py relevant <id> KEY yes|no              (it is, or isn't, for his audience)
@@ -119,7 +123,9 @@ def main():
     s.add_argument("--all", action="store_true", help="también los que no le sirven a su audiencia")
     s.add_argument("--json", action="store_true")
     s = sub.add_parser("new")
-    s.add_argument("topic")
+    s.add_argument("topic", nargs="?")
+    s.add_argument("--from", dest="source", metavar="ID", help="copia esa investigación (tema, búsquedas, opciones)")
+    s.add_argument("--country")
     s.add_argument("--platform")
     s.add_argument("--since", type=int)
     s.add_argument("--max-seconds", type=int)
@@ -187,11 +193,19 @@ def main():
             print(f"\nInforme ({when(r['report']['at'])}):\n\n{r['report']['text']}")
         print(f"\nArchivos: projects/<proyecto>/research/{a.id}/ (research.json; videos/<clave>/reel.json, analysis.json, transcript.json)")
     elif a.cmd == "new":
-        body = {"topic": a.topic, **options()}
-        if a.query:
-            body["queries"] = a.query
+        if a.source:
+            src = call("GET", f"/api/research/{a.source}")
+            body = {"topic": a.topic or src["topic"], **src["options"], **options(), "queries": a.query or src["queries"]}
+        elif not a.topic:
+            sys.exit('research.py new: falta el tema (o --from <id> para copiar una)')
+        else:
+            body = {"topic": a.topic, **options()}
+            if a.query:
+                body["queries"] = a.query
+        if a.country is not None:
+            body["country"] = a.country
         r = call("POST", "/api/research", body)
-        if not a.query:
+        if "queries" not in body:
             print("El agente de Reel Studio está proponiendo las búsquedas…", flush=True)
             r = wait(r["id"], quiet=True)
         head(r)

@@ -1,13 +1,14 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {ArrowLeft, Bookmark, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Eye, FileText, Heart, Lightbulb, Loader2, MessageCircle, Plus, RefreshCw, Search, Share2, Sparkles, Square, Telescope, ThumbsDown, ThumbsUp, Trash2, Users, X} from 'lucide-react';
+import {ArrowLeft, Bookmark, Check, ChevronLeft, ChevronRight, Clock, Copy, Download, Settings2, ExternalLink, Eye, FileText, Heart, Lightbulb, Loader2, MessageCircle, Plus, RefreshCw, Search, Share2, Sparkles, Square, Telescope, ThumbsDown, ThumbsUp, Trash2, Users, X} from 'lucide-react';
 import {Alert, AlertDescription} from '@/components/ui/alert';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@/components/ui/collapsible';
-import {Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle} from '@/components/ui/dialog';
+import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from '@/components/ui/dialog';
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {Input} from '@/components/ui/input';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Label} from '@/components/ui/label';
 import {Progress} from '@/components/ui/progress';
 import {Switch} from '@/components/ui/switch';
@@ -15,8 +16,9 @@ import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/c
 import {cn} from '@/lib/utils';
 import PageSkeleton from '@/components/common/PageSkeleton';
 import ListSkeleton from '@/components/common/ListSkeleton';
-import {audienceApi, fmtAgo, fmtTime, researchApi, useSocket, type Research, type ResearchDetail, type ResearchJob, type ResearchOptions, type ResearchPlatform, type ResearchStatus, type ResearchVideo, type ResearchVideoDetail} from './api';
-import {RESEARCH_MAX_ANALYSE, RESEARCH_PLATFORMS, RESEARCH_SINCE} from '../shared/types';
+import {audienceApi, fmtAgo, fmtTime, researchApi, useSocket, type Research, type ResearchDetail, type ResearchJob, type ResearchOptions, type ResearchPlatform, type ResearchSettings, type ResearchSettingsView, type ResearchStatus, type ResearchTask, type ResearchVideo, type ResearchVideoDetail} from './api';
+import {RESEARCH_MAX_ANALYSE, RESEARCH_PLATFORMS, RESEARCH_SINCE, RESEARCH_TASKS} from '../shared/types';
+import {EFFORT_LABELS} from './ChatControls';
 import {md} from './Chat';
 import {useConfirm} from './confirm';
 import {projectKey, useStudio} from './studio';
@@ -115,6 +117,7 @@ function ResearchList() {
   const [st, setSt] = useState<ResearchStatus | null>(null);
   const [err, setErr] = useState('');
   const [creating, setCreating] = useState(false);
+  const [configuring, setConfiguring] = useState(false);
   const load = useCallback(() => researchApi.status().then(setSt, (e: Error) => setErr(e.message)), []);
   useEffect(() => void load(), [load]);
   useSocket((m) => (m.type === 'research' || m.type === 'synced') && void load(), load);
@@ -134,11 +137,16 @@ function ResearchList() {
           <h1 className="text-2xl font-semibold tracking-tight">Investigación</h1>
           <p className="text-sm text-muted-foreground">Busca un tema en TikTok, YouTube Shorts e Instagram, quédate con lo que le sirve a tu audiencia y estudia los videos que mejor funcionan.</p>
         </div>
-        {has && (
-          <Button onClick={() => setCreating(true)}>
-            <Plus /> Nueva investigación
+        <div className="flex gap-2">
+          {has && (
+            <Button onClick={() => setCreating(true)}>
+              <Plus /> Nueva investigación
+            </Button>
+          )}
+          <Button variant="outline" size="icon" onClick={() => setConfiguring(true)} aria-label="Configuración" title="Configuración: los modelos del agente para cada tarea">
+            <Settings2 />
           </Button>
-        )}
+        </div>
       </div>
       {!has ? (
         <Card className="border-dashed">
@@ -159,6 +167,7 @@ function ResearchList() {
           ))}
         </section>
       )}
+      {configuring && <SettingsDialog onClose={() => setConfiguring(false)} />}
       {creating && (
         <Dialog open onOpenChange={(o) => !o && setCreating(false)}>
           <DialogContent className="sm:max-w-2xl">
@@ -171,6 +180,112 @@ function ResearchList() {
         </Dialog>
       )}
     </main>
+  );
+}
+
+// Configuración: the model and effort the agent uses for each task of a research, for this project; saved with Guardar.
+const TASKS: {task: ResearchTask; label: string; hint: string}[] = [
+  {task: 'queries', label: 'Proponer las búsquedas', hint: 'Lo que tu audiencia escribiría en cada buscador.'},
+  {task: 'relevance', label: 'Filtrar lo que le sirve', hint: 'Lee los captions y separa lo que le sirve a tu audiencia.'},
+  {task: 'analysis', label: 'Analizar los mejores', hint: 'Gancho, estructura y recursos de cada video, con sus fotogramas.'},
+  {task: 'report', label: 'Escribir el informe', hint: 'Lo que funciona, los huecos y las ideas.'},
+];
+const NONE = '_'; // '' in a Select: the default
+function SettingsDialog({onClose}: {onClose: () => void}) {
+  const [view, setView] = useState<ResearchSettingsView | null>(null);
+  const [draft, setDraft] = useState<ResearchSettings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    researchApi.settings().then(
+      (v) => (setView(v), setDraft(v.settings)),
+      (e: Error) => setErr(e.message),
+    );
+  }, []);
+  const effortsOf = (model: string) => view?.models.find((m) => m.id === model)?.efforts ?? [];
+  const set = (task: ResearchTask, v: {model?: string; effort?: string}) =>
+    setDraft((d) => {
+      if (!d) return d;
+      const model = v.model ?? d[task].model;
+      const effort = v.effort ?? (effortsOf(model).includes(d[task].effort) ? d[task].effort : '');
+      return {...d, [task]: {model, effort}};
+    });
+  const changed = !!view && !!draft && RESEARCH_TASKS.some((t) => draft[t].model !== view.settings[t].model || draft[t].effort !== view.settings[t].effort);
+  const save = async () => {
+    if (!draft) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await researchApi.saveSettings(draft);
+      onClose();
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Configuración de la investigación</DialogTitle>
+          <DialogDescription>El modelo y el esfuerzo del agente para cada tarea, en todas las investigaciones de este proyecto.</DialogDescription>
+        </DialogHeader>
+        {!view || !draft ? (
+          err ? <p className="text-sm text-destructive">{err}</p> : <Loader2 className="mx-auto size-5 animate-spin text-muted-foreground" />
+        ) : (
+          <div className="flex flex-col gap-4">
+            {TASKS.map(({task, label, hint}) => {
+              const efforts = effortsOf(draft[task].model);
+              return (
+                <div key={task} className="flex flex-col gap-2">
+                  <div>
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground">{hint}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select value={draft[task].model || NONE} onValueChange={(m) => set(task, {model: m === NONE ? '' : m})}>
+                      <SelectTrigger className="w-full" aria-label={`Modelo: ${label}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {view.models.map((m) => (
+                          <SelectItem key={m.id || NONE} value={m.id || NONE}>
+                            {m.id ? m.label : view.defaults[task]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={draft[task].effort || NONE} onValueChange={(e) => set(task, {effort: e === NONE ? '' : e})} disabled={!efforts.length}>
+                      <SelectTrigger className="w-full" aria-label={`Esfuerzo: ${label}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>Esfuerzo predeterminado</SelectItem>
+                        {efforts.map((e) => (
+                          <SelectItem key={e} value={e}>
+                            Esfuerzo {(EFFORT_LABELS[e] ?? e).toLowerCase()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              );
+            })}
+            <p className="text-xs text-muted-foreground">Con {view.agent}, el agente predeterminado de tus ajustes. Lo que ya está trabajando sigue con lo de antes.</p>
+            {err && <p className="text-sm text-destructive">{err}</p>}
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="ghost" disabled={busy} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button disabled={busy || !changed} onClick={() => void save()}>
+            {busy && <Loader2 className="animate-spin" />} Guardar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -310,6 +425,7 @@ function ResearchView({id, videoKey}: {id: string; videoKey: string | null}) {
   const [st, setSt] = useState<ResearchStatus | null>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
   const load = useCallback(() => {
     researchApi.detail(id).then(setR, (e: Error) => setErr(e.message));
     researchApi.status().then(setSt, () => {});
@@ -359,8 +475,8 @@ function ResearchView({id, videoKey}: {id: string; videoKey: string | null}) {
     act('search', async () => {
       const e = await researchApi.estimate(r.id);
       const ok = await confirm({
-        title: r.searched ? '¿Buscar otra vez?' : '¿Buscar ahora?',
-        description: `${r.queries.length} búsqueda${r.queries.length === 1 ? '' : 's'} en ${r.options.platforms.map((p) => PLATFORM[p].label).join(', ')}. ${e.lines.map((l) => `${PLATFORM[l.platform].label}: ${l.text}.`).join(' ')} Después el agente lee los captions con tu suscripción y separa lo que le sirve a tu audiencia.${r.searched ? ' Los videos ya encontrados conservan su análisis.' : ''}`,
+        title: '¿Buscar ahora?',
+        description: `${r.queries.length} búsqueda${r.queries.length === 1 ? '' : 's'} en ${r.options.platforms.map((p) => PLATFORM[p].label).join(', ')}. ${e.lines.map((l) => `${PLATFORM[l.platform].label}: ${l.text}.`).join(' ')} Después el agente lee los captions con tu suscripción y separa lo que le sirve a tu audiencia.`,
         action: 'Buscar',
       });
       if (ok) await researchApi.search(r.id);
@@ -371,8 +487,9 @@ function ResearchView({id, videoKey}: {id: string; videoKey: string | null}) {
       const yt = pending.filter((v) => v.platform === 'youtube').length;
       if (yt && !st.youtubeDownloader) throw new Error('Para analizar YouTube Shorts falta yt-dlp: instálalo en Ajustes → Requisitos → Descarga de YouTube.');
       const ok = await confirm({
-        title: `¿Analizar los ${pending.length} mejores videos sin analizar?`,
-        description: `Se bajan, se transcriben en este equipo y el agente analiza cada uno con tu suscripción (gancho, estructura, recursos visuales, CTA); al final escribe el informe. No gasta saldo de ScrapeCreators ni de Apify.`,
+        title: pending.length === 1 ? '¿Analizar el mejor video sin analizar?' : `¿Analizar los ${pending.length} mejores videos sin analizar?`,
+        description: 'Los de mejor puntaje que le sirven a tu audiencia y aún no tienen análisis.',
+        body: <AnalyseSteps r={r} videos={pending} />,
         action: 'Analizar',
       });
       if (ok) await researchApi.analyse(r.id, {top});
@@ -400,9 +517,11 @@ function ResearchView({id, videoKey}: {id: string; videoKey: string | null}) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant={r.searched ? 'outline' : 'default'} disabled={working || !!busy || !r.queries.length} onClick={() => void search()}>
-              {busy === 'search' ? <Loader2 className="animate-spin" /> : r.searched ? <RefreshCw /> : <Search />} {r.searched ? 'Buscar otra vez' : 'Buscar'}
-            </Button>
+            {!r.searched && (
+              <Button disabled={working || !!busy || !r.queries.length} onClick={() => void search()}>
+                {busy === 'search' ? <Loader2 className="animate-spin" /> : <Search />} Buscar
+              </Button>
+            )}
             {r.counts.videos > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -419,6 +538,11 @@ function ResearchView({id, videoKey}: {id: string; videoKey: string | null}) {
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
+            )}
+            {r.searched && (
+              <Button variant="outline" disabled={working} onClick={() => setDuplicating(true)} title="Una nueva con este tema, sus búsquedas y opciones, para cambiar lo que quieras">
+                <Copy /> Duplicar
+              </Button>
             )}
             <Button variant="ghost" size="icon" disabled={working} onClick={() => void remove()} aria-label="Borrar la investigación" title="Borrar la investigación">
               <Trash2 />
@@ -463,7 +587,45 @@ function ResearchView({id, videoKey}: {id: string; videoKey: string | null}) {
       <Analysed r={r} />
       {r.counts.videos > 0 && <Ranking r={r} />}
       <VideoDialog id={r.id} videoKey={videoKey} st={st} onClose={() => go(r.id)} />
+      {duplicating && <DuplicateDialog r={r} st={st} onClose={() => setDuplicating(false)} />}
     </main>
+  );
+}
+
+// What Analizar los mejores does, for its confirmation: the videos it takes, its three steps and what it spends.
+function AnalyseSteps({r, videos}: {r: ResearchDetail; videos: ResearchVideo[]}) {
+  const steps: [typeof Download, string, string][] = [
+    [Download, 'Los baja y los transcribe', 'En este equipo: el video, sus fotogramas y lo que dice.'],
+    [Sparkles, 'El agente analiza cada uno', 'Gancho, estructura con sus tiempos, recursos visuales, CTA y qué tomar para tus videos.'],
+    [FileText, 'Reescribe el informe', 'Ángulos y ganchos que funcionan, formato, huecos de tu audiencia e ideas.'],
+  ];
+  return (
+    <div className="flex flex-col gap-4 text-sm">
+      <div className="flex flex-wrap gap-1.5">
+        {videos.map((v) => (
+          <span key={v.key} className="relative" title={`@${v.author} · puntaje ${v.score}`}>
+            {v.thumb ? <img src={researchApi.file(r.id, v.key, 'thumb.jpg')} alt="" className="h-14 w-10 rounded object-cover" /> : <span className="block h-14 w-10 rounded bg-muted" />}
+            <span className="absolute right-0.5 bottom-0.5 rounded bg-black/70 px-1 text-[10px] font-medium text-white tabular-nums">{v.score}</span>
+          </span>
+        ))}
+      </div>
+      <ol className="flex flex-col gap-3">
+        {steps.map(([Icon, title, text], i) => (
+          <li key={title} className="flex gap-3">
+            <span className="grid size-7 flex-none place-items-center rounded-full border bg-muted/40 text-muted-foreground">
+              <Icon className="size-3.5" />
+            </span>
+            <span className="flex flex-col">
+              <span className="font-medium">
+                {i + 1}. {title}
+              </span>
+              <span className="text-muted-foreground">{text}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">Usa la suscripción de tu agente. No gasta saldo de ScrapeCreators ni de Apify.</p>
+    </div>
   );
 }
 
@@ -506,80 +668,24 @@ function JobLine({job, onStop}: {job: ResearchJob; onStop: () => Promise<unknown
   );
 }
 
-// The searches (chips) and options, saved as he changes them; and how each platform went the last time.
+type Fields = {queries: string[]; options: ResearchOptions};
+type FieldsChange = {queries?: string[]; options?: Partial<ResearchOptions>};
+
+// The searches (chips) and options: before its first search, saved as he changes them. Once searched, a research
+// doesn't change: they're shown as they were, with how each platform went, and Duplicar makes a new one to change.
 function Queries({r, st, disabled, onSaved}: {r: Research; st: ResearchStatus; disabled: boolean; onSaved: () => void}) {
-  const [adding, setAdding] = useState('');
   const [err, setErr] = useState('');
-  const save = (input: {queries?: string[]; options?: Partial<ResearchOptions>}) => researchApi.edit(r.id, input).then(onSaved, (e: Error) => setErr(e.message));
-  const add = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!adding.trim()) return;
-    void save({queries: [...r.queries, adding.trim()]}).then(() => setAdding(''));
-  };
-  const proposing = r.job?.stage === 'queries';
+  const save = (input: FieldsChange) => researchApi.edit(r.id, input).then(onSaved, (e: Error) => setErr(e.message));
   return (
     <Card className="gap-4">
       <CardHeader>
         <CardTitle className="text-base">Búsquedas</CardTitle>
-        <CardDescription>Lo que tu audiencia escribiría en el buscador de cada app. Cámbialas antes de buscar: cada una se busca en cada plataforma.</CardDescription>
+        <CardDescription>
+          {r.searched ? 'Lo que tu audiencia escribiría en el buscador de cada app; cada una se buscó en cada plataforma. Para cambiarlas, duplica la investigación.' : 'Lo que tu audiencia escribiría en el buscador de cada app. Cámbialas antes de buscar: cada una se busca en cada plataforma.'}
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {proposing && (
-            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> El agente está proponiendo las búsquedas…
-            </span>
-          )}
-          {!proposing &&
-            r.queries.map((q) => (
-              <span key={q} className="inline-flex items-center gap-1 rounded-full border bg-muted/40 py-0.5 pr-1 pl-2.5 text-sm">
-                {q}
-                <button type="button" disabled={disabled || r.queries.length === 1} onClick={() => void save({queries: r.queries.filter((x) => x !== q)})} className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40" aria-label={`Quitar «${q}»`}>
-                  <X className="size-3.5" />
-                </button>
-              </span>
-            ))}
-          {!proposing && r.queries.length < 8 && (
-            <form onSubmit={add} className="flex items-center gap-1">
-              <Input value={adding} onChange={(e) => setAdding(e.target.value)} disabled={disabled} maxLength={80} placeholder="Otra búsqueda…" className="h-7 w-48 text-sm" />
-              <Button type="submit" size="icon-sm" variant="ghost" disabled={disabled || !adding.trim()} aria-label="Añadir búsqueda">
-                <Plus />
-              </Button>
-            </form>
-          )}
-        </div>
-        <div className="flex flex-wrap items-end gap-4">
-          <PlatformToggles value={r.options.platforms} onChange={(platforms) => platforms.length && void save({options: {platforms}})} ready={st.ready} disabled={disabled} />
-          <div className="flex flex-col gap-2">
-            <Label>Antigüedad</Label>
-            <FilterSelect value={String(r.options.sinceDays)} onChange={(v) => void save({options: {sinceDays: Number(v)}})} label="Antigüedad" options={RESEARCH_SINCE.map((d) => [String(d), SINCE_LABEL(d)])} />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label>Duración</Label>
-            <FilterSelect value={String(r.options.maxSeconds)} onChange={(v) => void save({options: {maxSeconds: Number(v)}})} label="Duración" options={MAX_SECONDS} />
-          </div>
-          {r.options.platforms.includes('instagram') && (
-            <div className="flex flex-col gap-2">
-              <Label>Reels de Instagram por búsqueda</Label>
-              <FilterSelect value={String(r.options.perQuery)} onChange={(v) => void save({options: {perQuery: Number(v)}})} label="Reels" options={['15', '30', '50', '100'].map((x) => [x, `${x} reels`])} />
-            </div>
-          )}
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="research-country" title="Desde dónde se busca en TikTok y YouTube (código de 2 letras)">
-              País
-            </Label>
-            <Input
-              id="research-country"
-              key={r.options.country ?? ''}
-              defaultValue={r.options.country ?? ''}
-              disabled={disabled}
-              maxLength={2}
-              placeholder="CO"
-              className="h-8 w-16 uppercase"
-              onBlur={(e) => e.target.value.trim().toUpperCase() !== (r.options.country ?? '') && void save({options: {country: e.target.value.trim() || null}})}
-            />
-          </div>
-        </div>
+        {r.searched ? <SearchSummary r={r} /> : <SearchFields value={r} onChange={save} ready={st.ready} disabled={disabled} proposing={r.job?.stage === 'queries'} />}
         {r.runs.length > 0 && (
           <div className="flex flex-wrap gap-x-5 gap-y-1 border-t pt-3 text-xs text-muted-foreground">
             {r.runs.map((run) => (
@@ -593,6 +699,150 @@ function Queries({r, st, disabled, onSaved}: {r: Research; st: ResearchStatus; d
         {err && <p className="text-sm text-destructive">{err}</p>}
       </CardContent>
     </Card>
+  );
+}
+
+// A searched research's searches and options, as they were.
+function SearchSummary({r}: {r: Research}) {
+  const o = r.options;
+  const opts = [SINCE_LABEL(o.sinceDays), MAX_SECONDS.find(([v]) => Number(v) === o.maxSeconds)?.[1] ?? `Hasta ${o.maxSeconds} s`, o.platforms.includes('instagram') ? `${o.perQuery} reels de Instagram por búsqueda` : '', o.country ? `País ${o.country}` : ''].filter(Boolean);
+  return (
+    <>
+      <div className="flex flex-wrap gap-1.5">
+        {r.queries.map((q) => (
+          <span key={q} className="rounded-full border bg-muted/40 px-2.5 py-0.5 text-sm">
+            {q}
+          </span>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+        {o.platforms.map((p) => (
+          <PlatformBadge key={p} p={p} />
+        ))}
+        <span className="ml-1">{opts.join(' · ')}</span>
+      </div>
+    </>
+  );
+}
+
+// The searches and options as a form: the research's own before its first search, or a copy's in Duplicar.
+function SearchFields({value, onChange, ready, disabled, proposing}: {value: Fields; onChange: (v: FieldsChange) => unknown; ready: Record<ResearchPlatform, boolean>; disabled?: boolean; proposing?: boolean}) {
+  const [adding, setAdding] = useState('');
+  const {queries, options: o} = value;
+  const add = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = adding.trim();
+    if (!q || queries.includes(q)) return;
+    void Promise.resolve(onChange({queries: [...queries, q]})).then(() => setAdding(''));
+  };
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {proposing && (
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> El agente está proponiendo las búsquedas…
+          </span>
+        )}
+        {!proposing &&
+          queries.map((q) => (
+            <span key={q} className="inline-flex items-center gap-1 rounded-full border bg-muted/40 py-0.5 pr-1 pl-2.5 text-sm">
+              {q}
+              <button type="button" disabled={disabled || queries.length === 1} onClick={() => void onChange({queries: queries.filter((x) => x !== q)})} className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40" aria-label={`Quitar «${q}»`}>
+                <X className="size-3.5" />
+              </button>
+            </span>
+          ))}
+        {!proposing && queries.length < 8 && (
+          <form onSubmit={add} className="flex items-center gap-1">
+            <Input value={adding} onChange={(e) => setAdding(e.target.value)} disabled={disabled} maxLength={80} placeholder="Otra búsqueda…" className="h-7 w-48 text-sm" />
+            <Button type="submit" size="icon-sm" variant="ghost" disabled={disabled || !adding.trim()} aria-label="Añadir búsqueda">
+              <Plus />
+            </Button>
+          </form>
+        )}
+      </div>
+      <div className="flex flex-wrap items-end gap-4">
+        <PlatformToggles value={o.platforms} onChange={(platforms) => platforms.length && void onChange({options: {platforms}})} ready={ready} disabled={disabled} />
+        <div className="flex flex-col gap-2">
+          <Label>Antigüedad</Label>
+          <FilterSelect value={String(o.sinceDays)} onChange={(v) => void onChange({options: {sinceDays: Number(v)}})} label="Antigüedad" options={RESEARCH_SINCE.map((d) => [String(d), SINCE_LABEL(d)])} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label>Duración</Label>
+          <FilterSelect value={String(o.maxSeconds)} onChange={(v) => void onChange({options: {maxSeconds: Number(v)}})} label="Duración" options={MAX_SECONDS} />
+        </div>
+        {o.platforms.includes('instagram') && (
+          <div className="flex flex-col gap-2">
+            <Label>Reels de Instagram por búsqueda</Label>
+            <FilterSelect value={String(o.perQuery)} onChange={(v) => void onChange({options: {perQuery: Number(v)}})} label="Reels" options={['15', '30', '50', '100'].map((x) => [x, `${x} reels`])} />
+          </div>
+        )}
+        <div className="flex flex-col gap-2">
+          <Label title="Desde dónde se busca en TikTok y YouTube (código de 2 letras)">País</Label>
+          <Input
+            key={o.country ?? ''}
+            defaultValue={o.country ?? ''}
+            disabled={disabled}
+            maxLength={2}
+            placeholder="CO"
+            aria-label="País"
+            className="h-8 w-16 uppercase"
+            onBlur={(e) => e.target.value.trim().toUpperCase() !== (o.country ?? '') && void onChange({options: {country: e.target.value.trim().toUpperCase() || null}})}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Duplicar: a new research with this one's topic, searches and options, changed as he likes; it opens unsearched.
+function DuplicateDialog({r, st, onClose}: {r: Research; st: ResearchStatus; onClose: () => void}) {
+  const [topic, setTopic] = useState(r.topic);
+  const [f, setF] = useState<Fields>({queries: r.queries, options: r.options});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const change = (v: FieldsChange) => setF((x) => ({queries: v.queries ?? x.queries, options: {...x.options, ...v.options}}));
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr('');
+    try {
+      const n = await researchApi.create(topic, f.options, f.queries);
+      onClose();
+      go(n.id);
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Duplicar investigación</DialogTitle>
+          <DialogDescription>Una nueva con este tema, sus búsquedas y opciones: cambia lo que quieras. Esta queda como está; la nueva empieza sin buscar.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={create} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="research-copy-topic">Tema</Label>
+            <Input id="research-copy-topic" value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={200} />
+          </div>
+          <div className="flex flex-col gap-4">
+            <Label>Búsquedas</Label>
+            <SearchFields value={f} onChange={change} ready={st.ready} disabled={busy} />
+          </div>
+          {err && <p className="text-sm text-destructive">{err}</p>}
+          <DialogFooter>
+            <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={busy || !topic.trim() || !f.queries.length || !f.options.platforms.length}>
+              {busy ? <Loader2 className="animate-spin" /> : <Copy />} Crear la copia
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

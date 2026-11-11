@@ -53,10 +53,12 @@ globalThis.fetch = (async (u: string | URL) => {
 }) as typeof fetch;
 
 const asked: string[] = [];
+const askedWith: {model?: string; use?: string; effort?: string}[] = [];
 async function fakeAgent() {
   const {agentCli} = await import('./agent.ts');
-  agentCli.ask = async (prompt: string) => {
+  agentCli.ask = async (prompt: string, _system: string, o?: {model?: string; use?: string; effort?: string}) => {
     asked.push(prompt);
+    askedWith.push({model: o?.model, use: o?.use, effort: o?.effort});
     if (prompt.includes('Propose 4 to 6 searches')) return '```json\n{"queries": ["cuota inicial", "subsidio vivienda", "cuota inicial"], "country": "co"}\n```';
     if (prompt.includes('useful to study')) {
       const keys = [...prompt.matchAll(/^((?:tiktok|youtube)-\S+) \|/gm)].map((m) => m[1]);
@@ -122,6 +124,9 @@ test('a research: searches from the agent, search, filters, report; in its own p
   assert.equal(d.options.country, 'CO');
   assert.match(asked[0], /ahorrar la cuota inicial/); // it knows the audience
 
+  // Before its first search, its searches change.
+  r.edit(undefined, d.id, {queries: ['cuota inicial', 'subsidio vivienda'], options: {country: 'CO'}});
+
   const est = await r.estimate(undefined, d.id);
   assert.deepEqual(est.lines.map((l) => l.platform), ['tiktok', 'youtube', 'instagram']);
   assert.match(est.lines[0].text, /2 créditos/);
@@ -150,17 +155,36 @@ test('a research: searches from the agent, search, filters, report; in its own p
   assert.equal(reel.videoUrl, 'https://v.test/v.mp4');
   assert.equal(reel.platform, 'tiktok');
 
-  // He corrects the agent: it enters the ranking. Searching again keeps his word.
+  // Once searched it doesn't change: a copy with its searches and options does, and starts unsearched.
+  assert.throws(() => r.edit(undefined, d.id, {queries: ['otra']}), /duplícala/);
+  const copy = r.create(undefined, {topic: d.topic, ...d.options, queries: [...d.queries, 'cesantías vivienda']});
+  const c = r.detail(undefined, copy.id);
+  assert.deepEqual(c.queries, ['cuota inicial', 'subsidio vivienda', 'cesantías vivienda']);
+  assert.deepEqual(c.options, d.options);
+  assert.equal(c.searched, null);
+  assert.equal(c.videos.length, 0);
+  r.remove(undefined, copy.id);
+
+  // Nor is it searched again.
+  assert.throws(() => r.search(undefined, d.id), /duplícala/);
+
+  // He corrects the agent: it enters the ranking.
   r.setRelevant(undefined, d.id, 'tiktok-1005', true);
-  r.search(undefined, d.id);
-  d = await idle(r, undefined, d.id);
+  d = r.detail(undefined, d.id);
   assert.equal(d.videos.find((v) => v.key === 'tiktok-1005')!.relevant, true);
 
   // Nothing to analyse without a transcriber; the report from the metrics.
   await assert.rejects(r.analyse(undefined, d.id, {top: 0}), /de 1 a/);
   await assert.rejects(r.analyse(undefined, d.id, {top: 2}), /falta la transcripción/);
+  // Configuración: the report on the model and effort chosen; the filter, untouched, on the quick default.
+  assert.deepEqual(askedWith[asked.findIndex((p) => p.includes('useful to study'))], {model: 'fast', use: undefined, effort: undefined});
+  assert.throws(() => r.setSettings(undefined, {report: {model: 'no-existe'}}), /no tiene ese modelo/);
+  const conf = r.setSettings(undefined, {report: {model: 'opus', effort: 'high'}});
+  assert.deepEqual(conf.settings.report, {model: 'opus', effort: 'high'});
+  assert.deepEqual(conf.settings.queries, {model: '', effort: ''});
   r.report(undefined, d.id);
   d = await idle(r, undefined, d.id);
+  assert.deepEqual(askedWith.at(-1), {model: 'smart', use: 'opus', effort: 'high'});
   assert.match(d.report!.text, /\[tiktok-1001\]/);
   assert.match(asked.at(-1)!, /Todavía no se analizó ninguno/);
 

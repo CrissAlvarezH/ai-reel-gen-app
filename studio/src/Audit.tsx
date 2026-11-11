@@ -346,8 +346,8 @@ function ReportCard({report: r, act, thumb = null, posted, sendable, exists, inV
   const confirm = useConfirm();
   const {addAudit} = useStudio();
   const working = r.status === 'running' || r.status === 'queued';
-  // Folded on the Auditoría page; open on the video's own.
-  const [open, setOpen] = useState(inVideo);
+  // Folded until he opens it, on the Auditoría page and on the video's own.
+  const [open, setOpen] = useState(false);
   const errors = r.findings.filter((f) => f.verdict === 'error');
   const matices = r.findings.filter((f) => f.verdict === 'matiz');
   const ok = r.findings.filter((f) => f.verdict === 'ok');

@@ -27,7 +27,8 @@ profile (`projects/<id>/config/profile.json`).
 - `projects/<id>/research/` holds that channel's Investigaciones (Reel Studio → Investigación): a topic, the searches
   its audience would type, the TikTok, YouTube Shorts and Instagram videos they found (metrics, whether they serve the
   audience, a 0–100 score; the best ones analysed) and the report. Change it with `tools/research.py` (`list`, `show`,
-  `new`, `cost`, `search`, `analyse`, `report`…; needs the studio running), never by hand. `search` spends from the
+  `new`, `cost`, `search`, `analyse`, `report`…; needs the studio running), never by hand. Once searched, a research
+  doesn't change nor search again: `new --from <id>` makes a copy with what he wants different. `search` spends from the
   creator's ScrapeCreators and Apify balance (say what `cost` says and wait for their yes); `analyse` uses their
   subscription: ask before more than 5.
 - `projects/<id>/account/<user>/` holds that channel's own reels and their numbers (Reel Studio → Mi cuenta).

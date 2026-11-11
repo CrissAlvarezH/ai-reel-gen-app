@@ -457,7 +457,7 @@ function Player({reel, comments, onComment, seekRef}: PlayerProps) {
             {revealBusy ? <Loader2 className="animate-spin" /> : <Download />}
           </Button>
           <SocialPreview reel={reel} src={videoSrc} live={live} version={live ? 'En vivo · código actual' : current?.name ?? 'Video'} initialTime={t} onOpen={() => { video.current?.pause(); preview.current?.pause(); }} />
-          <PublishButton slug={reel.slug} version={current?.name ?? null} data={pubs.data} onDone={pubs.load} />
+          <PublishButton slug={reel.slug} version={current?.name ?? null} data={pubs.data} posted={reel.instagram} onDone={pubs.load} />
           </div>
         )}
         {revealError && <p role="alert" className="text-sm text-destructive">{revealError}</p>}
