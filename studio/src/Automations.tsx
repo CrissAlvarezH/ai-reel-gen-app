@@ -252,17 +252,42 @@ export function Automations() {
           </section>
         );
       })}
-      {!!view?.runs.length && (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium">Historial</h2>
-          {view.runs.map((r) => (
-            <RunRow key={r.id} run={r} />
-          ))}
-        </section>
-      )}
+      {!!view?.runs.length && <RunHistory runs={view.runs} />}
       {memoryOf && view?.automations.some((a) => a.id === memoryOf) && <MemoryDialog automation={view.automations.find((a) => a.id === memoryOf)!} onClose={() => setMemoryOf(null)} />}
       {editing && <AutomationForm automation={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={setView} />}
     </main>
+  );
+}
+
+// Historial: the runs, newest first as the view gives them, 10 at a time.
+const RUNS_PAGE = 10;
+function RunHistory({runs}: {runs: AutomationsView['runs']}) {
+  const [page, setPage] = useState(0);
+  const last = Math.max(0, Math.ceil(runs.length / RUNS_PAGE) - 1);
+  const at = Math.min(page, last); // fewer runs than before: the last page there is
+  const shown = runs.slice(at * RUNS_PAGE, (at + 1) * RUNS_PAGE);
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-sm font-medium">Historial</h2>
+      {shown.map((r) => (
+        <RunRow key={r.id} run={r} />
+      ))}
+      {runs.length > RUNS_PAGE && (
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="tabular-nums">
+            {at * RUNS_PAGE + 1}–{at * RUNS_PAGE + shown.length} de {runs.length}
+          </span>
+          <span className="flex gap-1.5">
+            <Button type="button" variant="outline" size="xs" disabled={at === 0} onClick={() => setPage(at - 1)}>
+              Anterior
+            </Button>
+            <Button type="button" variant="outline" size="xs" disabled={at >= last} onClick={() => setPage(at + 1)}>
+              Siguiente
+            </Button>
+          </span>
+        </div>
+      )}
+    </section>
   );
 }
 
