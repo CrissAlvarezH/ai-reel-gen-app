@@ -2,14 +2,14 @@
 // each on the day and hour it goes out (or went out), with its title and whether it's out yet. A video opens its
 // details (cover, caption, state…) with a link to its page, where it can be moved or canceled; a day's number opens
 // that day's list. The scheduled ones go out from the account, with this app closed.
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clapperboard, ExternalLink, Loader2, TriangleAlert} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from '@/components/ui/dialog';
 import {cn} from '@/lib/utils';
 import EmptyState from '@/components/common/EmptyState';
-import {api, type CalendarPublication} from './api';
+import {api, useLive, type CalendarPublication} from './api';
 import {MOVING, STATUS} from './Publish';
 import {InstagramGlyph} from './Sidebar';
 import {useStudio} from './studio';
@@ -32,10 +32,14 @@ function weeksOf(year: number, month: number) {
   return days;
 }
 
+// The calendar last read in this window, shown at once when the page opens again while it's read anew. A project
+// switch reloads the window, so it's always this project's.
+let last: CalendarPublication[] | null = null;
+
 export function Scheduled() {
   const {uiRef} = useStudio();
   uiRef.current = {page: 'scheduled'};
-  const [items, setItems] = useState<CalendarPublication[] | null>(null);
+  const [items, setItems] = useState<CalendarPublication[] | null>(last);
   const [shown, setShown] = useState<CalendarPublication | null>(null); // its details' dialog
   const [day, setDay] = useState<Date | null>(null); // that day's list
   const [err, setErr] = useState('');
@@ -46,12 +50,20 @@ export function Scheduled() {
   const load = useCallback(
     () =>
       api.calendar().then(
-        (x) => (setItems(x), setErr('')),
+        (x) => ((last = x), setItems(x), setErr('')),
         (e: Error) => setErr(e.message),
       ),
     [],
   );
   useEffect(() => void load(), [load]);
+  // The server answers with the files and asks the account in the background: what it learns rewrites a video's
+  // publicaciones.json, and the watcher says so. Many changes at once (a render) are read once.
+  const soon = useRef<number | undefined>(undefined);
+  useLive(() => {
+    clearTimeout(soon.current);
+    soon.current = window.setTimeout(load, 300);
+  });
+  useEffect(() => () => clearTimeout(soon.current), []);
   // Fresh while one is on its way (seconds) or waiting for its hour (a minute).
   const moving = items?.some((p) => MOVING.has(p.status));
   const waiting = items?.some((p) => p.status === 'scheduled');
