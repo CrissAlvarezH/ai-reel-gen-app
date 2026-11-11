@@ -139,7 +139,8 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
           <span className="flex-none text-sm text-muted-foreground">Versión</span>
           <Select value={sel} onValueChange={setSel}>
             <SelectTrigger className="min-w-48 flex-1 sm:max-w-80" aria-label="Versión del carrusel">
-              <SelectValue />
+              {/* Just which one: the list has the details. */}
+              <SelectValue>{draft ? `Borrador · ${c.slides.length} ${c.slides.length === 1 ? 'lámina' : 'láminas'}` : sel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={DRAFT}>
@@ -474,9 +475,6 @@ function Preview({slides, caption, start}: {slides: Shown[]; caption: string; st
           {s && (
             <div className="relative overflow-hidden rounded-md bg-muted" style={{aspectRatio: '4 / 5'}}>
               {s.url ? <img src={s.url} alt={`Lámina ${k + 1}: ${s.title || s.id}`} className="size-full object-cover" /> : <NoImage slide={s} />}
-              <span className="absolute top-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-xs text-white tabular-nums">
-                {k + 1}/{n}
-              </span>
               {k > 0 && (
                 <button onClick={() => setK(k - 1)} aria-label="Anterior" className="absolute top-1/2 left-2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-white/85 text-black">
                   <ChevronLeft className="size-4" />
@@ -489,10 +487,16 @@ function Preview({slides, caption, start}: {slides: Shown[]; caption: string; st
               )}
             </div>
           )}
-          <div className="flex justify-center gap-1" aria-hidden>
-            {slides.map((x, j) => (
-              <span key={x.id} className={cn('size-1.5 rounded-full', j === k ? 'bg-sky-500' : 'bg-muted-foreground/40')} />
-            ))}
+          {/* Under the picture, where it can't hide the slide's own counter. */}
+          <div className="flex items-center justify-center gap-2">
+            <span className="flex gap-1" aria-hidden>
+              {slides.map((x, j) => (
+                <span key={x.id} className={cn('size-1.5 rounded-full', j === k ? 'bg-sky-500' : 'bg-muted-foreground/40')} />
+              ))}
+            </span>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {k + 1}/{n}
+            </span>
           </div>
           {caption.trim() ? (
             <p className={cn('text-sm whitespace-pre-line', !more && 'line-clamp-2')}>
