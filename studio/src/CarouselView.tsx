@@ -225,12 +225,8 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
                     </Badge>
                   )}
                 </div>
-                <Button variant="secondary" size="icon" className="absolute top-1/2 left-2 -translate-y-1/2 rounded-full opacity-90" onClick={() => go(i - 1)} aria-label="Lámina anterior" title="Anterior (←)" disabled={shown.length < 2}>
-                  <ChevronLeft />
-                </Button>
-                <Button variant="secondary" size="icon" className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full opacity-90" onClick={() => go(i + 1)} aria-label="Lámina siguiente" title="Siguiente (→)" disabled={shown.length < 2}>
-                  <ChevronRight />
-                </Button>
+                <SlideArrow direction="previous" onClick={() => go(i - 1)} disabled={shown.length < 2} />
+                <SlideArrow direction="next" onClick={() => go(i + 1)} disabled={shown.length < 2} />
               </div>
               <p className="text-center text-sm text-muted-foreground tabular-nums" aria-live="polite">
                 Lámina {i + 1} de {shown.length}
@@ -442,6 +438,27 @@ function SlideComment({slug, slide, n, draft, onComment}: {slug: string; slide: 
   );
 }
 
+function SlideArrow({direction, onClick, disabled}: {direction: 'previous' | 'next'; onClick: () => void; disabled?: boolean}) {
+  const previous = direction === 'previous';
+  const Icon = previous ? ChevronLeft : ChevronRight;
+  return (
+    <button
+      type="button"
+      aria-label={previous ? 'Lámina anterior' : 'Lámina siguiente'}
+      title={previous ? 'Anterior (←)' : 'Siguiente (→)'}
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'absolute top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-border bg-background text-foreground shadow-sm',
+        'enabled:cursor-pointer enabled:hover:bg-muted enabled:active:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50',
+        previous ? 'left-2' : 'right-2',
+      )}
+    >
+      <Icon className="size-4" aria-hidden />
+    </button>
+  );
+}
+
 // The slides in order as they'd show on Instagram: one at a time, with the dots and the caption under them.
 function Preview({slides, caption, start}: {slides: Shown[]; caption: string; start: number}) {
   const [open, setOpen] = useState(false);
@@ -475,16 +492,8 @@ function Preview({slides, caption, start}: {slides: Shown[]; caption: string; st
           {s && (
             <div className="relative overflow-hidden rounded-md bg-muted" style={{aspectRatio: '4 / 5'}}>
               {s.url ? <img src={s.url} alt={`Lámina ${k + 1}: ${s.title || s.id}`} className="size-full object-cover" /> : <NoImage slide={s} />}
-              {k > 0 && (
-                <button onClick={() => setK(k - 1)} aria-label="Anterior" className="absolute top-1/2 left-2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-white/85 text-black">
-                  <ChevronLeft className="size-4" />
-                </button>
-              )}
-              {k < n - 1 && (
-                <button onClick={() => setK(k + 1)} aria-label="Siguiente" className="absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-white/85 text-black">
-                  <ChevronRight className="size-4" />
-                </button>
-              )}
+              {k > 0 && <SlideArrow direction="previous" onClick={() => setK(k - 1)} />}
+              {k < n - 1 && <SlideArrow direction="next" onClick={() => setK(k + 1)} />}
             </div>
           )}
           {/* Under the picture, where it can't hide the slide's own counter. */}
