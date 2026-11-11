@@ -3,7 +3,7 @@
 // from the account at its time, with the app closed; until then it can be moved or canceled.
 import {useCallback, useEffect, useState} from 'react';
 import {CalendarClock, CircleCheck, ExternalLink, Loader2, Send} from 'lucide-react';
-import {api, type PublicationStatus, type VideoPublication, type VideoPublications} from './api';
+import {api, type PostedReel, type PublicationStatus, type VideoPublication, type VideoPublications} from './api';
 import {useConfirm} from './confirm';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -90,7 +90,8 @@ export function usePublications(slug: string) {
   return {data, load};
 }
 
-export function PublishButton({slug, version, data, onDone}: {slug: string; version: string | null; data: VideoPublications | null; onDone: () => void}) {
+// posted: the reel Mi cuenta found it posted as, when it was posted some other way (or before this button existed).
+export function PublishButton({slug, version, data, posted, onDone}: {slug: string; version: string | null; data: VideoPublications | null; posted: PostedReel | null; onDone: () => void}) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'now' | 'later'>('now');
   const [when, setWhen] = useState(() => whenOf(nextHour()));
@@ -101,6 +102,9 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
   // This version's latest publication that went (or is going) somewhere: the button wears its state, and the form
   // warns before sending the same video twice.
   const last = version ? data?.items.find((p) => p.version === version && p.status !== 'error' && p.status !== 'canceled') : undefined;
+  // Out on Instagram without a publication from here: Mi cuenta saw it.
+  const outside = !last && version ? posted : null;
+  const postedOn = outside?.posted ? new Date(outside.posted).toLocaleDateString('es', {day: 'numeric', month: 'long'}) : null;
 
   const submit = async () => {
     if (!version) return;
@@ -128,8 +132,8 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
       <Button
         variant="outline"
         disabled={!version}
-        className={cn('shrink-0', last?.status === 'published' && 'text-emerald-600 dark:text-emerald-400', last?.status === 'scheduled' && 'text-violet-600 dark:text-violet-400')}
-        title={!version ? 'Renderiza el video para publicarlo' : last ? `${STATUS[last.status].label}: abre para ver o publicar otra vez` : 'Publicar esta versión en Instagram, ahora o programada'}
+        className={cn('shrink-0', (last?.status === 'published' || outside) && 'text-emerald-600 dark:text-emerald-400', last?.status === 'scheduled' && 'text-violet-600 dark:text-violet-400')}
+        title={!version ? 'Renderiza el video para publicarlo' : last ? `${STATUS[last.status].label}: abre para ver o publicar otra vez` : outside ? `Publicado en Instagram${postedOn ? ` el ${postedOn}` : ''} (lo encontró Mi cuenta): abre para publicar otra vez` : 'Publicar esta versión en Instagram, ahora o programada'}
         onClick={() => {
           setMode('now');
           setWhen(whenOf(nextHour()));
@@ -137,11 +141,11 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
           setOpen(true);
         }}
       >
-        {!last ? (
+        {!last && !outside ? (
           <>
             <Send /> Publicar
           </>
-        ) : last.status === 'published' ? (
+        ) : !last || last.status === 'published' ? (
           <>
             <CircleCheck /> Publicado
           </>
@@ -170,6 +174,14 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
             </DialogDescription>
           </DialogHeader>
 
+          {ready && outside && (
+            <div className="flex flex-col gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              <span>Este video ya está en Instagram{postedOn ? ` desde el ${postedOn}` : ''}, según Mi cuenta: si lo publicas otra vez, saldrá repetido.</span>
+              <a href={outside.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 self-start text-xs underline-offset-2 hover:underline">
+                Ver en Instagram <ExternalLink className="size-3" />
+              </a>
+            </div>
+          )}
           {ready && last && (
             <div className="flex flex-col gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
               <span>
@@ -244,7 +256,7 @@ export function PublishButton({slug, version, data, onDone}: {slug: string; vers
             {ready && (
               <Button disabled={busy || !version} onClick={submit}>
                 {busy && <Loader2 className="animate-spin" />}
-                {mode === 'now' ? (last ? 'Publicar otra vez' : 'Publicar ahora') : last ? 'Programar otra vez' : 'Programar'}
+                {mode === 'now' ? (last || outside ? 'Publicar otra vez' : 'Publicar ahora') : last || outside ? 'Programar otra vez' : 'Programar'}
               </Button>
             )}
           </DialogFooter>
