@@ -580,6 +580,9 @@ app.post('/api/source-items/:id/idea', sourcesChat((req) => sources.ideaRequest(
 // Searching and analysing run in the background; the page follows them by the socket ({type: 'research'}).
 const researchProject = (req: Req) => (typeof req.query.project === 'string' && req.query.project ? req.query.project : undefined);
 app.get('/api/research', handle((req) => research.status(researchProject(req))));
+// Configuración: the model and effort of each of the agent's tasks, for the project.
+app.get('/api/research-settings', handle((req) => research.settings(researchProject(req))));
+app.put('/api/research-settings', handle((req) => research.setSettings(researchProject(req), req.body)));
 app.post('/api/research', handle((req) => research.create(researchProject(req), req.body)));
 app.get('/api/research/:id', handle((req) => research.detail(researchProject(req), req.params.id)));
 app.put('/api/research/:id', handle((req) => research.edit(researchProject(req), req.params.id, req.body)));

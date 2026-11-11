@@ -522,6 +522,13 @@ export type ResearchPlatform = (typeof RESEARCH_PLATFORMS)[number]['id'];
 // How far back a search looks (days; 0: any time).
 export const RESEARCH_SINCE = [7, 30, 90, 180, 365, 0] as const;
 export const RESEARCH_MAX_ANALYSE = 12; // the most videos one "Analizar" takes
+// The tasks the agent does in a research, each on the model and effort chosen in Investigación → Configuración
+// (projects/<id>/config/research.json; '' for either: the default).
+export const RESEARCH_TASKS = ['queries', 'relevance', 'analysis', 'report'] as const;
+export type ResearchTask = (typeof RESEARCH_TASKS)[number];
+export type ResearchSettings = Record<ResearchTask, {model: string; effort: string}>;
+// defaults: what '' runs each task on, as a label (Haiku for the quick ones, Sonnet for the analyses, with Claude).
+export type ResearchSettingsView = {agent: string; settings: ResearchSettings; models: {id: string; label: string; efforts: string[]}[]; defaults: Record<ResearchTask, string>};
 
 export type ResearchOptions = {
   platforms: ResearchPlatform[];
