@@ -125,23 +125,30 @@ export function refreshDue(now = Date.now()) {
   for (const slug of slugs) if (recordsOf(path.join(VIDEOS, slug)).some(due)) list(slug).catch(() => {});
 }
 
-// Videos programados: what every video of the project sent, each refreshed like its page does. Canceled ones stay out.
-export async function calendar(): Promise<CalendarPublication[]> {
+// Videos programados: what every video of the project sent, as its publicaciones.json has it, at once. Each video is
+// then refreshed like its page does, in the background (the account takes seconds to answer): a change rewrites the
+// file and the page, told by the watcher, reads it again. Asked about once every ASK_EVERY at most, so those reads
+// don't ask again. Canceled ones stay out.
+const ASK_EVERY = 3000;
+const asked = new Map<string, number>(); // video folder → when it was last asked about
+export async function calendar(now = Date.now()): Promise<CalendarPublication[]> {
   let slugs: string[] = [];
   try {
     slugs = fs.readdirSync(VIDEOS, {withFileTypes: true}).filter((d) => d.isDirectory() && fs.existsSync(path.join(VIDEOS, d.name, FILE))).map((d) => d.name);
   } catch {
     return [];
   }
-  const all = await Promise.all(
-    slugs.map(async (slug) => {
-      const {items} = await list(slug);
-      const shown = items.filter((p) => p.status !== 'canceled');
-      if (!shown.length) return [];
-      const head = {slug, title: titleOf(slug) ?? slug, cover: coverUrl(slug), caption: captionOf(path.join(VIDEOS, slug))};
-      return shown.map((p) => ({...p, ...head, at: p.scheduledAt ?? p.createdAt}));
-    }),
-  );
+  const all = slugs.map((slug) => {
+    const dir = path.join(VIDEOS, slug);
+    if (now - (asked.get(dir) ?? 0) >= ASK_EVERY) {
+      asked.set(dir, now);
+      list(slug).catch(() => {});
+    }
+    const shown = recordsOf(dir).filter((p) => p.status !== 'canceled');
+    if (!shown.length) return [];
+    const head = {slug, title: titleOf(slug) ?? slug, cover: coverUrl(slug), caption: captionOf(dir)};
+    return shown.map((p) => ({...p, ...head, at: p.scheduledAt ?? p.createdAt}));
+  });
   return all.flat().sort((a, b) => a.at.localeCompare(b.at));
 }
 

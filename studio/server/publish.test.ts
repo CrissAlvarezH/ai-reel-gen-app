@@ -212,3 +212,23 @@ test('the library asks about the videos whose moment came (once a minute at most
   publish.refreshDue(now + 61_000);
   await until(() => records()[0].status === 'published');
 });
+
+test('the calendar answers with the files at once and asks the account in the background, every few seconds at most', async () => {
+  const past = new Date(Date.now() - 60_000).toISOString();
+  // In the account it's out already; the file still has it as scheduled.
+  ctl.pubs.set('C1', {id: 'C1', body: {}, status: 'published', scheduledAt: past, gets: 0});
+  const rec = {id: 'C1', version: 'v', account: 'entiende.finanzas.ya', scheduledAt: past, createdAt: past, status: 'scheduled', error: null, permalink: null};
+  fs.writeFileSync(path.join(video, 'publicaciones.json'), JSON.stringify([rec]));
+  const now = Date.now() + 3600_000;
+  const cal = await publish.calendar(now);
+  assert.deepEqual(cal.map((p) => [p.id, p.status]), [['C1', 'scheduled']], 'what the file has, without waiting for the account');
+  await until(() => records()[0].status === 'published');
+
+  // Read again within a few seconds: not asked again.
+  fs.writeFileSync(path.join(video, 'publicaciones.json'), JSON.stringify([rec]));
+  await publish.calendar(now + 1000);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(records()[0].status, 'scheduled');
+  await publish.calendar(now + 3000);
+  await until(() => records()[0].status === 'published');
+});
