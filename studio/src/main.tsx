@@ -122,7 +122,7 @@ function App() {
         {/* each column scrolls on its own (md+), so scrolling the chat never moves the page */}
         <div className="min-w-0 md:h-[calc(100vh-3.5rem)] md:overflow-y-auto md:overscroll-contain">
           {/* a new key on every route replays the entrance animation (animate-page-in, index.css) */}
-          <div key={`${page}/${slug ?? ''}/${settingsSection ?? ''}`} className="animate-page-in">
+          <div key={`${page}/${slug ?? ''}/${settingsSection ?? ''}`} className="animate-page-in md:h-full">
             {slug ? <ReelView key={slug} slug={slug} /> : page === 'scheduled' ? <Scheduled /> : page === 'account' ? <Account /> : page === 'ideas' ? <Ideas /> : page === 'audience' ? <AudiencePage /> : page === 'automations' ? <Automations /> : page === 'audit' ? <Audit /> : page === 'sources' ? <Sources /> : page === 'inspiration' ? <Inspiration /> : page === 'styles' ? <Styles /> : page === 'formats' ? <Formats /> : page === 'settings' ? <Settings section={settingsSection} /> : page === 'new' ? <NewReel /> : <Library />}
           </div>
         </div>
