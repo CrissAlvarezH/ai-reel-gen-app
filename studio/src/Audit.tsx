@@ -127,18 +127,30 @@ export function Audit() {
 type Act = (p: Promise<FactAuditView>) => Promise<void>;
 type Thumbs = Record<string, string | null>;
 
-// Configuración: the reviewers' model and effort, and his instructions for them.
+// Configuración: the reviewers' model and effort, and his instructions for them. All three are a draft until Guardar
+// (Cancelar drops them); the effort kept is only one the chosen model has ('' when it has none: its default).
 function SettingsDialog({open, onClose, view, act}: {open: boolean; onClose: () => void; view: FactAuditView; act: Act}) {
   const {settings} = view;
-  const efforts = view.models.find((m) => m.id === settings.model)?.efforts ?? [];
+  const effortsOf = (model: string) => view.models.find((m) => m.id === model)?.efforts ?? [];
   const [prompt, setPrompt] = useState(settings.prompt);
+  const [model, setModel] = useState(settings.model);
+  const [effort, setEffort] = useState(settings.effort);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    if (open) setPrompt(settings.prompt);
-  }, [open, settings.prompt]);
+    if (!open) return;
+    setPrompt(settings.prompt);
+    setModel(settings.model);
+    setEffort(settings.effort);
+  }, [open, settings.prompt, settings.model, settings.effort]);
+  const efforts = effortsOf(model);
+  const pickModel = (m: string) => {
+    setModel(m);
+    if (!effortsOf(m).includes(effort)) setEffort('');
+  };
+  const changed = prompt.trim() !== settings.prompt || model !== settings.model || effort !== settings.effort;
   const save = async () => {
     setSaving(true);
-    await act(auditApi.settings({prompt}));
+    await act(auditApi.settings({prompt, model, ...(effort && efforts.includes(effort) ? {effort} : {})}));
     setSaving(false);
     onClose();
   };
@@ -154,7 +166,7 @@ function SettingsDialog({open, onClose, view, act}: {open: boolean; onClose: () 
           <div className={cn('grid gap-3', efforts.length > 0 && 'grid-cols-2')}>
             <div className="flex min-w-0 flex-col gap-1.5">
               <Label className="text-sm">Modelo de los revisores</Label>
-              <Select value={settings.model || DEFAULT} onValueChange={(m) => void act(auditApi.settings({model: m === DEFAULT ? '' : m}))}>
+              <Select value={model || DEFAULT} onValueChange={(m) => pickModel(m === DEFAULT ? '' : m)}>
                 <SelectTrigger className="w-full" aria-label="Modelo de los revisores">
                   <SelectValue />
                 </SelectTrigger>
@@ -170,7 +182,7 @@ function SettingsDialog({open, onClose, view, act}: {open: boolean; onClose: () 
             {efforts.length > 0 && (
               <div className="flex min-w-0 flex-col gap-1.5">
                 <Label className="text-sm">Nivel de esfuerzo</Label>
-                <Select value={settings.effort || efforts[0]} onValueChange={(effort) => void act(auditApi.settings({effort}))}>
+                <Select value={effort || efforts[0]} onValueChange={setEffort}>
                   <SelectTrigger className="w-full" aria-label="Nivel de esfuerzo de los revisores">
                     <SelectValue />
                   </SelectTrigger>
@@ -205,7 +217,7 @@ function SettingsDialog({open, onClose, view, act}: {open: boolean; onClose: () 
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
-          <Button disabled={saving || prompt.trim() === settings.prompt} onClick={() => void save()}>
+          <Button disabled={saving || !changed} onClick={() => void save()}>
             {saving && <Loader2 className="animate-spin" />} Guardar
           </Button>
         </DialogFooter>
