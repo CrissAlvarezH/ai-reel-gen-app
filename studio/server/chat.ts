@@ -15,6 +15,7 @@ import {agentNote as inspirationNote, refsText, validRefs} from './inspiration.t
 import {agentNote as accountNote, ownRefsText, validOwnRefs} from './account.ts';
 import {agentNote as ideasNote, ideaRefsText, validIdeaRefs} from './ideas.ts';
 import {agentNote as sourcesNote} from './sources.ts';
+import {agentNote as researchNote} from './research.ts';
 import {audienceText} from './audience.ts';
 import * as scriptCheck from './script-check.ts';
 import * as hookCheck from './hook-check.ts';
@@ -558,6 +559,8 @@ function voiceText(key: string) {
 
 // How the agent runs tools/sources.py (Fuentes de información): the app's own copy, like ideas.py.
 export const SOURCES_TOOL = () => `${PY} "${resource('tools/sources.py')}"`;
+// And tools/research.py (Investigación).
+export const RESEARCH_TOOL = () => `${PY} "${resource('tools/research.py')}"`;
 
 // The studio's index (server/db.ts), for every conversation.
 const INDEX_LINE = () =>
@@ -637,6 +640,7 @@ const SYSTEM = (key: string) =>
         projectLine(),
         'Cada video tiene sus propias conversaciones (puede haber una trabajando ahora mismo): no edites un video que ya existe desde aquí salvo que te lo pida explícitamente; para trabajarlo tú, muévete a él (abajo).',
         inspirationNote(),
+        researchNote(RESEARCH_TOOL()),
         accountNote(),
         `Cuando apruebe una idea y te pida crearla, crea el video con scripts/new-video.sh <slug> [estilo] [formato] (lo crea en el proyecto abierto, ${V()}/<slug>/; estilo: el id de una carpeta de styles/; sin él, el predeterminado; queda en ${V()}/<slug>/style.txt; formato: igual con formats/, en format.txt; para saltarte el estilo pasa "") y escribe su guion en ${V()}/<slug>/audio/vo.txt: aparecerá solo en la biblioteca.`,
         MOVE_LINE,
@@ -666,7 +670,7 @@ const SYSTEM = (key: string) =>
         ...COMMON(),
       ].join('\n');
 
-const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', scheduled: 'Videos programados', ideas: 'Ideas de contenido', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', audience: 'Perfil de audiencia', reel: null};
+const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', scheduled: 'Videos programados', ideas: 'Ideas de contenido', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', research: 'Investigación', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', audience: 'Perfil de audiencia', reel: null};
 const fmtCtx = (c: UiContext | undefined, progress?: string, style?: string, voice?: string, kind?: string) => {
   if (!c || typeof c !== 'object') return '';
   const parts: (string | null | undefined)[] = [PAGES[c.page] ?? (c.slug ? `video ${c.slug}` : null)];
@@ -677,6 +681,10 @@ const fmtCtx = (c: UiContext | undefined, progress?: string, style?: string, voi
     parts.push(code ? `reel abierto: ${relPath(PROJECT_DIR)}/inspiration/${acc}/${code}/` : `cuenta abierta: ${relPath(PROJECT_DIR)}/inspiration/${acc}/`);
   }
   if (typeof c.sourceItem === 'string' && /^[a-f0-9]{8}$/.test(c.sourceItem)) parts.push(`resultado abierto: ${c.sourceItem} (sources.py item ${c.sourceItem})`);
+  if (typeof c.research === 'string' && /^[a-f0-9]{8}(\/(tiktok|youtube|instagram)-[A-Za-z0-9_-]{3,40})?$/.test(c.research)) {
+    const [id, key] = c.research.split('/');
+    parts.push(key ? `video abierto: ${relPath(PROJECT_DIR)}/research/${id}/videos/${key}/` : `investigación abierta: ${relPath(PROJECT_DIR)}/research/${id}/ (research.py show ${id})`);
+  }
   if (c.live) parts.push('reproductor: vista en vivo (código actual)');
   else if (c.version) parts.push(`reproductor: out/${c.version}.mp4`);
   if (typeof c.t === 'number' && (c.live || c.version))

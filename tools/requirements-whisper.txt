@@ -1,2 +1,4 @@
-# Inspiración: transcribing other accounts' reels (tools/inspiration.py). Installed from Ajustes → Requisitos.
+# Inspiración and Investigación: transcribing other accounts' videos (tools/inspiration.py). Installed from Ajustes → Requisitos.
+# yt-dlp: Investigación's YouTube Shorts (YouTube gives no direct link to the video).
 faster-whisper
+yt-dlp

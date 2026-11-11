@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {AlertCircle, CalendarClock, CalendarDays, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Newspaper, Palette, Plus, ShieldCheck, Sparkles, Target, UserRound} from 'lucide-react';
+import {AlertCircle, CalendarClock, CalendarDays, Circle, CircleDot, LayoutGrid, Lightbulb, Loader2, MessageCircleQuestion, Newspaper, Palette, Plus, ShieldCheck, Sparkles, Target, Telescope, UserRound} from 'lucide-react';
 import {cn} from '@/lib/utils';
 import {Tooltip, TooltipContent, TooltipTrigger} from '@/components/ui/tooltip';
 import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentState, type ProgressStep, type ReelSummary} from './api';
@@ -131,6 +131,7 @@ const GROUPS: {label: string; pages: {href: string; icon: typeof UserRound; labe
       {href: '#/cuenta', icon: UserRound, label: 'Mi cuenta', is: ['account']},
       {href: '#/audiencia', icon: Target, label: 'Perfil de audiencia', is: ['audience']},
       {href: '#/inspiracion', icon: Sparkles, label: 'Inspiración', is: ['inspiration']},
+      {href: '#/investigacion', icon: Telescope, label: 'Investigación', is: ['research']},
       {href: '#/fuentes', icon: Newspaper, label: 'Fuentes de información', is: ['sources']},
       {href: '#/auditoria', icon: ShieldCheck, label: 'Auditoría', is: ['audit']},
     ],

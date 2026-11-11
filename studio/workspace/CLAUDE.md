@@ -24,6 +24,12 @@ profile (`projects/<id>/config/profile.json`).
   `tools/ideas.py` (`show`, `add`, `move`, `list …`, `vertical …`; needs the studio running), never by hand: the page wouldn't follow.
 - `projects/<id>/inspiration/` holds the other accounts' reels that channel studies in Reel Studio → Inspiración (metrics,
   transcript, analysis, frame sheets): use it for ideas when asked; adapt, never copy a script.
+- `projects/<id>/research/` holds that channel's Investigaciones (Reel Studio → Investigación): a topic, the searches
+  its audience would type, the TikTok, YouTube Shorts and Instagram videos they found (metrics, whether they serve the
+  audience, a 0–100 score; the best ones analysed) and the report. Change it with `tools/research.py` (`list`, `show`,
+  `new`, `cost`, `search`, `analyse`, `report`…; needs the studio running), never by hand. `search` spends from the
+  creator's ScrapeCreators and Apify balance (say what `cost` says and wait for their yes); `analyse` uses their
+  subscription: ask before more than 5.
 - `projects/<id>/account/<user>/` holds that channel's own reels and their numbers (Reel Studio → Mi cuenta).
   `tools/social.py` uses the social-media scraper through the running studio; each call spends from his balance.
   `social.py analyse` analyses his reels like Mi cuenta's Analizar (his Claude subscription): ask before more than 5.

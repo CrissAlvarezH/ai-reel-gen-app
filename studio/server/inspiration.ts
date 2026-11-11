@@ -430,7 +430,8 @@ export async function fetchItems(targets: string[], as: string | null, limit: nu
   return {items, problem: errors[0] ?? null};
 }
 
-async function runActor<T>(actor: string, input: unknown, maxUsd: number): Promise<{items: T[]; problem: string | null}> {
+// Also Investigación's (server/research-platforms.ts).
+export async function runActor<T>(actor: string, input: unknown, maxUsd: number): Promise<{items: T[]; problem: string | null}> {
   const token = getKey('APIFY_TOKEN');
   if (!token) throw httpError(400, 'falta la clave de Apify: ponla en Ajustes → Extracción de datos → Redes sociales');
   const headers = {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'};

@@ -30,6 +30,7 @@ import * as cloud from './cloud.ts';
 import * as syncQueue from './sync-queue.ts';
 import * as ideas from './ideas.ts';
 import * as sources from './sources.ts';
+import * as research from './research.ts';
 import * as audience from './audience.ts';
 import * as scriptCheck from './script-check.ts';
 import * as hookCheck from './hook-check.ts';
@@ -138,7 +139,7 @@ app.get('/project-files/:id/avatar', (req: Req, res: Response) => {
 // Until there is a workspace, only the welcome page's calls work (the agent check doesn't need one).
 const OPEN = /^\/api\/(workspace|settings\/agent|requirements)(\/|$|\?)/;
 app.use((req, res, next) => {
-  if (workspace.ROOT || OPEN.test(req.path) || !/^\/(api|files|style-files|format-files|inspiration-files)\//.test(req.path)) return next();
+  if (workspace.ROOT || OPEN.test(req.path) || !/^\/(api|files|style-files|format-files|inspiration-files|research-files)\//.test(req.path)) return next();
   res.status(409).json({error: 'falta elegir la carpeta de trabajo', setup: true});
 });
 
@@ -575,6 +576,34 @@ app.put('/api/source-items/:id', sourcesChange((p, req) => sources.editItem(p, r
 app.delete('/api/source-items/:id', sourcesChange((p, req) => sources.removeItem(p, req.params.id)));
 app.post('/api/source-items/:id/idea', sourcesChat((req) => sources.ideaRequest(undefined, req.params.id, chat.SOURCES_TOOL())));
 
+// Investigación (server/research.ts): the page and the agent (tools/research.py, which says its project in ?project=).
+// Searching and analysing run in the background; the page follows them by the socket ({type: 'research'}).
+const researchProject = (req: Req) => (typeof req.query.project === 'string' && req.query.project ? req.query.project : undefined);
+app.get('/api/research', handle((req) => research.status(researchProject(req))));
+app.post('/api/research', handle((req) => research.create(researchProject(req), req.body)));
+app.get('/api/research/:id', handle((req) => research.detail(researchProject(req), req.params.id)));
+app.put('/api/research/:id', handle((req) => research.edit(researchProject(req), req.params.id, req.body)));
+app.delete('/api/research/:id', handle((req) => research.remove(researchProject(req), req.params.id)));
+app.post('/api/research/:id/estimate', handle((req) => research.estimate(researchProject(req), req.params.id)));
+app.post('/api/research/:id/search', handle((req) => research.search(researchProject(req), req.params.id)));
+app.post('/api/research/:id/analyse', handle((req) => research.analyse(researchProject(req), req.params.id, req.body)));
+app.post('/api/research/:id/report', handle((req) => research.report(researchProject(req), req.params.id)));
+app.post('/api/research/:id/stop', handle((req) => research.stop(researchProject(req), req.params.id)));
+app.get('/api/research/:id/videos/:key', handle((req) => research.video(researchProject(req), req.params.id, req.params.key)));
+app.put('/api/research/:id/videos/:key', handle((req) => research.setRelevant(researchProject(req), req.params.id, req.params.key, req.body?.relevant)));
+// "Llevar a Ideas": a new general conversation that turns the research into ideas.
+app.post('/api/research/:id/ideas', handle((req) => {
+  const {text, note} = research.ideasRequest(undefined, req.params.id);
+  const {id} = chat.newChat(chat.GENERAL);
+  chat.send(chat.GENERAL, {text, note, context: req.body?.context}, id);
+  return {chat: id};
+}));
+app.get('/research-files/:id/:key/:file', (req: Req, res: Response) => {
+  const p = research.file(req.params.id, req.params.key, req.params.file);
+  if (!p) return res.sendStatus(404);
+  res.sendFile(p);
+});
+
 // The studio's index (server/db.ts): tools/studio_sql.py asks for it to be brought up to date before a query.
 app.post('/api/index/sync', handle(() => (db.sync(true), {ok: true})));
 
@@ -647,6 +676,7 @@ function send(obj: ServerEvent) {
 }
 chat.setBroadcast(send);
 inspiration.setBroadcast(send);
+research.setBroadcast(send);
 account.setBroadcast(send);
 factAudit.setNotify(() => send({type: 'audit'}));
 const pending = new Map<string, NodeJS.Timeout>();
@@ -759,6 +789,7 @@ workspace.onChange(() => {
   chat.stopAll();
   factAudit.stopAll();
   inspiration.reset();
+  research.reset();
   account.reset();
   watchVideos();
   watchStyles();
