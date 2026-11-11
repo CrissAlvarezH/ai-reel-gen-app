@@ -6,14 +6,17 @@ import {agentsApi, api, fmtAgo, useAgentId, useSocket, type Agent, type AgentSta
 import {ReelProgressRing} from './ReelProgress';
 import {AgentLogo} from './AgentLogo';
 import {useStudio, type UiContext} from './studio';
+import {KIND, KindIcon, publicationHref} from './PublicationKind';
+import {NewPublicationMenu} from './NewPublicationMenu';
 import {ProjectPicker} from './ProjectPicker';
 import {SidebarAccount} from './SidebarAccount';
 
 type Page = UiContext['page'];
 
-// Left sidebar: every video's agent in one list, most recent first; the icon on the left says its state.
-// The library's general conversation shows its state next to "Biblioteca". Contracted (⌘B or the header's
-// button, studio.tsx), it's a column of icons: the project, the pages and each video's state, named on hover.
+// Left sidebar: every publication's agent (videos and carousels) in one list, most recent first; the icons on the
+// left say its state and what it is. The library's general conversation shows its state next to "Biblioteca".
+// Contracted (⌘B or the header's button, studio.tsx), it's a column of icons: the project, the pages and each
+// publication's state, named on hover.
 
 const STATE_LABEL: Record<AgentState, string> = {
   working: 'Trabajando',
@@ -147,13 +150,18 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   const compact = !sideOpen;
   const inUse = useAgentId();
   const [agents, setAgents] = useState<Agent[]>([]);
-  // Each video's progress (Guion → Voz → … → Render) and when its files last changed.
+  // The empty list's line waits for the first answer (else it flashes before the rows).
+  const [loaded, setLoaded] = useState(false);
+  // Each publication's progress (Guion → Voz → … → Render, or Textos → Láminas → …) and when its files last changed.
   const [reels, setReels] = useState<Record<string, {progress: ProgressStep[]; updated: number; instagram: ReelSummary['instagram']; release: ReelSummary['release']}>>({});
   const load = useCallback(() => {
-    agentsApi.list().then(setAgents, () => {});
+    agentsApi.list().then((list) => {
+      setAgents(list);
+      setLoaded(true);
+    }, () => {});
     api.reels().then((list) => setReels(Object.fromEntries(list.map((r) => [r.slug, {progress: r.progress, updated: r.updated, instagram: r.instagram, release: r.release}]))), () => {});
   }, []);
-  // A video's last activity: its conversation's last message or its files, whichever is newer (one made by an
+  // A publication's last activity: its conversation's last message or its files, whichever is newer (one made by an
   // automation, or by the general conversation, has no conversation of its own yet).
   const last = (a: Agent) => Math.max(a.lastTs ?? 0, (a.slug && reels[a.slug]?.updated) || 0) || null;
   useEffect(() => void load(), [load]);
@@ -178,11 +186,11 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   }, [waiting]);
 
   const go = (a: Agent) => {
-    location.hash = `#/reel/${a.slug}`;
+    location.hash = publicationHref(a.kind ?? undefined, a.slug!);
     setOpen(true);
   };
 
-  // The video list's height, dragged from its top edge (null: the room the pages leave).
+  // The publication list's height, dragged from its top edge (null: the room the pages leave).
   const {videosHeight, setVideosHeight} = useStudio();
   const menuRef = useRef<HTMLDivElement>(null);
   const videosRef = useRef<HTMLDivElement>(null);
@@ -223,83 +231,106 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
         </div>
       ))}
       </div>
-      {rows.length > 0 &&
-        (compact ? (
-          <div className="mx-2 mt-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain border-t pt-3">
+      {/* Shown even with no publications yet: its + is the sidebar's way to start the first one. */}
+      {compact ? (
+        <div className="mx-2 mt-3 flex min-h-0 flex-1 flex-col gap-0.5 border-t pt-3">
+          <NewPublicationMenu side="right" align="start">
+            <button
+              title="Nueva publicación"
+              aria-label="Nueva publicación"
+              className="flex flex-none justify-center rounded-md py-2 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground"
+            >
+              <Plus className="size-4" />
+            </button>
+          </NewPublicationMenu>
+          <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain">
             {rows.map(({a, st}) => (
               <button
                 key={a.key}
                 onClick={() => go(a)}
-                title={`${a.title ?? a.slug} · ${STATE_LABEL[st]}`}
-                className={cn('relative flex justify-center rounded-md py-2 transition-colors duration-150 hover:bg-muted', a.slug === slug && 'bg-primary/10 hover:bg-primary/10')}
+                title={`${KIND[a.kind ?? 'video'].label} · ${a.title ?? a.slug} · ${STATE_LABEL[st]}`}
+                className={cn('relative flex flex-none justify-center rounded-md py-2 transition-colors duration-150 hover:bg-muted', a.slug === slug && 'bg-primary/10 hover:bg-primary/10')}
               >
                 <StateGlyph state={st} />
                 <AgentLogo agent={a.agent ?? inUse} className="absolute right-1.5 bottom-1 size-2.5" />
               </button>
             ))}
           </div>
-        ) : (
-          <div ref={videosRef} className="relative mt-1 flex min-h-24 flex-col pt-2" style={{flex: videosHeight ? `0 0 ${videosHeight}px` : '1 1 0'}}>
-            <RowResizeHandle
-              onPointerDown={(e) => {
-                if (e.button !== 0) return;
-                e.preventDefault();
-                e.currentTarget.setPointerCapture(e.pointerId);
-                rowDrag.current = {y: e.clientY, start: videosRef.current!.getBoundingClientRect().height, last: videosHeight};
-                document.documentElement.classList.add('resizing-rows');
-              }}
-              onPointerMove={(e) => {
-                const d = rowDrag.current;
-                if (!d) return;
-                // Up makes the list taller; the pages above keep at least a little room (and scroll).
-                const max = videosRef.current!.getBoundingClientRect().height + menuRef.current!.getBoundingClientRect().height - 48;
-                d.last = Math.round(Math.max(96, Math.min(max, d.start - (e.clientY - d.y))));
-                setVideosHeight(d.last, false);
-              }}
-              onPointerUp={endRowDrag}
-              onPointerCancel={endRowDrag}
-              onDoubleClick={() => setVideosHeight(null)}
-            />
-            <div className="group/videos flex items-center justify-between pr-3 pb-1 pl-4">
-              <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                Videos <span className="tabular-nums">{rows.length}</span>
-              </p>
-              <a
-                href="#/nuevo"
-                title="Nuevo video"
-                aria-label="Nuevo video"
-                className="-my-1.5 flex-none rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity group-hover/videos:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100"
+        </div>
+      ) : (
+        <div ref={videosRef} className="relative mt-1 flex min-h-24 flex-col pt-2" style={{flex: videosHeight ? `0 0 ${videosHeight}px` : '1 1 0'}}>
+          <RowResizeHandle
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              rowDrag.current = {y: e.clientY, start: videosRef.current!.getBoundingClientRect().height, last: videosHeight};
+              document.documentElement.classList.add('resizing-rows');
+            }}
+            onPointerMove={(e) => {
+              const d = rowDrag.current;
+              if (!d) return;
+              // Up makes the list taller; the pages above keep at least a little room (and scroll).
+              const max = videosRef.current!.getBoundingClientRect().height + menuRef.current!.getBoundingClientRect().height - 48;
+              d.last = Math.round(Math.max(96, Math.min(max, d.start - (e.clientY - d.y))));
+              setVideosHeight(d.last, false);
+            }}
+            onPointerUp={endRowDrag}
+            onPointerCancel={endRowDrag}
+            onDoubleClick={() => setVideosHeight(null)}
+          />
+          <div className="group/videos flex items-center justify-between pr-3 pb-1 pl-4">
+            <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+              Publicaciones <span className="tabular-nums">{rows.length}</span>
+            </p>
+            {/* Faint until the header is hovered or the + focused; stays while its menu is open. */}
+            <NewPublicationMenu>
+              <button
+                title="Nueva publicación"
+                aria-label="Nueva publicación"
+                className="-my-1.5 flex-none rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity group-hover/videos:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100 data-[state=open]:bg-muted data-[state=open]:text-foreground data-[state=open]:opacity-100"
               >
                 <Plus className="size-4" />
-              </a>
-            </div>
-            {/* Only the video list scrolls; the pages above and Ajustes below stay put. */}
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              {rows.map(({a, st}) => (
-                <div key={a.key} className={cn('group mx-2 flex items-center rounded-md transition-colors duration-150 hover:bg-muted', a.slug === slug && 'bg-primary/10 hover:bg-primary/10')}>
-                  <button onClick={() => go(a)} className="flex min-w-0 flex-1 flex-col gap-1 py-2 pl-2 text-left">
-                    <span className="flex items-center gap-2 text-sm">
+              </button>
+            </NewPublicationMenu>
+          </div>
+          {/* Only the list scrolls; the pages above and Ajustes below stay put. */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {loaded && rows.length === 0 && <p className="px-4 py-1 text-xs text-muted-foreground">Aún no hay publicaciones</p>}
+            {rows.map(({a, st}) => (
+              <div key={a.key} className={cn('group mx-2 flex items-center rounded-md transition-colors duration-150 hover:bg-muted', a.slug === slug && 'bg-primary/10 hover:bg-primary/10')}>
+                {/* Left column, as wide as the state icon was: the state on the title's line, the kind on the last
+                    line (they spread apart as the row grows). The logo and title keep their place to its right. */}
+                <button onClick={() => go(a)} className="flex min-w-0 flex-1 items-stretch gap-2 py-2 pl-2 text-left">
+                  <span className="flex flex-none flex-col justify-between gap-1">
+                    <span className="flex h-5 items-center">
                       <StateIcon state={st} />
+                    </span>
+                    <KindIcon kind={a.kind ?? 'video'} className="size-4 text-muted-foreground" />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="flex items-center gap-2 text-sm">
                       <AgentLogo agent={a.agent ?? inUse} />
                       <span className="min-w-0 flex-1 truncate font-medium">{a.title ?? a.slug}</span>
                     </span>
                     {(subtitle(a, st) || (last(a) && st !== 'working')) && (
-                      <span className="flex items-start gap-2 pl-6 text-xs text-muted-foreground">
+                      <span className="flex items-start gap-2 text-xs text-muted-foreground">
                         <span className="line-clamp-2 min-w-0 flex-1">{subtitle(a, st)}</span>
                         {last(a) && st !== 'working' && <span className="flex-none text-[11px] leading-4">{fmtAgo(last(a)!)}</span>}
                       </span>
                     )}
-                  </button>
-                  <div className="mr-1 flex flex-none flex-col items-center self-start pt-0.5">
-                    {reels[a.slug!]?.progress.length ? <ReelProgressRing steps={reels[a.slug!].progress} className="m-1.5 mb-1" /> : null}
-                    {reels[a.slug!]?.release?.state === 'scheduled' && reels[a.slug!].release!.at && <Scheduled at={reels[a.slug!].release!.at!} />}
-                    {reels[a.slug!]?.instagram && <Posted p={reels[a.slug!].instagram!} />}
+                  </span>
+                </button>
+                <div className="mr-1 flex flex-none flex-col items-center self-start pt-0.5">
+                  {reels[a.slug!]?.progress.length ? <ReelProgressRing steps={reels[a.slug!].progress} className="m-1.5 mb-1" /> : null}
+                  {reels[a.slug!]?.release?.state === 'scheduled' && reels[a.slug!].release!.at && <Scheduled at={reels[a.slug!].release!.at!} />}
+                  {reels[a.slug!]?.instagram && <Posted p={reels[a.slug!].instagram!} />}
                 </div>
-                </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+      )}
       <div className="mt-auto flex flex-none flex-col border-t pt-1 pb-2">
         <SidebarAccount onSettings={page === 'settings'} compact={compact} />
       </div>
@@ -307,14 +338,14 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
   );
 }
 
-// The top edge of the video list: drag it up or down; double click, back to the room the pages leave. A thin line that
+// The top edge of the publication list: drag it up or down; double click, back to the room the pages leave. A thin line that
 // shows faintly on hover, like the columns' edges (components/common/ResizeHandle).
 function RowResizeHandle(props: Pick<React.HTMLAttributes<HTMLDivElement>, 'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel' | 'onDoubleClick'>) {
   return (
     <div
       role="separator"
       aria-orientation="horizontal"
-      aria-label="Cambiar el alto de la lista de videos"
+      aria-label="Cambiar el alto de la lista de publicaciones"
       title="Arrastra para cambiar el alto · doble clic: el alto por defecto"
       className="group absolute inset-x-0 -top-1.5 z-10 h-3 cursor-row-resize touch-none"
       {...props}

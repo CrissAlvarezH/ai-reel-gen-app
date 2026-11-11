@@ -7,6 +7,10 @@ profile (`projects/<id>/config/profile.json`).
   the video's style skill (`styles/<id>/SKILL.md`, named in its `style.json`), its format's skill if it has one
   (`formats/<id>/SKILL.md`, named in its `format.json`) and `LESSONS.md`. `animated-video`, `video-script` etc. are
   the general method.
+- Instagram carousels (still slides, 4:5) live with the videos in `projects/<id>/videos/<slug>/`, marked by
+  `kind.txt` = `carousel`: use the `carousel` skill (`.claude/skills/carousel/SKILL.md`) and the style's `carousel`
+  block in its `style.json`. New carousel: Reel Studio → Biblioteca → Nuevo carrusel, or
+  `node scripts/new-carousel.mjs <slug> [style] [--from <video>]`.
 - For creating or sharpening content ideas (the project's Ideas de contenido board), use the `content-ideas` skill.
 - Format vs style: a video's format (`format.txt` → `formats/<id>/format.json`: animated over a generated voice,
   animated over the creator's recorded voice, the creator talking to camera with animations…) is how it's made; its style (`style.txt` → `styles/<id>/`) is how it looks. Formats with

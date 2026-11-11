@@ -81,9 +81,15 @@ function Item({item, slug, onSeek, onPermission}: {item: ChatItem; slug: string 
             <ul className="flex flex-col gap-2">
               {item.comments.map((c) => (
                 <li key={c.id} className="flex items-start gap-2">
-                  <button className="rounded bg-primary-foreground/15 px-1.5 text-xs tabular-nums" onClick={() => onSeek(c.t)}>
-                    {fmtTime(c.t)}
-                  </button>
+                  {c.slide ? (
+                    <span className="rounded bg-primary-foreground/15 px-1.5 text-xs whitespace-nowrap tabular-nums" title={`Lámina «${c.slide.id}»${c.slide.version ? ` · ${c.slide.version}` : ''}`}>
+                      Lámina {c.slide.n}
+                    </span>
+                  ) : (
+                    <button className="rounded bg-primary-foreground/15 px-1.5 text-xs tabular-nums" onClick={() => onSeek(c.t)}>
+                      {fmtTime(c.t)}
+                    </button>
+                  )}
                   {c.frame && slug && <img src={`/files/${slug}/${c.frame}`} alt="" className="h-16 w-auto rounded" />}
                   <span>{c.text}</span>
                 </li>
@@ -352,7 +358,7 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
     setErr('');
     stick.current = true;
     try {
-      await chatApi.send(chatKey, chatId, audit && !msg.trim() ? (auditKinds.length > 1 ? 'Aplica estos análisis al guion.' : auditKinds[0] === 'hook' ? 'Aplica este análisis del gancho al guion.' : auditKinds[0] === 'facts' ? 'Corrige en el guion los errores y matices de esta auditoría.' : 'Aplica este análisis de audiencia al guion.') : msg, comments, {...studio.uiRef.current}, refs.length ? refs : undefined, ready.length ? ready : undefined, ideaRefs.length ? ideaRefs : undefined, audit ? [...auditKinds] : undefined);
+      await chatApi.send(chatKey, chatId, audit && !msg.trim() ? (auditKinds.length > 1 ? 'Aplica estos análisis al guion.' : auditKinds[0] === 'hook' ? 'Aplica este análisis del gancho al guion.' : auditKinds[0] === 'facts' ? (studio.uiRef.current.page === 'carousel' ? 'Corrige en las láminas los errores y matices de esta auditoría.' : 'Corrige en el guion los errores y matices de esta auditoría.') : 'Aplica este análisis de audiencia al guion.') : msg, comments, {...studio.uiRef.current}, refs.length ? refs : undefined, ready.length ? ready : undefined, ideaRefs.length ? ideaRefs : undefined, audit ? [...auditKinds] : undefined);
       setText('');
       for (const i of images) URL.revokeObjectURL(i.url);
       setImages([]);
@@ -447,9 +453,16 @@ function Conversation({chatKey, chatId, slug, visible, onNew}: {chatKey: string;
           <ul className="flex flex-col gap-1 text-sm">
             {comments.map((c) => (
               <li key={c.id} className="flex items-center gap-2 rounded-md bg-muted px-2 py-1">
-                <button className="rounded bg-amber-400/20 px-1.5 text-xs text-amber-300 tabular-nums" onClick={() => studio.seekRef.current(c.t)}>
-                  {fmtTime(c.t)}
-                </button>
+                {/* A carousel's comment names its slide (by id: it stays right if the slides move). */}
+                {c.slide ? (
+                  <span className="rounded bg-amber-400/20 px-1.5 text-xs whitespace-nowrap text-amber-700 tabular-nums dark:text-amber-300" title={`Lámina «${c.slide.id}»${c.slide.version ? ` · ${c.slide.version}` : ''}`}>
+                    Lámina {c.slide.n}
+                  </span>
+                ) : (
+                  <button className="rounded bg-amber-400/20 px-1.5 text-xs text-amber-300 tabular-nums" onClick={() => studio.seekRef.current(c.t)}>
+                    {fmtTime(c.t)}
+                  </button>
+                )}
                 <span className="min-w-0 flex-1 truncate">{c.text}</span>
                 <Button variant="ghost" size="icon-xs" onClick={() => studio.removeComment(slug!, c.id)} title="Quitar">
                   <X />

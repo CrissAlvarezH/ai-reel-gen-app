@@ -283,8 +283,13 @@ export function ReelView({slug}: {slug: string}) {
     return () => setReelTitle(null);
   }, [name, setReelTitle]);
 
+  // A carousel reached by its old-style link (#/reel/<slug>) opens its own page.
+  useEffect(() => {
+    if (reel?.kind === 'carousel') location.replace(`#/carrusel/${reel.slug}`);
+  }, [reel]);
+
   if (err) return <p className="p-6 text-destructive">{err}</p>;
-  if (!reel) return <DetailSkeleton />;
+  if (!reel || reel.kind === 'carousel') return <DetailSkeleton />;
   // The video's name lives in the top header; the page starts with the video and its script.
   return (
     <main className="flex flex-col gap-4 p-6">
@@ -770,7 +775,7 @@ function Boards({reel, onZoom}: {reel: ReelDetail; onZoom: (u: string) => void})
   );
 }
 
-function TextFileTab({slug, path, disk, hint}: {slug: string; path: string; disk: string; hint: string}) {
+export function TextFileTab({slug, path, disk, hint}: {slug: string; path: string; disk: string; hint: string}) {
   const ed = useEditable(disk, (text) => api.write(slug, path, text));
   return (
     <div className="flex flex-col gap-3">
@@ -810,7 +815,8 @@ function useCopy() {
   return [state, copy] as const;
 }
 
-function CaptionTab({reel}: {reel: ReelDetail}) {
+// Also a carousel's (CarouselView.tsx): only the caption, the credits and the slug are read.
+export function CaptionTab({reel}: {reel: Pick<ReelDetail, 'slug' | 'caption' | 'credits'>}) {
   const ed = useEditable(reel.caption, (text) => api.write(reel.slug, 'caption.md', text));
   const tags = (ed.text.match(/#[\p{L}\p{N}_]+/gu) ?? []).length;
   const emoji = /\p{Extended_Pictographic}/u.test(ed.text);
@@ -989,7 +995,7 @@ function AutomationField({field, value, onChange, onKeyDown}: {field: (typeof AU
   );
 }
 
-function AutomationTab({reel}: {reel: ReelDetail}) {
+export function AutomationTab({reel, what = 'este video'}: {reel: Pick<ReelDetail, 'slug' | 'automation'>; what?: string}) {
   const disk = parseAutomation(reel.automation);
   const ed = useEditable(disk ? automationText(disk) : reel.automation, (text) => api.write(reel.slug, 'automatizacion.json', text));
   const current = parseAutomation(ed.text);
@@ -1006,7 +1012,7 @@ function AutomationTab({reel}: {reel: ReelDetail}) {
       )}
       {current && AUTOMATION_FIELDS.map((f) => <AutomationField key={f.key} field={f} value={str(f.key)} onChange={(v) => set(f.key, v)} onKeyDown={saveOnCmdS(ed)} />)}
       <SaveBar ed={ed}>
-        <span className="font-mono">automatizacion.json</span> · Para configurar ManyChat o InstantDM en este video.
+        <span className="font-mono">automatizacion.json</span> · Para configurar ManyChat o InstantDM en {what}.
       </SaveBar>
     </div>
   );

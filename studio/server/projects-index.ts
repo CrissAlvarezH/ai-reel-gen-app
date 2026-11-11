@@ -10,6 +10,7 @@ import path from 'node:path';
 import {ROOT, listProjects} from './workspace.ts';
 import {readJson} from './platform.ts';
 import {CREATED, createdOf} from './created.ts';
+import {kindIn, manifestIn} from './carousel.ts';
 import {register, read as readIndex, dirs, mtime, median, norm, strs, json, row, words, since, durationWhere, type DB, type DURATIONS} from './db.ts';
 import type {CloudReelMetrics, InspirationProfile, OwnReel, PostedReel, ReelAnalysis, ReelTranscript} from '../shared/types.ts';
 
@@ -26,18 +27,20 @@ CREATE TABLE projects (       -- each channel the studio works on: projects/<id>
   account   TEXT,              -- its Instagram account (Mi cuenta: config/account.json), without @
   videos    INTEGER NOT NULL
 );
-CREATE TABLE videos (         -- the videos made in the studio (Biblioteca), of every project
+CREATE TABLE videos (         -- the publications made in the studio (Biblioteca), of every project: videos and carousels
   project   TEXT NOT NULL,     -- projects.id
   slug      TEXT NOT NULL,     -- its folder: projects/<project>/videos/<slug>/
+  kind      TEXT NOT NULL,     -- 'video' or 'carousel' (kind.txt; none: video)
+  slides    INTEGER,           -- carousels: slides in carousel.json (null for videos)
   title     TEXT,              -- its name in the studio (title.txt)
   style     TEXT,              -- visual style: an id in styles/ (style.txt; null: the default)
-  script    TEXT,              -- the narration (audio/vo.txt)
+  script    TEXT,              -- the narration (audio/vo.txt); carousels: each slide's text, one line per slide
   words     INTEGER,           -- of the script
   hook      TEXT,              -- the script's first sentence
   caption   TEXT,              -- the post's text (caption.md)
   voice     INTEGER NOT NULL,  -- 1: the voice is recorded (audio/vo.mp3)
   seconds   REAL,              -- length of the recorded voice (src/words.json), or null
-  renders   INTEGER NOT NULL,  -- versions rendered (out/*.mp4)
+  renders   INTEGER NOT NULL,  -- versions rendered (out/*.mp4; carousels: out/vN/)
   rendered  INTEGER,           -- newest render, ms (null: none)
   created   INTEGER,           -- ms
   updated   INTEGER,           -- newest of the folder, the script and the renders, ms
@@ -153,7 +156,7 @@ type ReelFile = {code: string; url: string; caption: string; posted: string | nu
 type AccountFile = {username: string; fullName: string | null; profile: InspirationProfile | null; fetched: number | null; error: string | null};
 type InsightsFile = {metrics?: Partial<CloudReelMetrics>; at?: number};
 
-const VIDEO_FILES = [CREATED, 'title.txt', 'style.txt', 'audio/vo.txt', 'audio/beats.json', 'caption.md', 'audio/vo.mp3', 'src/words.json'];
+const VIDEO_FILES = [CREATED, 'title.txt', 'style.txt', 'audio/vo.txt', 'audio/beats.json', 'caption.md', 'audio/vo.mp3', 'src/words.json', 'kind.txt', 'carousel.json'];
 const REEL_FILES = ['reel.json', 'meta.json', 'thumb.jpg', 'transcript.json', 'hook.jpg', 'analysis.json', 'insights.json'];
 
 // Each returns whether anything changed.
@@ -162,7 +165,7 @@ function syncVideos(d: DB, ids: string[]) {
   const known = new Map((d.prepare('SELECT project, slug, sig FROM videos').all() as {project: string; slug: string; sig: string}[]).map((r) => [`${r.project}/${r.slug}`, r.sig]));
   const seen = new Set<string>();
   const upsert = d.prepare(
-    `INSERT OR REPLACE INTO videos (project, slug, title, style, script, words, hook, caption, voice, seconds, renders, rendered, created, updated, reel, search, sig) VALUES (${Array(17).fill('?').join(', ')})`,
+    `INSERT OR REPLACE INTO videos (project, slug, kind, slides, title, style, script, words, hook, caption, voice, seconds, renders, rendered, created, updated, reel, search, sig) VALUES (${Array(19).fill('?').join(', ')})`,
   );
   const delBeats = d.prepare('DELETE FROM video_beats WHERE project = ? AND slug = ?');
   const addBeat = d.prepare('INSERT INTO video_beats (project, slug, idx, tag, line) VALUES (?, ?, ?, ?, ?)');
@@ -171,14 +174,16 @@ function syncVideos(d: DB, ids: string[]) {
     const vids = path.join(ROOT, 'projects', id, 'videos');
     for (const slug of dirs(vids, (n) => SLUG.test(n))) {
       const dir = path.join(vids, slug);
-      const outs = ls(path.join(dir, 'out')).filter((n) => /\.mp4$/i.test(n));
+      const kind = kindIn(dir);
+      const outs = ls(path.join(dir, 'out')).filter((n) => (kind === 'carousel' ? /^v\d+$/.test(n) : /\.mp4$/i.test(n)));
       const renders = outs.map((n) => mtime(path.join(dir, 'out', n)));
       const sig = [mtime(dir), ...VIDEO_FILES.map((f) => mtime(path.join(dir, f))), ...renders].join(',');
       const key = `${id}/${slug}`;
       seen.add(key);
       if (known.get(key) === sig) continue;
       changed = true;
-      const script = read(path.join(dir, 'audio/vo.txt'))?.trim() ?? '';
+      const deck = kind === 'carousel' ? manifestIn(dir).slides : null;
+      const script = deck ? deck.map((x) => x.text.replace(/\s+/g, ' ').trim()).join('\n').trim() : (read(path.join(dir, 'audio/vo.txt'))?.trim() ?? '');
       const title = read(path.join(dir, 'title.txt'))?.trim() || null;
       const caption = read(path.join(dir, 'caption.md'))?.trim() || null;
       const words = readJson<{e: number}[]>(path.join(dir, 'src/words.json'));
@@ -188,7 +193,7 @@ function syncVideos(d: DB, ids: string[]) {
       const prev = (oldReel.get(id, slug) as {reel: string | null} | undefined)?.reel ?? null;
       upsert.run(
         ...row([
-          id, slug, title, read(path.join(dir, 'style.txt'))?.trim() || null, script || null, script ? script.split(/\s+/).filter(Boolean).length : 0,
+          id, slug, kind, deck ? deck.length : null, title, read(path.join(dir, 'style.txt'))?.trim() || null, script || null, script ? script.split(/\s+/).filter(Boolean).length : 0,
           script.split(/(?<=[.?!…])\s/)[0] || null, caption, mtime(path.join(dir, 'audio/vo.mp3')) ? 1 : 0,
           Array.isArray(words) && words.length ? Math.round(words[words.length - 1].e * 10) / 10 : null, outs.length, rendered, Math.round(created),
           Math.round(Math.max(mtime(dir), mtime(path.join(dir, 'audio/vo.txt')), rendered ?? 0)), prev, norm([title, script, caption].filter(Boolean).join('\n')), sig,
@@ -326,7 +331,7 @@ const sameStart = (a: string, b: string) => {
 
 // Each reel of a project's account to the video it came from; each video to its newest reel.
 function link(d: DB) {
-  const vids = d.prepare('SELECT project, slug, caption, script, reel FROM videos').all() as {project: string; slug: string; caption: string | null; script: string | null; reel: string | null}[];
+  const vids = d.prepare("SELECT project, slug, caption, script, reel FROM videos WHERE kind = 'video'").all() as {project: string; slug: string; caption: string | null; script: string | null; reel: string | null}[];
   const reels = d
     .prepare('SELECT r.project, r.account, r.code, r.caption, r.posted, r.video, a.configured FROM own_reels r JOIN own_accounts a ON a.project = r.project AND a.username = r.account')
     .all() as {project: string; account: string; code: string; caption: string; posted: string | null; video: string | null; configured: number}[];

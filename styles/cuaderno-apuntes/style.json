@@ -38,6 +38,24 @@
     "Párrafos en letra manuscrita: lo largo va en el subtítulo en Inter.",
     "Más de dos colores de acento en una escena."
   ],
+  "carousel": {
+    "look": [
+      "Lámina 4:5 (1080×1350) como una página de cuaderno cuadriculada con margen rojo a la izquierda y sombra suave; cada lámina es la página siguiente.",
+      "Portada: la pregunta o la promesa escrita a mano en Caveat 700 grande (≈110 px), con el resaltador amarillo detrás de la palabra clave y un dibujo de línea simple que la ilustre.",
+      "Una idea por lámina: un título a mano arriba, un dibujo o diagrama a rotulador en el centro y como mucho 30 palabras en Patrick Hand de 38 px o más.",
+      "Post-its para las cifras y los datos; flechas curvas a mano que unen lo que se relaciona.",
+      "Notas al margen en bolígrafo azul para ejemplos; tachones rojos sobre lo incorrecto.",
+      "El número de página «3/8» a mano abajo a la derecha, como en un cuaderno.",
+      "Última lámina: el resumen en tres viñetas a mano y el CTA en un post-it («Guárdalo para cuando lo necesites»)."
+    ],
+    "avoid": [
+      "Más de dos colores de acento por lámina.",
+      "Letra a mano por debajo de 34 px o renglones apretados: tiene que leerse en el móvil.",
+      "Fotos o capturas de pantalla: todo parece dibujado en la hoja.",
+      "Texto encima de las líneas del margen o pegado a los bordes."
+    ],
+    "examples": []
+  },
   "examples": [],
   "references": []
 }

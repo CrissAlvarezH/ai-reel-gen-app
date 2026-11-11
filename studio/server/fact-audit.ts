@@ -27,6 +27,7 @@ import {httpError, isPlaceholder, listSlugs, title, validSlug} from './reels.ts'
 import {arr, hash, modelOptions, obj, str} from './script-check.ts';
 import {PROJECT, ROOT, listProjects, projectDir, rel, withProject} from './workspace.ts';
 import {runsElsewhere} from './cloud.ts';
+import {MANIFEST, kindIn, manifestIn, scriptOf, slideOfClaim} from './carousel.ts';
 
 type Store = {settings: FactAuditSettings; reports: FactReport[]; seen: Record<string, string>};
 const DEFAULTS: FactAuditSettings = {auto: false, prompt: '', model: '', effort: 'high'};
@@ -37,7 +38,27 @@ const REVIEW_TIMEOUT = 15 * 60_000;
 const MERGE_TIMEOUT = 6 * 60_000;
 
 const fileOf = (project: string) => path.join(projectDir(project), 'fact-audit.json');
-const scriptFile = (project: string, slug: string) => path.join(projectDir(project), 'videos', slug, 'audio/vo.txt');
+// What's checked: a video's narration (audio/vo.txt), or a carousel's slides (carousel.json), one line per slide with
+// its number and id ("Lámina 2 (cifra-real, «…»): …") so each finding can say which slide it's on.
+const pubDir = (project: string, slug: string) => path.join(projectDir(project), 'videos', slug);
+const isCarouselIn = (project: string, slug: string) => kindIn(pubDir(project, slug)) === 'carousel';
+const scriptFile = (project: string, slug: string) => path.join(pubDir(project, slug), isCarouselIn(project, slug) ? MANIFEST : 'audio/vo.txt');
+// Throws when there's nothing to read (like reading vo.txt did).
+function readScript(project: string, slug: string): string {
+  if (!isCarouselIn(project, slug)) return fs.readFileSync(scriptFile(project, slug), 'utf8').trim();
+  if (!fs.existsSync(scriptFile(project, slug))) throw new Error('sin carousel.json');
+  return scriptOf(manifestIn(pubDir(project, slug)).slides);
+}
+// The slide a finding is on, from the report's own text (ids as they were when it ran: a later reorder doesn't move it).
+function slideOf(r: FactReport, claim: string) {
+  const slides: {id: string; title: string; text: string}[] = [];
+  for (const line of r.script.split('\n')) {
+    const m = /^L[áa]mina (\d+) \(([a-z0-9-]+)(?:, «(.*?)»)?\): (.*)$/.exec(line);
+    if (m) slides[Number(m[1]) - 1] = {id: m[2], title: m[3] ?? '', text: m[4]};
+  }
+  return slideOfClaim(Array.from(slides, (x) => x ?? {id: '', title: '', text: ''}), claim);
+}
+const what = (r: FactReport) => (r.kind === 'carousel' ? 'the text of an Instagram carousel' : 'the narration script of a short video');
 // A file that's there but can't be read (edited by hand, cut) stops here, so the next change doesn't write empty
 // settings and no reports over it.
 const read = (project: string): Store => {
@@ -91,10 +112,10 @@ const today = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
 
 function reviewPrompt(n: number, r: FactReport, audience: string) {
   const l = LENSES[n - 1];
-  return `Today is ${today()}. You are reviewer ${n} of three who check, each on their own, the facts stated in the narration script of a short video. You won't see the other reviewers' work and they won't see yours: don't assume anything is right because it's in the script, and don't soften a verdict.
+  return `Today is ${today()}. You are reviewer ${n} of three who check, each on their own, the facts stated in ${what(r)}. You won't see the other reviewers' work and they won't see yours: don't assume anything is right because it's in the script, and don't soften a verdict.
 ${audience ? `The video is for: ${audience}. Use it to know which country, currency, laws and institutions the claims refer to when the script doesn't say.\n` : ''}
 Title: «${r.title}»
-The script (one line per beat):
+${r.kind === 'carousel' ? 'The carousel (one line per slide: "Lámina N (its id, «title»): what the slide says"):' : 'The script (one line per beat):'}
 """
 ${r.script}
 """
@@ -112,12 +133,12 @@ What to do:
 ${r.prompt ? `\nThe creator's instructions for this audit (they win over the above on what to check and how, never on citing sources you opened):\n"""\n${r.prompt}\n"""\n` : ''}
 Write explanations and corrections in the script's language, short and plain, giving the figure or date your sources state.
 Answer with a JSON object:
-{"claims": [{"claim": "the script's words, quoted exactly (the line or the part of it)", "verdict": "error" | "matiz" | "ok", "explanation": "what your sources say", "correction": "how the line could say it correctly, in the script's tone (\\"\\" for ok)", "sources": [{"title": "page or document title", "url": "https://…"}]}]}
+{"claims": [{"claim": "${r.kind === 'carousel' ? 'Lámina N: and then the slide\'s words, quoted exactly' : 'the script\'s words, quoted exactly (the line or the part of it)'}", "verdict": "error" | "matiz" | "ok", "explanation": "what your sources say", "correction": "how the line could say it correctly, in the script's tone (\\"\\" for ok)", "sources": [{"title": "page or document title", "url": "https://…"}]}]}
 Every claim needs at least one source you opened.`;
 }
 
 function mergePrompt(r: FactReport, reviews: {n: number; claims: Claim[]}[]) {
-  return `Three reviewers checked, independently and with web sources, the facts stated in this video script. Merge their work into one report. You are not a fourth reviewer: don't add claims none of them made, don't use sources they didn't give and don't use your own knowledge to overrule their evidence.
+  return `Three reviewers checked, independently and with web sources, the facts stated in ${what(r)}. Merge their work into one report. You are not a fourth reviewer: don't add claims none of them made, don't use sources they didn't give and don't use your own knowledge to overrule their evidence.
 
 The script:
 """
@@ -127,7 +148,7 @@ ${r.script}
 ${reviews.map((v) => `Reviewer ${v.n} (approach: ${LENSES[v.n - 1].lens}):\n${JSON.stringify(v.claims)}`).join('\n\n')}
 
 Rules:
-- One finding per fact: join the claims that refer to the same fact even if quoted differently. "agents": the numbers of the reviewers who listed it. "claim": the script's words, quoted exactly.
+- One finding per fact: join the claims that refer to the same fact even if quoted differently. "agents": the numbers of the reviewers who listed it. "claim": the script's words, quoted exactly${r.kind === 'carousel' ? ', starting with "Lámina N: " (the slide it is on)' : ''}.
 - "verdict": if they agree, that one. If they disagree, decide from the evidence they give (the most specific, primary and recent source wins; a figure a reliable source shows wrong is an "error" even if another reviewer passed it), set "disputed": true and say in explanation what each side found.
 - A fact only one reviewer flagged as "error" or "matiz" stays (it may have caught what the others missed) unless the others' sources clearly show it's right.
 - "sources": the reviewers' sources for that fact, best first, up to 4, copied exactly (title and url).
@@ -225,6 +246,11 @@ async function audit(job: Job, signal: AbortSignal) {
     if (signal.aborted) return update(job.project, job.id, (x) => ((x.status = 'stopped'), (x.finished = Date.now())));
     merged = {summary: `No pude unir los hallazgos de los revisores (${(e as Error).message}): van por separado, y un mismo dato puede salir más de una vez.`, findings: unmerged(ok)};
   }
+  if (r.kind === 'carousel')
+    for (const f of merged.findings) {
+      const at = slideOf(r, f.claim);
+      if (at) f.slide = at;
+    }
   update(job.project, job.id, (x) => {
     x.status = 'done';
     x.finished = Date.now();
@@ -256,7 +282,7 @@ async function pump() {
 function enqueue(project: string, s: Store, slug: string, trigger: 'manual' | 'auto'): string | null {
   let script = '';
   try {
-    script = fs.readFileSync(scriptFile(project, slug), 'utf8').trim();
+    script = readScript(project, slug);
   } catch {
     return null;
   }
@@ -266,6 +292,7 @@ function enqueue(project: string, s: Store, slug: string, trigger: 'manual' | 'a
   s.reports.push({
     id,
     slug,
+    ...(isCarouselIn(project, slug) ? {kind: 'carousel' as const} : {}),
     title: withProject(project, () => title(slug)) ?? slug,
     trigger,
     script,
@@ -288,7 +315,7 @@ function enqueue(project: string, s: Store, slug: string, trigger: 'manual' | 'a
 
 const lastScript = (slug: string) => {
   try {
-    return fs.readFileSync(scriptFile(PROJECT, slug), 'utf8').trim();
+    return readScript(PROJECT, slug);
   } catch {
     return '';
   }
@@ -314,6 +341,7 @@ export function view(): FactAuditView {
     }
     return {
       slug,
+      ...(isCarouselIn(PROJECT, slug) ? {kind: 'carousel' as const} : {}),
       title: title(slug) ?? slug,
       script: !!script && !isPlaceholder(slug, script),
       updated: Math.round(updated),
@@ -435,9 +463,8 @@ function scan() {
     }
     const due = slugs.filter((slug) => {
       try {
-        const f = scriptFile(p.id, slug);
-        const st = fs.statSync(f);
-        const script = fs.readFileSync(f, 'utf8').trim();
+        const st = fs.statSync(scriptFile(p.id, slug));
+        const script = readScript(p.id, slug);
         return !!script && s.seen[slug] !== hash(script) && Date.now() - st.mtimeMs >= STABLE && !s.reports.some((r) => r.slug === slug && busy(p.id, r.id));
       } catch {
         return false;
@@ -449,7 +476,7 @@ function scan() {
         if (!enqueue(p.id, st, slug, 'auto')) {
           // A placeholder: seen, so it isn't looked at again until it changes.
           try {
-            st.seen[slug] = hash(fs.readFileSync(scriptFile(p.id, slug), 'utf8').trim());
+            st.seen[slug] = hash(readScript(p.id, slug));
           } catch {
             /* gone */
           }
@@ -478,12 +505,15 @@ export function agentText(slug: string): string {
   if (!r) return '';
   const flagged = r.findings.filter((f) => f.verdict !== 'ok');
   const changed = hash(lastScript(slug)) !== r.scriptHash;
+  const slides = r.kind === 'carousel';
   return [
-    `Auditoría de datos del guion (página Auditoría, ${new Date(r.finished ?? r.created).toLocaleString('es')}; tres revisores independientes con fuentes web)${changed ? '. Ojo: el guion cambió después de esta auditoría, compáralo con audio/vo.txt' : ''}.`,
+    `Auditoría de datos ${slides ? 'del texto de las láminas' : 'del guion'} (página Auditoría, ${new Date(r.finished ?? r.created).toLocaleString('es')}; tres revisores independientes con fuentes web)${changed ? `. Ojo: ${slides ? 'el texto de las láminas' : 'el guion'} cambió después de esta auditoría, compáralo con ${slides ? 'carousel.json' : 'audio/vo.txt'}` : ''}.`,
     r.summary && `Resumen: ${r.summary}`,
     flagged.length ? 'Hallazgos:' : 'No encontró errores ni matices.',
-    ...flagged.map((f) => `- [${f.verdict === 'error' ? 'Error' : 'Matiz'}${f.disputed ? ', los revisores no coincidieron' : ''}] «${f.claim}»: ${f.explanation}${f.correction ? ` Corrección: ${f.correction}` : ''}${f.sources.length ? ` Fuentes: ${f.sources.map((x) => x.url).join(' · ')}` : ' (sin fuente)'}`),
-    'Corrige solo lo que estas fuentes sostengan (ábrelas si dudas) y cuéntale qué cambiaste; si cambias el guion, actualiza beats.json y respeta el skill video-script.',
+    ...flagged.map((f) => `- [${f.verdict === 'error' ? 'Error' : 'Matiz'}${f.disputed ? ', los revisores no coincidieron' : ''}]${f.slide ? ` lámina «${f.slide.id}» (era la ${f.slide.n})` : ''} «${f.claim}»: ${f.explanation}${f.correction ? ` Corrección: ${f.correction}` : ''}${f.sources.length ? ` Fuentes: ${f.sources.map((x) => x.url).join(' · ')}` : ' (sin fuente)'}`),
+    slides
+      ? 'Corrige solo lo que estas fuentes sostengan (ábrelas si dudas) y cuéntale qué cambiaste: cambia la lámina por su id (su dibujo en src/slides/<id>.tsx y su text en carousel.json) y renderiza una versión nueva.'
+      : 'Corrige solo lo que estas fuentes sostengan (ábrelas si dudas) y cuéntale qué cambiaste; si cambias el guion, actualiza beats.json y respeta el skill video-script.',
   ]
     .filter(Boolean)
     .join('\n');

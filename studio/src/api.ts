@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {CalendarPublication, PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationMemory, AutomationsView, MemoryInput, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView, Research, ResearchDetail, ResearchEstimate, ResearchOptions, ResearchSettings, ResearchSettingsView, ResearchStatus, ResearchVideoDetail} from '../shared/types';
+import type {CalendarPublication, PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationMemory, AutomationsView, MemoryInput, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, CarouselDetail, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView, Research, ResearchDetail, ResearchEstimate, ResearchOptions, ResearchSettings, ResearchSettingsView, ResearchStatus, ResearchVideoDetail} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -18,6 +18,18 @@ export const api = {
   // choice: the model and effort picked for it, if he changed them; brief: instructions for the agent only, not shown.
   create: (text: string, context?: unknown, style?: string, videoFormat?: string, clips?: string[], choice?: {model: string; effort: string}, brief?: string) =>
     fetch('/api/reels', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text, brief, context, style, videoFormat, clips, ...choice})}).then((r) => json<{slug: string; title: string}>(r)),
+  // A new carousel (kind "carousel"): named like a video from its first message; from: a video whose script it starts from.
+  createCarousel: (text: string, context?: unknown, style?: string, from?: string, choice?: {model: string; effort: string}, brief?: string) =>
+    post('/api/reels', {kind: 'carousel', text, brief, context, style, from, ...choice}) as Promise<{slug: string; title: string; kind: 'carousel'}>,
+  // Carousels (server/carousel.ts): the draft (carousel.json) and its versions (out/vN/).
+  carousel: (slug: string) => fetch(`/api/carousels/${slug}`).then((r) => json<CarouselDetail>(r)),
+  reorderSlides: (slug: string, order: string[]) =>
+    fetch(`/api/carousels/${slug}/order`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({order})}).then((r) => json<CarouselDetail>(r)),
+  addSlide: (slug: string, input: {after?: string; duplicate?: string; title?: string}) => post(`/api/carousels/${slug}/slides`, input) as Promise<{id: string; carousel: CarouselDetail}>,
+  removeSlide: (slug: string, id: string) => fetch(`/api/carousels/${slug}/slides/${encodeURIComponent(id)}`, {method: 'DELETE'}).then((r) => json<CarouselDetail>(r)),
+  renderCarousel: (slug: string, note?: string) => post(`/api/carousels/${slug}/render`, {note}),
+  exportUrl: (slug: string, version: string) => `/api/carousels/${slug}/export?version=${encodeURIComponent(version)}`,
+  revealCarouselVersion: (slug: string, version: string) => post(`/api/carousels/${slug}/reveal-version`, {version}),
   audienceCheck: (slug: string) => fetch(`/api/reels/${slug}/audience-check`).then((r) => json<ScriptCheckState>(r)),
   runAudienceCheck: (slug: string, force = false) => post(`/api/reels/${slug}/audience-check`, {force}) as Promise<ScriptCheckState>,
   // The model each review runs on (its badge): '' = the default.
