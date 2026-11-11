@@ -52,7 +52,8 @@ export type SourceProfile = {
 
 type J = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-async function api(path: string, params: Record<string, string | undefined>, key = getKey(KEY)): Promise<J> {
+// Also Investigación's (server/research-platforms.ts): any endpoint, with the key in Ajustes.
+export async function api(path: string, params: Record<string, string | undefined>, key = getKey(KEY)): Promise<J> {
   if (!key) throw new Error('falta la clave de ScrapeCreators: ponla en Ajustes → Extracción de datos → Redes sociales');
   const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => !!e[1]));
   const r = await fetch(`https://api.scrapecreators.com${path}${q.size ? `?${q}` : ''}`, {headers: {'x-api-key': key}, signal: AbortSignal.timeout(90_000)});

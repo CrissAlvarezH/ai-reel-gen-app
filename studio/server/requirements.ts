@@ -111,7 +111,7 @@ type Probe = {
   ffV: string | null;
   py: string | null;
   pyV: string | null;
-  venv: {version: string | null; missing: string[]; whisper: boolean} | null; // null: no .venv
+  venv: {version: string | null; missing: string[]; whisper: boolean; ytdlp: boolean} | null; // null: no .venv
 };
 const PROBE_TTL = 5000;
 let probeCache: {root: string; at: number; p: Promise<Probe>} | null = null;
@@ -133,6 +133,7 @@ async function runProbes(): Promise<Probe> {
     'print(sys.version.split()[0])',
     `print(' '.join(p for m, p in ${JSON.stringify(PACKAGES)} if not u.find_spec(m)))`,
     "print(bool(u.find_spec('faster_whisper')))",
+    "print(bool(u.find_spec('yt_dlp')))",
   ].join('\n');
   const [nodeV, npmV, ffOut, pyOut, venvOut] = await Promise.all([
     node ? out(node, ['--version']) : null,
@@ -143,9 +144,9 @@ async function runProbes(): Promise<Probe> {
   ]);
   let venv: Probe['venv'] = null;
   if (vpy && exists(vpy)) {
-    const [version = null, missing = '', whisper = ''] = venvOut?.split('\n') ?? [];
+    const [version = null, missing = '', whisper = '', ytdlp = ''] = venvOut?.split('\n') ?? [];
     // It didn't run: say everything is missing (Reparar reinstalls).
-    venv = venvOut === null ? {version: null, missing: PACKAGES.map(([, pkg]) => pkg), whisper: false} : {version, missing: missing.split(/\s+/).filter(Boolean), whisper: whisper.trim() === 'True'};
+    venv = venvOut === null ? {version: null, missing: PACKAGES.map(([, pkg]) => pkg), whisper: false, ytdlp: false} : {version, missing: missing.split(/\s+/).filter(Boolean), whisper: whisper.trim() === 'True', ytdlp: ytdlp.trim() === 'True'};
   }
   return {
     node,
@@ -159,6 +160,22 @@ async function runProbes(): Promise<Probe> {
     venv,
   };
 }
+
+// Whether Investigación can download YouTube Shorts to analyse them: yt-dlp in the venv (YouTube gives no direct link).
+export async function ytdlpReady() {
+  if (!ROOT || !exists(venvPy())) return false;
+  return !!(await probe()).venv?.ytdlp;
+}
+
+// Investigación has a research in some project (projects/<id>/research/<id>/).
+const researchUsed = () =>
+  listProjects().some(({id}) => {
+    try {
+      return fs.readdirSync(path.join(ROOT, 'projects', id, 'research')).some((n) => !n.startsWith('.'));
+    } catch {
+      return false;
+    }
+  });
 
 // Whether Inspiración can transcribe: faster-whisper in the venv and its model downloaded. Inspiración asks
 // on every refresh, so this answer is kept longer (and also cleared when a job ends).
@@ -322,6 +339,19 @@ export async function check(): Promise<Requirement[]> {
       job: job('whisper'),
     });
 
+    const ytdlp = !!venv?.ytdlp;
+    reqs.push({
+      id: 'ytdlp',
+      label: 'Descarga de YouTube (yt-dlp)',
+      ok: ytdlp,
+      version: null,
+      detail: ytdlp ? 'Instalado.' : 'Investigación lo usa para bajar los YouTube Shorts que analiza (YouTube no da el enlace del video). Se instala en el .venv.',
+      neededBy: researchUsed() ? ['Investigación'] : [],
+      unused: 'para analizar YouTube Shorts en Investigación',
+      fix: pyOk ? {label: 'Instalar', command: `${PY} -m venv .venv && pip install yt-dlp`, auto: true} : null,
+      job: job('ytdlp'),
+    });
+
     const b = videosWithoutBrowser();
     reqs.push({
       id: 'browser',
@@ -364,6 +394,12 @@ export async function fix(id: string) {
     if (!exists(venvPy())) steps.push([which(PY)!, ['-m', 'venv', '.venv'], ROOT]);
     steps.push([venvPy(), ['-m', 'pip', 'install', '--upgrade', '-r', path.join('tools', 'requirements-whisper.txt')], ROOT]);
     steps.push([venvPy(), ['-c', `from faster_whisper import WhisperModel; WhisperModel('${WHISPER}', device='cpu', compute_type='int8'); print('modelo listo')`], ROOT]);
+    return runJob(id, steps);
+  }
+  if (id === 'ytdlp') {
+    const steps: [string, string[], string][] = [];
+    if (!exists(venvPy())) steps.push([which(PY)!, ['-m', 'venv', '.venv'], ROOT]);
+    steps.push([venvPy(), ['-m', 'pip', 'install', '--upgrade', 'yt-dlp'], ROOT]);
     return runJob(id, steps);
   }
   if (id === 'rembg-model') return runJob(id, [[venvPy(), ['-c', `from rembg import new_session; new_session('${MODEL}'); print('ok')`], ROOT]]);

@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import type {CalendarPublication, PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationMemory, AutomationsView, MemoryInput, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView} from '../shared/types';
+import type {CalendarPublication, PublishInput, VideoPublication, VideoPublications, FactAuditSettings, FactAuditView, FactReportState, AutomationAgent, Audience, AudienceLevels, AudienceWant, PillarSet, ScriptCheckState, HookCheckState, CheckModels, WantOption, Agent, AgentChoice, AgentUsage, AutomationInput, AutomationMemory, AutomationsView, MemoryInput, Beat, IdeaColor, IdeaIcon, IdeaRef, IdeasBoard, ImageSources, InspirationList, InspirationReel, InspirationRef, InspirationStatus, Profile, ReelFormat, Requirement, Style, StyleRef, ChatList, ChatOptions, SocialSourceId, Voice, VoiceModel, VoiceOption, VoiceRef, VoiceSample, ChatState, Comment, ReelDetail, ReelSummary, ServerEvent, Settings, SourceItem, SourceItemDetail, SourceItemList, SourceItemState, SourcesView, Research, ResearchDetail, ResearchEstimate, ResearchOptions, ResearchStatus, ResearchVideoDetail} from '../shared/types';
 
 export type * from '../shared/types';
 
@@ -490,4 +490,27 @@ export const sourcesApi = {
   item: (id: string) => sourcesCall<SourceItemDetail>('GET', `/api/source-items/${seg(id)}`),
   editItem: (id: string, input: {state?: SourceItemState; tags?: string[]}) => sourcesCall<SourceItem>('PUT', `/api/source-items/${seg(id)}`, input),
   removeItem: (id: string) => sourcesCall('DELETE', `/api/source-items/${seg(id)}`),
+};
+
+/* ───── Investigación (server/research.ts) ───── */
+
+export const researchApi = {
+  status: () => fetch('/api/research').then((r) => json<ResearchStatus>(r)),
+  // A new research: the agent proposes its searches in the background (unless queries are given).
+  create: (topic: string, options: Partial<ResearchOptions>, queries?: string[]) => post('/api/research', {topic, ...options, queries}) as Promise<Research>,
+  detail: (id: string) => fetch(`/api/research/${id}`).then((r) => json<ResearchDetail>(r)),
+  edit: (id: string, input: {topic?: string; queries?: string[]; options?: Partial<ResearchOptions>}) => put<Research>(`/api/research/${id}`, input),
+  remove: (id: string) => del(`/api/research/${id}`),
+  // What a search would cost at most (ScrapeCreators' credits, Apify's balance).
+  estimate: (id: string) => post(`/api/research/${id}/estimate`) as Promise<ResearchEstimate>,
+  // Background jobs: the page follows them by the socket.
+  search: (id: string) => post(`/api/research/${id}/search`) as Promise<Research>,
+  analyse: (id: string, opts: {top?: number; keys?: string[]}) => post(`/api/research/${id}/analyse`, opts) as Promise<Research>,
+  report: (id: string) => post(`/api/research/${id}/report`) as Promise<Research>,
+  stop: (id: string) => post(`/api/research/${id}/stop`),
+  video: (id: string, key: string) => fetch(`/api/research/${id}/videos/${key}`).then((r) => json<ResearchVideoDetail>(r)),
+  setRelevant: (id: string, key: string, relevant: boolean) => put(`/api/research/${id}/videos/${key}`, {relevant}),
+  // "Llevar a Ideas": a new general conversation, shown in the panel.
+  toIdeas: (id: string, context?: unknown) => post(`/api/research/${id}/ideas`, {context}) as Promise<{chat: string}>,
+  file: (id: string, key: string, f: string) => `/research-files/${id}/${key}/${f}`,
 };

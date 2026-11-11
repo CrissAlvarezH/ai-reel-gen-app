@@ -3,7 +3,9 @@
 
     python tools/inspiration.py projects/<id>/inspiration/<account>/<code>
 
-The folder has reel.json (from the scraper, Apify or ScrapeCreators: videoUrl, displayUrl…). This writes next to it:
+The folder has reel.json (from the scraper, Apify or ScrapeCreators: videoUrl, displayUrl…). Investigación's videos use it
+too (projects/<id>/research/<id>/videos/<key>/): a YouTube Short ("platform": "youtube") has no videoUrl and is downloaded
+from its url with yt-dlp (in the venv). This writes next to it:
   thumb.jpg        the cover
   hook.jpg         the first 3 s at 4 frames/s (12 frames, 6×2, left→right, top→bottom; frame i = i×0.25 s)
   sheet_NN.jpg     the whole reel at 1 frame/s, 30 frames per sheet (6×5; frame i of sheet n = second (n−1)×30+i)
@@ -30,9 +32,20 @@ def download(url, dest):
             shutil.copyfileobj(r, f)
     except urllib.error.HTTPError as e:
         if e.code in (403, 404, 410):
-            sys.exit(f'el enlace de Instagram caducó ({e.code}): vuelve a descargar la cuenta o el reel')
+            sys.exit(f'el enlace del video caducó ({e.code}): vuelve a descargarlo (en Investigación, vuelve a buscar)')
         raise
     os.replace(dest + '.part', dest)
+
+
+def youtube(url, dest):
+    # The best MP4 up to 720p with its audio (a Short is small); yt-dlp's error, its last line.
+    try:
+        import yt_dlp  # noqa: F401
+    except ImportError:
+        sys.exit('falta yt-dlp para bajar videos de YouTube: instálalo en Ajustes → Requisitos → Descarga de YouTube')
+    r = subprocess.run([sys.executable, '-m', 'yt_dlp', '--no-playlist', '--quiet', '--no-warnings', '-f', 'b[height<=720][ext=mp4]/bv*[height<=720][ext=mp4]+ba[ext=m4a]/b', '--merge-output-format', 'mp4', '-o', dest, url], capture_output=True, text=True)
+    if r.returncode or not os.path.exists(dest):
+        sys.exit(f"yt-dlp no pudo bajar el video: {(r.stderr.strip().splitlines() or ['sin detalle'])[-1][-300:]}")
 
 
 def ffmpeg(*args):
@@ -90,10 +103,13 @@ def main():
     need_text = not os.path.exists(p('transcript.json'))
     if need_frames or need_text:
         if not os.path.exists(video):
-            if not reel.get('videoUrl'):
-                sys.exit('el scraper no dio el enlace del video')
             print('video', flush=True)
-            download(reel['videoUrl'], video)
+            if reel.get('platform') == 'youtube' and reel.get('url'):
+                youtube(reel['url'], video)
+            elif not reel.get('videoUrl'):
+                sys.exit('el scraper no dio el enlace del video')
+            else:
+                download(reel['videoUrl'], video)
         if need_frames:
             print('fotogramas', flush=True)
             ffmpeg('-t', '3', '-i', video, '-vf', 'fps=4,scale=240:-2,tile=6x2', '-frames:v', '1', '-q:v', '4', p('hook.jpg'))

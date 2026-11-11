@@ -200,7 +200,7 @@ export type PillarSet = {name: string; pillars: Pillar[]; leftovers: string[]};
 /* ───── Where Cristian is in the UI (sent with every message to the agent) ───── */
 
 export type UiContext = {
-  page: 'account' | 'library' | 'scheduled' | 'ideas' | 'audience' | 'automations' | 'audit' | 'sources' | 'inspiration' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
+  page: 'account' | 'library' | 'scheduled' | 'ideas' | 'audience' | 'automations' | 'audit' | 'sources' | 'inspiration' | 'research' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
   slug?: string;
   style?: string; // style open on the Estilos page (styles/<id>)
   videoFormat?: string; // format open on the Formatos page (formats/<id>)
@@ -213,6 +213,7 @@ export type UiContext = {
   scriptDirty?: boolean;
   inspiration?: string; // account (and reel) open on the Inspiración page: "@user" or "@user/CODE"
   sourceItem?: string; // result open on the Fuentes de información page (its id)
+  research?: string; // research open on the Investigación page: "<id>" or "<id>/<video key>"
 };
 
 /* ───── Chat ───── */
@@ -367,7 +368,7 @@ export type ChatEvent =
   | {op: 'chats'};
 
 // workspace: the studio now works on another folder (every page reloads).
-export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'automations'} | {type: 'audit'} | {type: 'styles'} | {type: 'formats'} | {type: 'audience'} | {type: 'cloud'} | {type: 'sync'; project: string; state: SyncActivity; done: number; total: number} | {type: 'synced'; project: string; paths: string[]} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
+export type ServerEvent = {type: 'changed'; slug: string} | {type: 'workspace'} | {type: 'inspiration'} | {type: 'account'} | {type: 'projects'} | {type: 'ideas'} | {type: 'sources'} | {type: 'research'} | {type: 'automations'} | {type: 'audit'} | {type: 'styles'} | {type: 'formats'} | {type: 'audience'} | {type: 'cloud'} | {type: 'sync'; project: string; state: SyncActivity; done: number; total: number} | {type: 'synced'; project: string; paths: string[]} | ({type: 'chat'; slug: string; chat: string} & ChatEvent);
 
 /* ───── Profile and voice (config/, set in Ajustes) ───── */
 
@@ -509,6 +510,92 @@ export type InspirationStatus = {
   transcriber: boolean; // faster-whisper and its model ready (Ajustes → Requisitos)
   loose: {job: InspirationJob | null; error: string | null}; // downloading loose reels (owners not known yet)
 };
+
+/* ───── Investigación: what's working on a topic in TikTok, YouTube Shorts and Instagram (projects/<id>/research/) ───── */
+
+export const RESEARCH_PLATFORMS = [
+  {id: 'tiktok', label: 'TikTok', via: 'ScrapeCreators', key: 'SCRAPECREATORS_API_KEY'},
+  {id: 'youtube', label: 'YouTube Shorts', via: 'ScrapeCreators', key: 'SCRAPECREATORS_API_KEY'},
+  {id: 'instagram', label: 'Instagram', via: 'Apify', key: 'APIFY_TOKEN'},
+] as const;
+export type ResearchPlatform = (typeof RESEARCH_PLATFORMS)[number]['id'];
+// How far back a search looks (days; 0: any time).
+export const RESEARCH_SINCE = [7, 30, 90, 180, 365, 0] as const;
+export const RESEARCH_MAX_ANALYSE = 12; // the most videos one "Analizar" takes
+
+export type ResearchOptions = {
+  platforms: ResearchPlatform[];
+  sinceDays: number; // one of RESEARCH_SINCE
+  maxSeconds: number; // longer videos aren't kept (lives, long videos)
+  country: string | null; // ISO code the searches are made from (TikTok's and YouTube's region), from the audience
+  perQuery: number; // Instagram: reels per search (Apify charges per reel)
+};
+
+// A video found, in the same shape for the three platforms. followers: its author's, when the platform says it
+// (TikTok; null otherwise). saves: TikTok's "favoritos". relevant: the agent's read of whether it's for this
+// audience (null until it reads it), with its reason.
+export type ResearchVideo = {
+  key: string; // "<platform>-<id>", its folder
+  platform: ResearchPlatform;
+  id: string;
+  url: string;
+  author: string; // handle, without @
+  authorName: string | null;
+  followers: number | null;
+  title: string; // caption or title
+  posted: string | null; // ISO date
+  duration: number | null; // seconds
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  region: string | null; // the country the platform gives (TikTok)
+  queries: string[]; // the searches that found it
+  relevant: boolean | null;
+  reason: string | null;
+  // Derived (server/research.ts score): views over followers, views per day since posted, interactions over views
+  // (likes + comments + shares + saves), and 0–100: how it ranks in its research on those.
+  ratio: number | null;
+  perDay: number | null;
+  engagement: number | null;
+  score: number | null;
+  thumb: boolean;
+  // Analysis, as in Inspiración: pending · processing (download, frames, transcript) · processed · analyzing · ready · error
+  state: 'pending' | 'processing' | 'processed' | 'analyzing' | 'ready' | 'error';
+  error: string | null;
+  analysis: ReelAnalysis | null;
+};
+export type ResearchVideoDetail = ResearchVideo & {transcript: ReelTranscript | null; files: {thumb: boolean; hook: boolean; sheets: string[]}};
+
+// What's running in a research (in memory).
+export type ResearchJob = {stage: 'queries' | 'searching' | 'filtering' | 'processing' | 'analyzing' | 'report'; done: number; total: number; started: number; note?: string};
+
+// Per platform, how the last search went: found (after dedupe and filters), the cost, and its problem if any.
+export type ResearchRun = {platform: ResearchPlatform; found: number; cost: string; error: string | null};
+
+export type Research = {
+  id: string; // 8 hex, its folder
+  topic: string;
+  queries: string[];
+  options: ResearchOptions;
+  created: number;
+  searched: number | null;
+  runs: ResearchRun[];
+  report: {text: string; at: number; keys: string[]} | null; // markdown; keys: the videos it read
+  error: string | null;
+  job: ResearchJob | null;
+  counts: {videos: number; relevant: number; analysed: number};
+};
+export type ResearchDetail = Research & {videos: ResearchVideo[]};
+export type ResearchStatus = {
+  researches: Research[];
+  ready: Record<ResearchPlatform, boolean>; // its key is set
+  transcriber: boolean;
+  youtubeDownloader: boolean; // yt-dlp in the venv (Ajustes → Requisitos → Transcripción)
+};
+// What a search would cost at most, before launching it.
+export type ResearchEstimate = {lines: {platform: ResearchPlatform; text: string}[]; usd: number};
 
 // A reel attached to a message of the general conversation: one of Inspiración's ("Usar como referencia"), or, own,
 // one of his account's (Mi cuenta → "Preguntar sobre este reel").
