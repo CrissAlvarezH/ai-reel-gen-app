@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
-import {ArrowRight, ArrowUp, Check, ChevronRight, Lightbulb, Loader2, Mic, PenLine, Plus, Target, Video, X, type LucideIcon} from 'lucide-react';
+import {ArrowRight, ArrowUp, Check, ChevronRight, Film, Lightbulb, Loader2, Mic, PenLine, Plus, Target, Video, X, type LucideIcon} from 'lucide-react';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
 import {api, audienceApi, ideasApi, useAgentName} from './api';
@@ -9,7 +10,7 @@ import {useStyles} from './StylePicker';
 import {AUDIO_ACCEPT, FormatPoster, useFormats} from './Formats';
 import {Poster} from './Styles';
 import {cn} from '@/lib/utils';
-import type {ReelFormat, Style} from './api';
+import type {PublicationKind, ReelFormat, ReelSummary, Style} from './api';
 
 // A clip of his recording, uploading (staged on the server) while he writes the message.
 type Clip = {key: number; file: File; progress: number; id?: string; error?: string};
@@ -22,8 +23,9 @@ const mb = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.max
 const VIDEO_EXT = /\.(mp4|mov|m4v|webm|mkv)$/i;
 const AUDIO_OR_VIDEO = /\.(mp4|mov|m4v|webm|mkv|m4a|mp3|wav|aac|ogg|opus|flac)$/i;
 
-// How it starts: he writes the idea (the default), or the agent gets one of these as the first message.
-type Start = 'write' | 'ideas' | 'audience';
+// How it starts: he writes the idea (the default), or the agent gets one of these as the first message. A carousel can
+// also start from one of the project's videos: its script is the agent's input (the carousel keeps its own files).
+type Start = 'write' | 'ideas' | 'audience' | 'video';
 // message: what he sees as his first message (and names the video); prompt: what the agent gets too, unseen.
 const STARTS: {id: Start; icon: LucideIcon; title: string; summary: string; empty?: string; href?: string; link?: string; message?: string; prompt?: string}[] = [
   {id: 'write', icon: PenLine, title: 'Describir la idea', summary: 'Tú cuentas el tema y el mensaje.'},
@@ -53,30 +55,59 @@ const STARTS: {id: Start; icon: LucideIcon; title: string; summary: string; empt
   },
 ];
 
-// Which starts can be used: ideas needs a saved card; the audience needs its onboarding done with something in it.
+// The same starts for a carousel, said for a carousel, plus starting from a video.
+const CAROUSEL_STARTS: typeof STARTS = [
+  {id: 'write', icon: PenLine, title: 'Describir la idea', summary: 'Tú cuentas el tema y el mensaje.'},
+  {
+    ...STARTS[1],
+    message: 'Quiero hacer este carrusel con una de mis ideas guardadas.',
+    prompt:
+      'Quiero hacer este carrusel con una de mis ideas de contenido guardadas. Evalúa las del tablero con el criterio del skill content-ideas y mi perfil de audiencia, si lo tengo: cuál le interesaría más a mi público, cuál tiene la portada más fuerte y cuál se explica bien en láminas, sin repetir algo que ya hice. Tus 3 propuestas son 3 ideas de mi tablero (di de qué lista y vertical sale cada una), la mejor primero con el porqué.',
+  },
+  {
+    ...STARTS[2],
+    message: 'Quiero un carrusel que le interese a mi audiencia.',
+    prompt:
+      'Quiero un carrusel que de verdad le interese a mi público. Parte de mi perfil de audiencia (lo que quieren y sus «para poder…», los problemas con los que lidian, sobre todo los primeros, y lo que piensan en cada nivel de conciencia) y del criterio del skill content-ideas. Tus 3 propuestas son 3 carruseles distintos entre sí (otro problema u otro nivel de conciencia), sin repetir lo que ya está en mis ideas guardadas o en mis publicaciones.',
+  },
+  {id: 'video', icon: Film, title: 'Desde un video', summary: 'Usa el guion de uno de tus videos.', empty: 'Aún no tienes videos con guion.', href: '#/nuevo', link: 'Crear un video'},
+];
+
+// Which starts can be used: ideas needs a saved card; the audience needs its onboarding done with something in it;
+// a video, one of the project's with a script.
 function useStarts() {
   const [can, setCan] = useState<Record<Start, boolean> | null>(null);
+  const [videos, setVideos] = useState<ReelSummary[]>([]);
   useEffect(() => {
     Promise.all([
       ideasApi.board().then((b) => b.lists.some((l) => l.cards.length > 0), () => false),
       audienceApi.get().then((a) => a.onboarded && !!(a.result || a.wants.length || a.problems.length || a.levels.length), () => false),
-    ]).then(([ideas, audience]) => setCan({write: true, ideas, audience}));
+      api.reels().then((list) => list.filter((r) => r.kind === 'video' && r.progress.find((p) => p.key === 'guion')?.done), () => [] as ReelSummary[]),
+    ]).then(([ideas, audience, withScript]) => {
+      setVideos(withScript);
+      setCan({write: true, ideas, audience, video: withScript.length > 0});
+    });
   }, []);
-  return can;
+  return {can, videos};
 }
 
-export function NewReel() {
+export function NewReel({kind: pub = 'video'}: {kind?: PublicationKind}) {
+  const carousel = pub === 'carousel';
+  const starts = carousel ? CAROUSEL_STARTS : STARTS;
   const agent = useAgentName();
   const {uiRef, setOpen} = useStudio();
-  uiRef.current = {page: 'new'};
+  uiRef.current = {page: carousel ? 'newCarousel' : 'new'};
   const [text, setText] = useState('');
   const [start, setStart] = useState<Start>('write');
-  const can = useStarts();
+  const {can, videos} = useStarts();
+  const [fromVideo, setFromVideo] = useState<string>('');
   const [sent, setSent] = useState('');
   const [err, setErr] = useState('');
   const input = useRef<HTMLTextAreaElement>(null);
-  // The visual style starts on the project's (Ajustes → Perfil), else the default one.
-  const styles = useStyles();
+  // The visual style starts on the project's (Ajustes → Perfil), else the default one. A carousel offers only the
+  // styles that do carousels (style.json "carousel"), starting on the project's if it's one of them.
+  const allStyles = useStyles();
+  const styles = carousel ? allStyles?.filter((s) => s.carousel) : allStyles;
   const [picked, setPicked] = useState<string | null>(null);
   const defaultStyle = (styles?.find((s) => s.projectDefault) ?? styles?.find((s) => s.default) ?? styles?.[0])?.id ?? null;
   const style = picked ?? defaultStyle;
@@ -110,20 +141,30 @@ export function NewReel() {
         ),
       );
   };
-  const needsClips = !!kind?.footage;
+  const needsClips = !carousel && !!kind?.footage;
   const voice = !!kind?.voiceOnly;
   const uploading = needsClips && clips.some((c) => !c.id && !c.error);
-  const ready = !!(start !== 'write' || text.trim()) && (!needsClips || (clips.some((c) => c.id) && !uploading));
+  const source = videos.find((v) => v.slug === fromVideo);
+  const ready = !!(start !== 'write' || text.trim()) && (start !== 'video' || !!source) && (!needsClips || (clips.some((c) => c.id) && !uploading));
 
   const submit = async () => {
-    const how = STARTS.find((x) => x.id === start);
-    const msg = how?.message ?? text.trim();
+    const how = starts.find((x) => x.id === start);
+    const msg = start === 'video' && source ? `Quiero hacer un carrusel a partir del guion de mi video «${source.title ?? source.slug}».` : (how?.message ?? text.trim());
     if (!msg || sent || !ready) return;
     setSent(msg);
     setErr('');
     try {
+      const choice = chosen ? {model: chosen.model, effort: chosen.effort} : undefined;
+      if (carousel) {
+        const brief = start === 'video' && source ? `Quiero un carrusel a partir del guion de mi video «${source.title ?? source.slug}» (videos/${source.slug}/audio/vo.txt). No es copiar el guion en láminas: adapta su idea a un carrusel que se entienda sin el video, con su propia portada.` : how?.prompt;
+        const {slug} = await api.createCarousel(msg, {...uiRef.current}, style ?? undefined, start === 'video' ? source?.slug : undefined, choice, start === 'video' ? undefined : brief);
+        // From a video the idea is given: the first turn reads it and asks to start, like a written one.
+        setOpen(true);
+        location.hash = `#/carrusel/${slug}`;
+        return;
+      }
       const ids = needsClips ? clips.flatMap((c) => (c.id ? [c.id] : [])) : undefined;
-      const {slug} = await api.create(msg, {...uiRef.current}, style ?? undefined, kind?.id, ids, chosen ? {model: chosen.model, effort: chosen.effort} : undefined, how?.prompt);
+      const {slug} = await api.create(msg, {...uiRef.current}, style ?? undefined, kind?.id, ids, choice, how?.prompt);
       setOpen(true);
       location.hash = `#/reel/${slug}`;
     } catch (e) {
@@ -138,20 +179,42 @@ export function NewReel() {
         <div className="flex flex-col gap-4">
           <div className="ml-auto max-w-[88%] rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground">{sent}</div>
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Poniéndole nombre y creando el video…
+            <Loader2 className="size-4 animate-spin" /> Poniéndole nombre y creando el {carousel ? 'carrusel' : 'video'}…
           </p>
         </div>
       ) : (
         <>
           <div className="text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">¿De qué va el próximo reel?</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Cuéntale a {agent} la idea. El nombre del video sale de tu primer mensaje.</p>
+            <h1 className="text-2xl font-semibold tracking-tight">{carousel ? '¿De qué va el próximo carrusel?' : '¿De qué va el próximo reel?'}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cuéntale a {agent} la idea. El nombre del {carousel ? 'carrusel' : 'video'} sale de tu primer mensaje.{carousel && ' Láminas de 4:5 (1080×1350) para Instagram.'}
+            </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {STARTS.map((x) => (
+          <div className={cn('grid gap-2', carousel ? 'sm:grid-cols-2' : 'sm:grid-cols-3')}>
+            {starts.map((x) => (
               <StartCard key={x.id} start={x} active={start === x.id} usable={x.id === 'write' || can?.[x.id]} onPick={() => setStart(x.id)} />
             ))}
           </div>
+          {start === 'video' && (
+            <div className="-mt-3 flex flex-col gap-1.5">
+              <label htmlFor="from-video" className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Video de partida
+              </label>
+              <Select value={fromVideo} onValueChange={setFromVideo}>
+                <SelectTrigger id="from-video" className="w-full">
+                  <SelectValue placeholder="Elige el video cuyo guion usar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {videos.map((v) => (
+                    <SelectItem key={v.slug} value={v.slug}>
+                      {v.title ?? v.slug}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {source?.hook && <p className="line-clamp-2 text-xs text-muted-foreground">«{source.hook}»</p>}
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             {start !== 'write' ? (
               <Button size="lg" className="self-end" onClick={submit} disabled={!ready} title={needsClips && !clips.some((c) => c.id) ? (voice ? 'Sube tu audio primero' : 'Sube tu grabación primero') : uploading ? 'Esperando a que termine de subir' : undefined}>
@@ -170,7 +233,7 @@ export function NewReel() {
                     submit();
                   }
                 }}
-                placeholder="El tema y la idea que quieres que se lleve quien lo vea. Si quieres, también la duración, el gancho o un reel de referencia."
+                placeholder={carousel ? 'El tema y la idea que quieres que se lleve quien lo deslice. Si quieres, también cuántas láminas, la portada o un carrusel de referencia.' : 'El tema y la idea que quieres que se lleve quien lo vea. Si quieres, también la duración, el gancho o un reel de referencia.'}
                 rows={4}
                 className="max-h-72 resize-none pr-12 text-base"
               />
@@ -184,6 +247,7 @@ export function NewReel() {
               <ModelPicker options={options} model={shown?.model ?? ''} effort={shown?.effort ?? ''} onChange={(o) => options && setPickedModel({agent: options.agent, ...o})} open={modelMenu} onOpenChange={setModelMenu} side="bottom" />
             </div>
           </div>
+          {!carousel && (
           <Section title="Formato" href="#/formatos" more="Ver formatos">
             <div className="grid gap-2 sm:grid-cols-2">
               {formats?.map((f) => (
@@ -191,6 +255,7 @@ export function NewReel() {
               ))}
             </div>
           </Section>
+          )}
           {needsClips && (
             <div
               className="-mt-3 flex flex-col gap-2 rounded-lg border border-dashed p-3"
@@ -243,9 +308,10 @@ export function NewReel() {
           <Section title="Estilo" href="#/estilos" more="Ver estilos">
             <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pt-1 pb-2">
               {styles?.map((st) => (
-                <StyleThumb key={st.id} style={st} active={st.id === style} isDefault={st.id === defaultStyle} onPick={() => setPicked(st.id)} />
+                <StyleThumb key={st.id} style={st} active={st.id === style} isDefault={st.id === defaultStyle} onPick={() => setPicked(st.id)} carousel={carousel} />
               ))}
             </div>
+            {carousel && styles?.length === 0 && <p className="text-sm text-muted-foreground">Ningún estilo hace carruseles todavía.</p>}
           </Section>
           {err && <p className="text-sm text-destructive">{err}</p>}
         </>
@@ -332,12 +398,15 @@ function FormatCard({format: f, active, onPick}: {format: ReelFormat; active: bo
 }
 
 // A style to pick: an approved frame (or a sample from its palette) and its name.
-function StyleThumb({style: s, active, isDefault, onPick}: {style: Style; active: boolean; isDefault: boolean; onPick: () => void}) {
+// For a carousel: its sample slide (4:5) when the style has one, and its carousel look as the hover text.
+function StyleThumb({style: s, active, isDefault, onPick, carousel}: {style: Style; active: boolean; isDefault: boolean; onPick: () => void; carousel?: boolean}) {
   const ready = !!(s.skill && s.template);
+  const sample = carousel ? s.carousel?.examples[0] : s.examples[0];
+  const hint = carousel ? `${s.summary}${s.carousel?.look[0] ? `\n\nComo carrusel: ${s.carousel.look[0]}` : ''}` : `${s.summary}${ready ? '' : '\n\nSin plantilla propia: el agente lo hace a partir de su descripción.'}`;
   return (
-    <button onClick={onPick} aria-pressed={active} title={`${s.summary}${ready ? '' : '\n\nSin plantilla propia: el agente lo hace a partir de su descripción.'}`} className="group flex w-28 flex-none flex-col gap-1.5 text-left">
+    <button onClick={onPick} aria-pressed={active} title={hint} className="group flex w-28 flex-none flex-col gap-1.5 text-left">
       <span className={cn('relative block overflow-hidden rounded-md border-2 transition-colors', active ? 'border-foreground' : 'border-transparent group-hover:border-foreground/40')}>
-        {s.examples.length ? <img src={s.examples[0]} alt="" loading="lazy" className="aspect-[9/16] w-full object-cover object-top" /> : <Poster style={s} className="w-full text-[9px]" />}
+        {sample ? <img src={sample} alt="" loading="lazy" className={cn('w-full object-cover object-top', carousel ? 'aspect-[4/5]' : 'aspect-[9/16]')} /> : <Poster style={s} className={cn('w-full text-[9px]', carousel && 'aspect-[4/5]')} />}
         {active && (
           <span className="absolute top-1.5 right-1.5 grid size-5 place-items-center rounded-full bg-foreground text-background">
             <Check className="size-3.5" />

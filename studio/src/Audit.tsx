@@ -88,7 +88,7 @@ export function Audit() {
           </Button>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Tres agentes revisan, cada uno por su lado y sin ver lo que dicen los otros, que los datos de un video sean correctos, con fuentes en la web. Luego se unen sus hallazgos en un reporte: errores, matices y datos correctos. Solo verifica datos: no juzga el estilo, el gancho ni los consejos.
+          Tres agentes revisan, cada uno por su lado y sin ver lo que dicen los otros, que los datos de una publicación (el guion de un video o el texto de las láminas de un carrusel) sean correctos, con fuentes en la web. Luego se unen sus hallazgos en un reporte: errores, matices y datos correctos. Solo verifica datos: no juzga el estilo, el gancho ni los consejos.
         </p>
       </div>
       {err && <p className="text-sm text-destructive">{err}</p>}
@@ -102,16 +102,16 @@ export function Audit() {
                 <Label htmlFor="audit-auto" className="font-medium">
                   Auditoría automática
                 </Label>
-                <p className="mt-1 text-sm text-muted-foreground">Audita cada video cuando se guarda su guion, y otra vez cuando cambie. Solo corre con Reel Studio abierto.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Audita cada publicación cuando se guarda su guion o el texto de sus láminas, y otra vez cuando cambie. Solo corre con Reel Studio abierto.</p>
               </div>
             </section>
             <section className="flex flex-col items-start gap-3 rounded-lg border bg-card p-4">
               <div>
                 <h2 className="font-medium">Empezar auditoría</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Elige los videos que quieres auditar, o audítalos todos.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Elige las publicaciones que quieres auditar, o audítalas todas.</p>
               </div>
               <Button size="sm" disabled={!auditable} onClick={() => setDialog('start')}>
-                <ShieldCheck /> Elegir videos
+                <ShieldCheck /> Elegir publicaciones
               </Button>
             </section>
           </div>
@@ -245,7 +245,7 @@ function StartDialog({onClose, view, act, thumbs}: {onClose: () => void; view: F
       <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Empezar auditoría</DialogTitle>
-          <DialogDescription>Elige los videos. Se auditan uno tras otro, cada uno con su guion de ahora.</DialogDescription>
+          <DialogDescription>Elige las publicaciones. Se auditan una tras otra, cada una con su texto de ahora.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => setPicked(ready.filter((v) => !v.lastAudit || v.stale).map((v) => v.slug))}>
@@ -280,7 +280,7 @@ function StartDialog({onClose, view, act, thumbs}: {onClose: () => void; view: F
                     <span className={cn('absolute top-1.5 left-1.5 grid size-5 place-items-center rounded-md border bg-background/80 backdrop-blur', on && 'border-primary bg-primary text-primary-foreground')}>{on && <Check className="size-3.5" />}</span>
                   </span>
                   <span className="line-clamp-2 text-xs font-medium">{v.title}</span>
-                  <span className="text-[11px] text-muted-foreground">{!v.script ? 'Sin guion' : v.busy ? 'Auditando…' : v.lastAudit ? (v.stale ? 'El guion cambió' : `Auditado ${fmtAgo(v.lastAudit)}`) : 'Sin auditar'}</span>
+                  <span className="text-[11px] text-muted-foreground">{!v.script ? (v.kind === 'carousel' ? 'Sin textos' : 'Sin guion') : v.busy ? 'Auditando…' : v.lastAudit ? (v.stale ? 'El guion cambió' : `Auditado ${fmtAgo(v.lastAudit)}`) : 'Sin auditar'}</span>
                 </button>
               </li>
             );
@@ -353,7 +353,7 @@ function ReportCard({report: r, act, thumb = null, posted, sendable, exists, inV
   const ok = r.findings.filter((f) => f.verdict === 'ok');
   const send = () => {
     addAudit(r.slug, 'facts');
-    location.hash = `#/reel/${r.slug}`;
+    location.hash = r.kind === 'carousel' ? `#/carrusel/${r.slug}` : `#/reel/${r.slug}`;
   };
   const remove = async () => {
     if (await confirm({title: `¿Borrar el reporte de «${r.title}»?`, description: 'Se pierden sus hallazgos y fuentes.', action: 'Borrar', destructive: true})) void act(auditApi.remove(r.id));
@@ -496,6 +496,12 @@ function Finding({f}: {f: FactFinding}) {
         {f.disputed && <Badge variant="outline">Los revisores no coincidieron</Badge>}
         <span className="text-xs text-muted-foreground">{f.agents.length ? `Lo señaló${f.agents.length > 1 ? 'n' : ''} ${f.agents.length} de 3 revisores` : ''}</span>
       </div>
+      {f.slide && (
+        <span className="self-start text-xs font-medium text-muted-foreground" title={`Lámina «${f.slide.id}» cuando se auditó`}>
+          Lámina {f.slide.n}
+          {f.slide.title ? ` · ${f.slide.title}` : ''}
+        </span>
+      )}
       <blockquote className="border-l-2 pl-2 text-sm italic">«{f.claim}»</blockquote>
       {f.explanation && <p className="text-sm">{f.explanation}</p>}
       {f.correction && (
@@ -538,7 +544,9 @@ function Correct({findings}: {findings: FactFinding[]}) {
         <ul className="flex flex-col gap-2">
           {findings.map((f) => (
             <li key={f.id} className="flex flex-col gap-1 rounded-md border px-3 py-2">
-              <p className="text-sm">«{f.claim}»</p>
+              <p className="text-sm">
+                {f.slide && <span className="mr-1.5 text-xs font-medium text-muted-foreground">Lámina {f.slide.n}</span>}«{f.claim}»
+              </p>
               {f.explanation && <p className="text-xs text-muted-foreground">{f.explanation}</p>}
               <Sources f={f} />
             </li>
@@ -563,10 +571,11 @@ export function ReelAudit({slug}: {slug: string}) {
   };
   if (!view) return err ? <p className="rounded-xl border px-4 py-3 text-xs text-destructive">No pude leer la auditoría: {err}</p> : <div className="h-[82px] rounded-xl border bg-card" aria-hidden />;
   const video = view.videos.find((v) => v.slug === slug);
+  const carousel = video?.kind === 'carousel';
   const reports = view.reports.filter((r) => r.slug === slug);
   const latest = reports[0];
   const audit = (
-    <Button size="sm" variant={latest ? 'ghost' : 'default'} disabled={!video?.script || video.busy} onClick={() => void act(auditApi.run([slug]))} title={video?.script ? 'Tres agentes verifican los datos del guion de ahora' : 'Este video aún no tiene guion'}>
+    <Button size="sm" variant={latest ? 'ghost' : 'default'} disabled={!video?.script || video.busy} onClick={() => void act(auditApi.run([slug]))} title={video?.script ? `Tres agentes verifican los datos ${carousel ? 'del texto de las láminas' : 'del guion'} de ahora` : carousel ? 'Este carrusel aún no tiene textos' : 'Este video aún no tiene guion'}>
       <ShieldCheck /> Auditar
     </Button>
   );
@@ -588,8 +597,8 @@ export function ReelAudit({slug}: {slug: string}) {
         <EmptyState
           icon={ShieldCheck}
           className="rounded-lg py-8"
-          title="Este video aún no tiene auditoría."
-          description={video?.script ? 'Tres agentes verifican, cada uno por su lado y con fuentes, que los datos del guion sean correctos.' : 'Cuando tenga guion, podrás auditar sus datos.'}
+          title={carousel ? 'Este carrusel aún no tiene auditoría.' : 'Este video aún no tiene auditoría.'}
+          description={video?.script ? `Tres agentes verifican, cada uno por su lado y con fuentes, que los datos ${carousel ? 'de las láminas' : 'del guion'} sean correctos${carousel ? ', y en qué lámina está cada uno' : ''}.` : carousel ? 'Cuando sus láminas tengan texto, podrás auditar sus datos.' : 'Cuando tenga guion, podrás auditar sus datos.'}
           action={audit}
         />
       )}

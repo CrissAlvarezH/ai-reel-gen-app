@@ -15,3 +15,12 @@ type NewVideo = {
 };
 
 export const {cleanFormat, resolveFormat, scaffold} = (await import(pathToFileURL(resource('scripts/new-video.mjs')).href)) as NewVideo;
+
+type NewCarousel = {
+  // A style that does carousels (style.json "carousel"): the one given, else the project's, the default or the first.
+  resolveCarouselStyle(root: string, id?: string | null, project?: string): string | null;
+  // Copies carousel-template/ into videos/<slug>/ with kind.txt "carousel" and returns that folder.
+  scaffoldCarousel(o: {root: string; project?: string; slug: string; style: string; title?: string; from?: string}): string;
+};
+
+export const {scaffoldCarousel} = (await import(pathToFileURL(resource('scripts/new-carousel.mjs')).href)) as NewCarousel;

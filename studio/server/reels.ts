@@ -7,12 +7,13 @@ import {formatRef} from './formats.ts';
 import * as footage from './footage.ts';
 import {videoVoice, voiceRef} from './config.ts';
 import {fsUrl, readJson} from './platform.ts';
-import {BEAT_TAGS, type Act, type Format, type Beat, type BoardGroup, type PostedReel, type ReelDetail, type ReelRelease, type ReelSummary, type VideoPublication, type ProgressStep, type Version, type Word} from '../shared/types.ts';
+import {BEAT_TAGS, type CarouselDetail, type Act, type Format, type Beat, type BoardGroup, type PostedReel, type ReelDetail, type ReelRelease, type ReelSummary, type VideoPublication, type ProgressStep, type Version, type Word} from '../shared/types.ts';
 
 import {ROOT, VIDEOS, PROJECT} from './workspace.ts';
 import {postedAs} from './projects-index.ts';
 import {recordsOf} from './publications-file.ts';
 import {createdOf} from './created.ts';
+import * as carousel from './carousel.ts';
 export {ROOT, VIDEOS};
 
 export const httpError = (status: number, message: string) => Object.assign(new Error(message), {status});
@@ -264,7 +265,38 @@ export function setStyle(slug: string, id: unknown) {
   return s;
 }
 
+// A carousel's card: its first slide as the picture and how many it has; no voice, length or Instagram yet.
+function carouselSummary(slug: string): ReelSummary & {parts: ReturnType<typeof carousel.summaryParts>} {
+  const c = carousel.summaryParts(slug);
+  return {
+    slug,
+    kind: 'carousel',
+    slideCount: c.slides.length,
+    title: title(slug),
+    style: styleOf(slug),
+    videoFormat: null,
+    hook: c.hook,
+    progress: c.progress,
+    latest: null,
+    versionCount: c.vers.length,
+    thumb: c.thumb,
+    created: c.created,
+    updated: c.updated,
+    words: c.words,
+    seconds: 0,
+    voice: null,
+    pace: 0,
+    instagram: null,
+    release: null,
+    parts: c,
+  };
+}
+
 export function summary(slug: string): ReelSummary {
+  if (carousel.isCarousel(slug)) {
+    const {parts: _parts, ...s} = carouselSummary(slug);
+    return s;
+  }
   const dir = path.join(VIDEOS, slug);
   const script = read(path.join(dir, 'audio/vo.txt'));
   const cuts = ls(path.join(dir, 'public/cut'), isImg);
@@ -279,6 +311,8 @@ export function summary(slug: string): ReelSummary {
   const instagram = postedAs(PROJECT, slug);
   return {
     slug,
+    kind: 'video',
+    slideCount: null,
     title: title(slug),
     style: styleOf(slug),
     videoFormat: kind,
@@ -324,6 +358,12 @@ function thumbnailOf(slug: string, dir: string): ReelDetail['thumbnail'] {
   const name = ls(path.join(dir, 'out'), (n) => THUMB.test(n))[0];
   const st = name ? stat(path.join(dir, 'out', name)) : null;
   return name && st ? {url: `${url(slug, `out/${name}`)}?v=${Math.round(st.mtimeMs)}`, mtime: st.mtimeMs} : null;
+}
+
+// A carousel's page (CarouselView.tsx).
+export function carouselDetail(slug: string): CarouselDetail {
+  const {parts, words: _w, ...s} = carouselSummary(slug);
+  return {...s, ...carousel.detailParts(slug, parts.vers, parts.slides)};
 }
 
 export function detail(slug: string): ReelDetail {

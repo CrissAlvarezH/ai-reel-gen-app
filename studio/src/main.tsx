@@ -21,6 +21,7 @@ import {Formats} from './Formats';
 import {Settings} from './Settings';
 import {NewReel} from './NewReel';
 import {ReelView} from './ReelView';
+import {CarouselView} from './CarouselView';
 import {AgentPanel} from './Chat';
 import {Sidebar} from './Sidebar';
 import {StudioProvider, loadOpenProject, useStudio} from './studio';
@@ -42,24 +43,26 @@ function useHash() {
   return hash;
 }
 
-// Hash routes: #/ (library), #/ideas (Ideas de contenido), #/audiencia (Perfil de audiencia), #/automatizaciones, #/auditoria, #/fuentes[/<id>] (Fuentes de información), #/cuenta (Mi cuenta), #/inspiracion, #/investigacion[/<id>[/<video>]], #/estilos[/<id>], #/formatos[/<id>], #/ajustes[/<section>], #/nuevo (new reel, chat first), #/reel/<slug>
+// Hash routes: #/ (library: videos and carousels), #/nuevo-carrusel (new carousel), #/carrusel/<slug> (a carousel's slides), #/ideas (Ideas de contenido), #/audiencia (Perfil de audiencia), #/automatizaciones, #/auditoria, #/fuentes[/<id>] (Fuentes de información), #/cuenta (Mi cuenta), #/inspiracion, #/investigacion[/<id>[/<video>]], #/estilos[/<id>], #/formatos[/<id>], #/ajustes[/<section>], #/nuevo (new reel, chat first), #/reel/<slug>
 // and #/bienvenida (welcome page, also shown whenever there's no workspace yet).
 function useRoute() {
   const hash = useHash();
   const m = hash.match(/^#\/reel\/([a-z0-9-]+)/);
   if (m) return {page: 'reel' as const, slug: m[1]};
-  const page = hash.startsWith('#/programados') ? 'scheduled' : hash.startsWith('#/ideas') ? 'ideas' : hash.startsWith('#/audiencia') ? 'audience' : hash.startsWith('#/automatizaciones') ? 'automations' : hash.startsWith('#/auditoria') ? 'audit' : hash.startsWith('#/fuentes') ? 'sources' : hash.startsWith('#/cuenta') ? 'account' : hash.startsWith('#/inspiracion') ? 'inspiration' : hash.startsWith('#/investigacion') ? 'research' : hash.startsWith('#/estilos') ? 'styles' : hash.startsWith('#/formatos') ? 'formats' : hash.startsWith('#/ajustes') ? 'settings' : hash.startsWith('#/nuevo') ? 'new' : 'library';
-  return {page: page as 'account' | 'library' | 'scheduled' | 'ideas' | 'audience' | 'automations' | 'audit' | 'sources' | 'inspiration' | 'research' | 'styles' | 'formats' | 'settings' | 'new', slug: null};
+  const c = hash.match(/^#\/carrusel\/([a-z0-9-]+)/);
+  if (c) return {page: 'carousel' as const, slug: c[1]};
+  const page = hash.startsWith('#/programados') ? 'scheduled' : hash.startsWith('#/ideas') ? 'ideas' : hash.startsWith('#/audiencia') ? 'audience' : hash.startsWith('#/automatizaciones') ? 'automations' : hash.startsWith('#/auditoria') ? 'audit' : hash.startsWith('#/fuentes') ? 'sources' : hash.startsWith('#/cuenta') ? 'account' : hash.startsWith('#/inspiracion') ? 'inspiration' : hash.startsWith('#/investigacion') ? 'research' : hash.startsWith('#/estilos') ? 'styles' : hash.startsWith('#/formatos') ? 'formats' : hash.startsWith('#/ajustes') ? 'settings' : hash.startsWith('#/nuevo-carrusel') ? 'newCarousel' : hash.startsWith('#/nuevo') ? 'new' : 'library';
+  return {page: page as 'account' | 'library' | 'scheduled' | 'ideas' | 'audience' | 'automations' | 'audit' | 'sources' | 'inspiration' | 'research' | 'styles' | 'formats' | 'settings' | 'new' | 'newCarousel', slug: null};
 }
 
-const PAGE_TITLES: Record<string, string> = {scheduled: 'Videos programados', account: 'Mi cuenta', ideas: 'Ideas de contenido', audience: 'Perfil de audiencia', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', research: 'Investigación', styles: 'Estilos y formatos', formats: 'Estilos y formatos', settings: 'Ajustes', new: 'Nuevo reel'};
+const PAGE_TITLES: Record<string, string> = {scheduled: 'Videos programados', account: 'Mi cuenta', ideas: 'Ideas de contenido', audience: 'Perfil de audiencia', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', research: 'Investigación', styles: 'Estilos y formatos', formats: 'Estilos y formatos', settings: 'Ajustes', new: 'Nuevo reel', newCarousel: 'Nuevo carrusel'};
 
 function App() {
   const {page, slug} = useRoute();
   const settingsSection = useHash().match(/^#\/ajustes\/([a-z]+)/)?.[1] ?? null;
   const {open: panelOpen, reelTitle, chatWidth, sideOpen, setSideOpen, sideWidth, setSideWidth} = useStudio();
-  // On #/nuevo the page itself is the chat: no side panel until the reel exists.
-  const panel = page !== 'new';
+  // On #/nuevo (and #/nuevo-carrusel) the page itself is the chat: no side panel until the publication exists.
+  const panel = page !== 'new' && page !== 'newCarousel';
   const open = panel && panelOpen;
   return (
     <>
@@ -124,7 +127,7 @@ function App() {
         <div className="min-w-0 md:h-[calc(100vh-3.5rem)] md:overflow-y-auto md:overscroll-contain">
           {/* a new key on every route replays the entrance animation (animate-page-in, index.css) */}
           <div key={`${page}/${slug ?? ''}/${settingsSection ?? ''}`} className="animate-page-in md:h-full">
-            {slug ? <ReelView key={slug} slug={slug} /> : page === 'scheduled' ? <Scheduled /> : page === 'account' ? <Account /> : page === 'ideas' ? <Ideas /> : page === 'audience' ? <AudiencePage /> : page === 'automations' ? <Automations /> : page === 'audit' ? <Audit /> : page === 'sources' ? <Sources /> : page === 'inspiration' ? <Inspiration /> : page === 'research' ? <ResearchPage /> : page === 'styles' ? <Styles /> : page === 'formats' ? <Formats /> : page === 'settings' ? <Settings section={settingsSection} /> : page === 'new' ? <NewReel /> : <Library />}
+            {slug ? page === 'carousel' ? <CarouselView key={slug} slug={slug} /> : <ReelView key={slug} slug={slug} /> : page === 'scheduled' ? <Scheduled /> : page === 'account' ? <Account /> : page === 'ideas' ? <Ideas /> : page === 'audience' ? <AudiencePage /> : page === 'automations' ? <Automations /> : page === 'audit' ? <Audit /> : page === 'sources' ? <Sources /> : page === 'inspiration' ? <Inspiration /> : page === 'research' ? <ResearchPage /> : page === 'styles' ? <Styles /> : page === 'formats' ? <Formats /> : page === 'settings' ? <Settings section={settingsSection} /> : page === 'new' ? <NewReel /> : page === 'newCarousel' ? <NewReel kind="carousel" /> : <Library />}
           </div>
         </div>
         {panel && <AgentPanel slug={slug} />}

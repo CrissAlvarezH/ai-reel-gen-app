@@ -7,6 +7,8 @@ import type {ProgressStep} from './api';
 // agent does every step; the steps are judged from the reel's files (server/reels.ts → progress).
 
 const nextOf = (steps: ProgressStep[]) => steps.find((s) => !s.done)?.key;
+// A carousel's steps have its slides (server/carousel.ts → progress).
+const ready = (steps: ProgressStep[]) => (steps.some((s) => s.key === 'laminas') ? 'Carrusel listo' : 'Video listo');
 
 export function ReelProgress({steps}: {steps: ProgressStep[]}) {
   const done = steps.filter((s) => s.done).length;
@@ -15,7 +17,7 @@ export function ReelProgress({steps}: {steps: ProgressStep[]}) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border bg-card px-4 py-3">
       <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
-        <span className="font-medium">{done === steps.length ? 'Video listo' : `${done} de ${steps.length}`}</span>
+        <span className="font-medium">{done === steps.length ? ready(steps) : `${done} de ${steps.length}`}</span>
         {done < steps.length && <span className="text-muted-foreground">· falta {missing.join(', ')}</span>}
       </div>
       <div className="grid gap-1.5" style={{gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`}}>
@@ -66,7 +68,7 @@ export function ReelProgressRing({steps, className}: {steps: ProgressStep[]; cla
   const c = 2 * Math.PI * r;
   const gap = steps.length > 1 ? 1.6 : 0;
   const seg = c / Math.max(steps.length, 1);
-  const label = done === steps.length ? 'Video listo' : `${done} de ${steps.length}: ${steps.map((s) => `${s.label} ${s.done ? '✓' : '·'}`).join(', ')}`;
+  const label = done === steps.length ? ready(steps) : `${done} de ${steps.length}: ${steps.map((s) => `${s.label} ${s.done ? '✓' : '·'}`).join(', ')}`;
   return (
     <span className={cn('relative grid size-4 place-items-center', className)} role="img" aria-label={label} title={label}>
       <svg viewBox="0 0 18 18" className="absolute inset-0 size-full -rotate-90" aria-hidden>

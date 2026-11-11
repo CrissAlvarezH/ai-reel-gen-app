@@ -5,7 +5,7 @@
 
 // How far the video is from done, judged from the reel's files. note says why a step that was done
 // no longer counts (e.g. the script changed after the voice).
-export type StepKey = 'guion' | 'voz' | 'sonido' | 'render';
+export type StepKey = 'guion' | 'voz' | 'sonido' | 'render' | 'textos' | 'laminas' | 'caption';
 export type ProgressStep = {key: StepKey; label: string; done: boolean; note?: string};
 export type Version = {name: string; url: string; size: number; mtime: number};
 export type Word = {w: string; s: number; e: number};
@@ -19,8 +19,16 @@ export type BeatTag = (typeof BEAT_TAGS)[number];
 export type Beat = {tag: BeatTag; line: string};
 
 
+// What a publication in the Biblioteca is. Both live in projects/<id>/videos/<slug>/ (one namespace of slugs, so a
+// carousel and a video never share a name, a conversation or a file URL); kind.txt says "carousel", and a folder
+// without it is a video (every video made before carousels existed).
+export const PUBLICATION_KINDS = ['video', 'carousel'] as const;
+export type PublicationKind = (typeof PUBLICATION_KINDS)[number];
+
 export type ReelSummary = {
   slug: string;
+  kind: PublicationKind;
+  slideCount: number | null; // carousels: slides in carousel.json; null for videos
   title: string | null; // title.txt, named from the first message
   style: StyleRef | null; // style.txt (an id in styles/), or the default style
   videoFormat: ReelFormatRef | null; // format.txt (an id in formats/), or the default format
@@ -62,6 +70,30 @@ export type ReelDetail = Omit<ReelSummary, 'words'> & {
   footage: FootageClip[]; // footage/: his own recording, for formats with footage
 };
 
+/* ───── Carousels (kind.txt "carousel": carousel.json, src/slides/<id>.tsx, out/vN/) ───── */
+
+// A slide as carousel.json has it: its id never changes when it moves (comments and versions point at it).
+export type CarouselSlideEntry = {id: string; title: string; text: string; notes?: string};
+// A slide of the draft (carousel.json, in its order) with the newest picture rendered of it. stale: its source or text
+// changed since that picture. source: src/slides/<id>.tsx exists.
+export type CarouselSlide = CarouselSlideEntry & {image: {version: string; url: string; stale: boolean} | null; source: boolean};
+// A rendered version, out/vN/: complete and never changed. file: NN.png in its order.
+export type CarouselVersionSlide = {id: string; title: string; text: string; file: string; url: string; source: string | null};
+export type CarouselVersion = {name: string; created: number; width: number; height: number; note: string; slides: CarouselVersionSlide[]};
+export type CarouselDetail = Omit<ReelSummary, 'words'> & {
+  kind: 'carousel';
+  width: number;
+  height: number;
+  slides: CarouselSlide[];
+  versions: CarouselVersion[]; // newest first
+  credits: string;
+  caption: string;
+  automation: string;
+  from: {slug: string; title: string | null} | null; // the video whose script it started from (from.txt)
+  rendering: boolean; // ./render.sh running from the studio
+  installing: boolean; // npm install still running
+};
+
 export type SkillCategory = 'general' | 'style' | 'format';
 export type SkillSummary = {id: string; name: string; description: string; category: SkillCategory; path: string; fileCount: number};
 export type SkillFile = {path: string; size: number};
@@ -77,6 +109,9 @@ export type StyleFont = {family: string; css: string; weight?: number; google?: 
 // ready: the style has its own skill and template. template: the folder new videos copy (its own, or the default style's).
 // How a video's thumbnail (its cover) looks in this style: style.json "thumbnail".
 export type StyleThumbnail = {look: string[]; avoid: string[]; example: string | null}; // example: url of a sample
+// How the style looks as an Instagram carousel (4:5 slides): style.json "carousel". A style without it isn't offered for
+// carousels. examples: urls of sample slides.
+export type StyleCarousel = {look: string[]; avoid: string[]; examples: string[]};
 export type StyleRef = {id: string; name: string; ready: boolean; skill: string | null; template: string};
 export type Style = {
   id: string;
@@ -94,6 +129,7 @@ export type Style = {
   sources: string[]; // where its pictures come from
   avoid: string[];
   thumbnail: StyleThumbnail | null;
+  carousel: StyleCarousel | null;
   examples: string[]; // urls of approved frames
   references: string[]; // urls of the inspiration it came from
 };
@@ -200,7 +236,7 @@ export type PillarSet = {name: string; pillars: Pillar[]; leftovers: string[]};
 /* ───── Where Cristian is in the UI (sent with every message to the agent) ───── */
 
 export type UiContext = {
-  page: 'account' | 'library' | 'scheduled' | 'ideas' | 'audience' | 'automations' | 'audit' | 'sources' | 'inspiration' | 'research' | 'styles' | 'formats' | 'settings' | 'new' | 'reel';
+  page: 'account' | 'library' | 'scheduled' | 'ideas' | 'audience' | 'automations' | 'audit' | 'sources' | 'inspiration' | 'research' | 'styles' | 'formats' | 'settings' | 'new' | 'newCarousel' | 'reel' | 'carousel';
   slug?: string;
   style?: string; // style open on the Estilos page (styles/<id>)
   videoFormat?: string; // format open on the Formatos page (formats/<id>)
@@ -214,11 +250,17 @@ export type UiContext = {
   inspiration?: string; // account (and reel) open on the Inspiración page: "@user" or "@user/CODE"
   sourceItem?: string; // result open on the Fuentes de información page (its id)
   research?: string; // research open on the Investigación page: "<id>" or "<id>/<video key>"
+  slide?: string; // carousel: id of the slide shown big
+  slideN?: number; // carousel: its position (1-based) in what's shown
 };
 
 /* ───── Chat ───── */
 
-export type Comment = {id: string; t: number; act?: string; said?: string; version?: string; live?: boolean; text: string; frame?: string};
+// A note for the agent, sent with the next message. Videos: an instant of the player (t, act, said). Carousels: a slide
+// (slide.id, stable across reorders; n: its position when commented; version: the out/vN it was looking at, null for
+// the draft), with t 0.
+export type CommentSlide = {id: string; n: number; title?: string; version: string | null; draft?: boolean}; // draft: seen in the draft (its picture from version)
+export type Comment = {id: string; t: number; act?: string; said?: string; version?: string; live?: boolean; text: string; frame?: string; slide?: CommentSlide};
 export type ChatItem =
   | {id: string; role: 'user'; text: string; comments: Comment[]; refs?: InspirationRef[]; ideas?: IdeaRef[]; images?: string[]; ts: number} // images: pasted ones, at /chat-images/<name>
   | {id: string; role: 'assistant'; text: string; ts: number}
@@ -273,6 +315,7 @@ export type AgentInfo = {
 export type Agent = AgentInfo & {
   slug: string | null; // null = the general conversation (library)
   title: string | null;
+  kind: PublicationKind | null; // what its publication is (null for the general conversation)
 };
 
 /* ───── Image sources (config/images.json, set in Ajustes → Extracción de datos) ───── */
@@ -805,6 +848,7 @@ export type FactFinding = {
   sources: FactSource[];
   agents: number[]; // which reviewers (1–3) flagged or checked it
   disputed: boolean; // the reviewers disagreed on the verdict
+  slide?: {id: string; n: number; title: string}; // carousels: the slide the claim is on (matched by its text)
 };
 export type FactReviewer = {n: number; lens: string; state: 'pending' | 'running' | 'done' | 'error' | 'stopped'; model: string; error: string; claims: number; flagged: number; at: number | null};
 // status: how the run went. state: what he did with it (Pendiente, Resuelto, Archivado).
@@ -813,6 +857,7 @@ export type FactReportState = 'open' | 'resolved' | 'archived';
 export type FactReport = {
   id: string;
   slug: string;
+  kind?: PublicationKind; // absent: a video (reports from before carousels)
   title: string;
   trigger: 'manual' | 'auto';
   script: string; // the script it checked, as it was
@@ -829,7 +874,7 @@ export type FactReport = {
   stale?: boolean; // in the view: the script changed since
 };
 export type FactAuditSettings = {auto: boolean; prompt: string; model: string; effort: string}; // effort: the reviewers' reasoning effort ('high' by default)
-export type FactAuditVideo = {slug: string; title: string; script: boolean; updated: number; lastAudit: number | null; stale: boolean; busy: boolean};
+export type FactAuditVideo = {slug: string; kind?: PublicationKind; title: string; script: boolean; updated: number; lastAudit: number | null; stale: boolean; busy: boolean};
 export type FactAuditView = {settings: FactAuditSettings; agent: string; models: {id: string; label: string; efforts: string[]}[]; videos: FactAuditVideo[]; reports: FactReport[]};
 
 /* ───── Sync (server/sync.ts, server/sync-queue.ts) ───── */

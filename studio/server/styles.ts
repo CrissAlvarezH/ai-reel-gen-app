@@ -3,9 +3,9 @@
 // /style-files/ (only files a style lists).
 import fs from 'node:fs';
 import path from 'node:path';
-import type {Style, StyleRef, StyleThumbnail} from '../shared/types.ts';
+import type {Style, StyleCarousel, StyleRef, StyleThumbnail} from '../shared/types.ts';
 
-import {ROOT, STYLES} from './workspace.ts';
+import {BUILTIN_STYLES, ROOT, STYLES, resource} from './workspace.ts';
 import {getProfile} from './config.ts';
 export {STYLES};
 
@@ -23,6 +23,22 @@ function thumbnail(v: unknown): StyleThumbnail | null {
   const t = v as Record<string, unknown>;
   const example = str(t.example);
   return {look: strs(t.look), avoid: strs(t.avoid), example: example && fileUrl(example)};
+}
+
+// style.json "carousel": {look, avoid, examples}. A built-in style copied into the workspace before carousels existed
+// takes it from the copy the app carries (the rest of its style.json stays the workspace's).
+function carousel(id: string, v: unknown): StyleCarousel | null {
+  let c = v;
+  if ((!c || typeof c !== 'object') && BUILTIN_STYLES.includes(id)) {
+    try {
+      c = (JSON.parse(fs.readFileSync(resource(`styles/${id}/style.json`), 'utf8')) as Record<string, unknown>).carousel;
+    } catch {
+      c = null;
+    }
+  }
+  if (!c || typeof c !== 'object') return null;
+  const o = c as Record<string, unknown>;
+  return {look: strs(o.look), avoid: strs(o.avoid), examples: images(o.examples)};
 }
 
 function read(id: string) {
@@ -61,6 +77,7 @@ export function listStyles(): Style[] {
       sources: strs(j.sources),
       avoid: strs(j.avoid),
       thumbnail: thumbnail(j.thumbnail),
+      carousel: carousel(id, j.carousel),
       examples: images(j.examples),
       references: images(j.references),
     });
@@ -70,7 +87,7 @@ export function listStyles(): Style[] {
 
 // Whether a workspace-relative image path is listed by some style (the only files /style-files/ serves).
 export function isStyleFile(rel: string) {
-  return listStyles().some((s) => [...s.examples, ...s.references, s.thumbnail?.example].includes(fileUrl(rel)));
+  return listStyles().some((s) => [...s.examples, ...s.references, s.thumbnail?.example, ...(s.carousel?.examples ?? [])].includes(fileUrl(rel)));
 }
 
 export const validStyleId = (s: unknown): s is string => typeof s === 'string' && /^[a-z0-9][a-z0-9-]{0,60}$/.test(s);
@@ -89,6 +106,18 @@ export function styleRef(id?: string | null): StyleRef | null {
   const s = (id && all.find((x) => x.id === id)) || all.find((x) => x.default) || all[0];
   return s ? ref(s, all) : null;
 }
+
+// The style a new carousel starts in: the project's when it does carousels, else the first one that does.
+export function newCarouselStyle(): StyleRef | null {
+  const all = listStyles();
+  const s = all.find((x) => x.projectDefault && x.carousel) ?? all.find((x) => x.default && x.carousel) ?? all.find((x) => x.carousel);
+  return s ? ref(s, all) : null;
+}
+export const carouselStyle = (id: unknown) => {
+  const all = listStyles();
+  const s = validStyleId(id) ? all.find((x) => x.id === id && x.carousel) : undefined;
+  return s ? ref(s, all) : null;
+};
 
 // The style a new video starts in: the open project's (Ajustes → Perfil) if it still exists, else the default one.
 export function newVideoStyle(): StyleRef | null {

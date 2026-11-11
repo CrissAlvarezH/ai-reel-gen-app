@@ -9,16 +9,17 @@ import express, {type NextFunction, type Request, type Response} from 'express';
 import {WebSocketServer} from 'ws';
 import chokidar from 'chokidar';
 import {createServer as createVite} from 'vite';
-import {ROOT, VIDEOS, listSlugs, summary, detail, writeFile, validSlug, title, httpError, setStyle} from './reels.ts';
+import {ROOT, VIDEOS, listSlugs, summary, detail, carouselDetail, writeFile, validSlug, title, httpError, setStyle} from './reels.ts';
+import * as carousel from './carousel.ts';
 import * as chat from './chat.ts';
 import * as settings from './settings.ts';
 import * as skills from './skills.ts';
 import * as config from './config.ts';
 import * as voice from './voice.ts';
-import {create, installing} from './create.ts';
+import {create, createCarousel, installing} from './create.ts';
 import {AGENTS, agentUsage, currentAgent, setAgent} from './agent.ts';
 import * as beats from './beats.ts';
-import {listStyles, isStyleFile} from './styles.ts';
+import {carouselStyle, listStyles, isStyleFile} from './styles.ts';
 import {listFormats, isFormatFile} from './formats.ts';
 import * as footage from './footage.ts';
 import {loadShellPath, reveal} from './platform.ts';
@@ -153,6 +154,58 @@ app.get('/api/reels', handle(() => {
   return listSlugs().map(summary).sort((a, b) => b.updated - a.updated);
 }));
 app.get('/api/reels/:slug', reel, handle((req) => detail(req.params.slug)));
+
+// Carousels (server/carousel.ts): a publication of slides that lives with the videos (kind.txt "carousel").
+const carouselOnly = (req: Req, res: Response, next: NextFunction) => {
+  if (!validSlug(req.params.slug) || !listSlugs().includes(req.params.slug) || !carousel.isCarousel(req.params.slug)) return res.status(404).json({error: 'carrusel no encontrado'});
+  next();
+};
+const changedCarousel = (slug: string, line: string) => {
+  chat.note(slug, line);
+  send({type: 'changed', slug});
+};
+const slideList = (ids: {id: string; title: string}[]) => ids.map((s, i) => `${i + 1}. ${s.id}${s.title ? ` («${s.title}»)` : ''}`).join(', ');
+app.get('/api/carousels/:slug', carouselOnly, handle((req) => carouselDetail(req.params.slug)));
+app.put('/api/carousels/:slug/order', carouselOnly, handle((req) => {
+  const slides = carousel.reorder(req.params.slug, req.body?.order);
+  changedCarousel(req.params.slug, `Reordenaste las láminas del borrador: ${slideList(slides)}.`);
+  return carouselDetail(req.params.slug);
+}));
+app.post('/api/carousels/:slug/slides', carouselOnly, handle((req) => {
+  const dup = typeof req.body?.duplicate === 'string';
+  const {id, slides} = carousel.addSlide(req.params.slug, req.body ?? {});
+  const n = slides.findIndex((s) => s.id === id) + 1;
+  changedCarousel(req.params.slug, dup ? `Duplicaste la lámina «${req.body.duplicate}» como «${id}» (ahora la ${n}).` : `Añadiste la lámina «${id}» en la posición ${n}, con un dibujo provisional (src/slides/${id}.tsx).`);
+  return {id, carousel: carouselDetail(req.params.slug)};
+}));
+app.delete('/api/carousels/:slug/slides/:id', carouselOnly, handle((req) => {
+  carousel.removeSlide(req.params.slug, req.params.id);
+  changedCarousel(req.params.slug, `Quitaste la lámina «${req.params.id}» del borrador (su archivo src/slides/${req.params.id}.tsx sigue ahí).`);
+  return carouselDetail(req.params.slug);
+}));
+// Renderizar: the next version from the draft as it is, without the agent (./render.sh).
+app.post('/api/carousels/:slug/render', carouselOnly, handle((req) => {
+  const {slug} = req.params;
+  carousel.render(slug, typeof req.body?.note === 'string' ? req.body.note : 'desde Reel Studio', (r) => {
+    chat.note(slug, r.ok ? `Renderizaste el borrador como la versión ${r.version} (out/${r.version}/).` : `Falló el render del carrusel:\n${r.error}`, !r.ok);
+    send({type: 'changed', slug});
+  });
+  send({type: 'changed', slug});
+}));
+// Exportar: a version's images, numbered in its order, with the caption and the credits, as a zip.
+app.get('/api/carousels/:slug/export', carouselOnly, (req: Req, res: Response) => {
+  try {
+    const {filename, data} = carousel.exportVersion(req.params.slug, req.query.version);
+    res.set({'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${filename}"`, 'Content-Length': String(data.length)}).send(data);
+  } catch (e) {
+    fail(res, e);
+  }
+});
+app.post('/api/carousels/:slug/reveal-version', carouselOnly, handle((req) => {
+  const v = carousel.versions(req.params.slug).find((x) => x.name === req.body?.version);
+  if (!v) throw httpError(404, 'esa versión no existe');
+  reveal(path.join(VIDEOS, req.params.slug, 'out', v.name, v.slides[0].file), true);
+}));
 // Alineación con tu audiencia (server/script-check.ts) and Fuerza del gancho (server/hook-check.ts): GET only reads;
 // POST judges the script if it changed (force: again) and answers once done. ?format=text: the agent's reading of it.
 // ?project=: the agent's own project (REEL_STUDIO_PROJECT_ID; it goes on in it after he opens another one), else the open one.
@@ -186,6 +239,7 @@ app.put('/api/reels/:slug/file', reel, handle((req) => {
 // The video's visual style (style.txt). The agent sees it in the [UI: …] line of the next message; the
 // transcript gets a line so the change shows in the conversation.
 app.put('/api/reels/:slug/style', reel, handle((req) => {
+  if (carousel.isCarousel(req.params.slug) && !carouselStyle(String(req.body?.style ?? ''))) throw httpError(400, 'ese estilo no tiene versión para carruseles');
   const s = setStyle(req.params.slug, req.body?.style);
   chat.note(req.params.slug, `Estilo cambiado a «${s.name}».`);
   send({type: 'changed', slug: req.params.slug});
@@ -228,7 +282,11 @@ app.post('/api/reels/:slug/reveal-version', reel, handle((req) => {
 // Publicar: to the project's Instagram account, now or at a time (publish.ts).
 app.get('/api/publications', handle(() => publish.calendar()));
 app.get('/api/reels/:slug/publications', reel, handle((req) => publish.list(req.params.slug)));
-app.post('/api/reels/:slug/publications', reel, handle((req) => publish.publish(req.params.slug, req.body)));
+app.post('/api/reels/:slug/publications', reel, handle((req) => {
+  // Publishing carousels comes later: the cloud's publishing takes one video file.
+  if (carousel.isCarousel(req.params.slug)) throw httpError(400, 'publicar carruseles todavía no está disponible: exporta sus imágenes desde el carrusel');
+  return publish.publish(req.params.slug, req.body);
+}));
 app.patch('/api/reels/:slug/publications/:id', reel, handle((req) => publish.reschedule(req.params.slug, req.params.id, req.body?.scheduledAt)));
 app.delete('/api/reels/:slug/publications/:id', reel, handle((req) => publish.cancel(req.params.slug, req.params.id)));
 // The thumbnail (out/miniatura.png) selected in its folder, like a version.
@@ -254,7 +312,33 @@ const FIRST_PICK =
   'Responde con una o dos frases de análisis y luego 3 propuestas numeradas, la que recomiendas primero. Cada una: un título corto en negrita, de qué va el video en una frase, a quién le pega (el problema o deseo de su perfil y el nivel de conciencia al que le habla) y el gancho de apertura entre comillas. ' +
   'Termina con esta pregunta, tal cual y en su propia línea: ¿Con cuál empezamos? ' +
   'Cuando elija una (o la corrija o combine), actualiza title.txt con ese tema y arranca el proceso completo (skill reel-studio): investigación, guion y video. Si ninguna le convence, propone otras 3 distintas y vuelve a preguntar.';
+// A new carousel: the same start as a video, its own first turn.
+const CAROUSEL_FIRST_TURN =
+  'Antes de nada: en este primer turno NO investigues, no busques en internet, no leas skills ni archivos, no escribas ni cambies archivos y no uses ninguna herramienta. ' +
+  'Responde solo con un párrafo breve, de tres o cuatro frases, con tu análisis de la idea como carrusel de Instagram (qué promete la portada, a quién le sirve, qué ángulo ves, cuántas láminas más o menos y qué le falta) y termina con esta pregunta, tal cual y en su propia línea: ¿Empiezo a crear el carrusel? ' +
+  'Cuando responda que sí, arranca el proceso completo (skill carousel). Si te corrige o añade algo, ajusta el párrafo y vuelve a preguntar: no empieces hasta su sí.';
+const CAROUSEL_FIRST_PICK =
+  'Antes de nada: en este primer turno solo puedes leer, sin cambiar nada: el tablero de ideas (tools/ideas.py show), el perfil de audiencia (config/audience.json), los títulos de lo que ya hizo (videos/*/title.txt) y, si partes de un video, su guion. No busques en internet, no escribas ni cambies archivos. ' +
+  'Responde con una o dos frases de análisis y luego 3 propuestas de carrusel numeradas, la que recomiendas primero. Cada una: un título corto en negrita, de qué va en una frase, a quién le pega y el texto de la portada entre comillas, con cuántas láminas. ' +
+  'Termina con esta pregunta, tal cual y en su propia línea: ¿Con cuál empezamos? ' +
+  'Cuando elija una (o la corrija o combine), actualiza title.txt con ese tema y arranca el proceso completo (skill carousel). Si ninguna le convence, propone otras 3 distintas y vuelve a preguntar.';
+async function newCarousel(body: Record<string, unknown>) {
+  const {text, brief, context, style: styleId, from, model, effort} = body;
+  const {slug, title: name, style} = await createCarousel(text, styleId, from, (s, ok, log) => {
+    send({type: 'changed', slug: s});
+    if (!ok) chat.note(s, `npm install falló en videos/${s}${log ? `\n${log.trim().split('\n').slice(-5).join('\n')}` : ''}`, true);
+  });
+  chat.startWith(slug, {model, effort});
+  const source = typeof from === 'string' && from ? ` Parte del video «${title(from) ?? from}» (videos/${from}/: su guion en audio/vo.txt, su caption en caption.md; queda en from.txt): úsalo como insumo, sin cambiar ese video.` : '';
+  chat.send(slug, {
+    text: text as string,
+    context: {...((context as object) ?? {}), page: 'carousel', slug},
+    note: `[Carrusel nuevo: acabo de crear videos/${slug}/ desde carousel-template/ (kind.txt = carousel) a partir de este mensaje, con el título «${name}» (en title.txt) y el estilo «${style.name}» (styles/${style.id}/style.json, en style.txt), en 4:5 (1080×1350).${source} npm install corre en segundo plano: no renderices hasta que exista node_modules/.bin/remotion.]\n\n${typeof brief === 'string' && brief.trim() ? `[${CAROUSEL_FIRST_PICK}]\n\n[Lo que pidió al empezar (él solo ve su mensaje): ${brief.trim().slice(0, 4000)}]` : `[${CAROUSEL_FIRST_TURN}]`}`,
+  });
+  return {slug, title: name, kind: 'carousel' as const};
+}
 app.post('/api/reels', handle(async (req) => {
+  if (req.body?.kind === 'carousel') return newCarousel(req.body);
   const {text, brief, context, style: styleId, videoFormat, clips, model, effort} = req.body ?? {};
   const {slug, title, style, kind, uploaded} = await create(text, styleId, videoFormat, clips, (s, ok, log) => {
     send({type: 'changed', slug: s});
@@ -276,6 +360,7 @@ app.delete('/api/reels/:slug', reel, handle((req) => {
   const {slug} = req.params;
   if (chat.running(slug)) throw httpError(409, 'El agente está trabajando en este video: detenlo antes de borrarlo.');
   if (installing(slug)) throw httpError(409, 'Aún se están instalando sus dependencias: inténtalo en un momento.');
+  if (carousel.rendering(slug)) throw httpError(409, 'Se está renderizando una versión: inténtalo cuando termine.');
   fs.rmSync(path.join(VIDEOS, slug), {recursive: true, force: true, maxRetries: 3});
   chat.remove(slug);
   db.sync(true);
@@ -324,7 +409,7 @@ app.post('/api/chat/:key/:chat/permission/:item', chatKey, handle((req) => chat.
 app.get('/api/agents', handle((): Agent[] =>
   [chat.GENERAL, ...listSlugs()].map((k) => {
     const general = k === chat.GENERAL;
-    return {...chat.agent(k), slug: general ? null : k, title: general ? null : title(k)};
+    return {...chat.agent(k), slug: general ? null : k, title: general ? null : title(k), kind: general ? null : carousel.kindOf(k)};
   }),
 ));
 app.post('/api/reels/:slug/frames', reel, express.raw({type: 'image/png', limit: '20mb'}), handle((req) => {

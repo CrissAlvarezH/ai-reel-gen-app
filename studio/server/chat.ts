@@ -24,6 +24,8 @@ import * as uploads from './uploads.ts';
 import {newVideoStyle} from './styles.ts';
 import {listFormats} from './formats.ts';
 import * as footage from './footage.ts';
+import * as carousel from './carousel.ts';
+import {listStyles} from './styles.ts';
 import {BEAT_TAGS, IMAGE_SOURCES, type ImageSourceId} from '../shared/types.ts';
 import type {AgentInfo, AutomationAgent, AgentState, ChatCommand, ChatContext, ChatEvent, ChatItem, ChatList, ChatOptions, ChatState, Comment, ServerEvent, UiContext} from '../shared/types.ts';
 
@@ -137,7 +139,7 @@ function titleOf(c: Chat) {
   if (!first || first.role !== 'user') return null;
   const t =
     first.text.replace(/\s+/g, ' ').trim() ||
-    (first.comments.length ? `${first.comments.length} comentario${first.comments.length > 1 ? 's' : ''} en el timeline` : '') ||
+    (first.comments.length ? `${first.comments.length} comentario${first.comments.length > 1 ? 's' : ''} ${first.comments.some((c) => c.slide) ? 'en las láminas' : 'en el timeline'}` : '') ||
     (first.ideas?.length ? `Idea: ${first.ideas.map((i) => i.title).join(', ')}` : '') ||
     (first.refs?.length ? (first.refs.every((r) => r.own) ? `Sobre: ${first.refs.map((r) => r.label || r.code).join(', ')}` : `Referencia: ${first.refs.map((r) => `@${r.account}`).join(', ')}`) : '');
   return t.length > 60 ? `${t.slice(0, 60)}…` : t;
@@ -394,6 +396,15 @@ const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).p
 // Turn the UI's timeline comments into text the agent can act on (frames are files it can Read).
 function commentsText(slug: string, comments: Comment[] | undefined) {
   if (!comments?.length) return '';
+  // A carousel's: per slide, by its id (it may have moved since), with the picture he was looking at.
+  if (comments.some((c) => c.slide)) {
+    const lines = comments.flatMap((c) => {
+      if (!c.slide || !carousel.SLIDE_ID.test(c.slide.id)) return [];
+      const frame = c.frame ? `\n  imagen: ${V()}/${slug}/${c.frame}` : '';
+      return [`- ${carousel.commentWhere(slug, c.slide)}\n  «${c.text}»${frame}`];
+    });
+    return lines.length ? `Comentarios en las láminas (cada una por su id en carousel.json: cambia esa lámina, aunque se haya movido; abre y mira cada imagen antes de responder):\n${lines.join('\n')}` : '';
+  }
   const lines = comments.map((c) => {
     const where = [`${fmt(c.t)}`, c.act && `acto ${c.act}`].filter(Boolean).join(', ');
     const said = c.said ? ` — voz: «${c.said}»` : '';
@@ -564,7 +575,7 @@ export const RESEARCH_TOOL = () => `${PY} "${resource('tools/research.py')}"`;
 
 // The studio's index (server/db.ts), for every conversation.
 const INDEX_LINE = () =>
-  `Índice de la app: una base SQLite de solo lectura con todo lo que la app guarda en archivos, de todos los proyectos (filtra siempre por project; el abierto es '${PROJECT}'), que la app mantiene al día (no la escribas): ${PY} tools/studio_sql.py --schema (las tablas y qué significa cada columna) y ${PY} tools/studio_sql.py "SELECT …". Tablas, con los nombres reales de sus columnas más usadas (el resto, en --schema; no adivines nombres): projects; videos (columnas: project, slug, title, style, script, caption, renders, created, updated, reel), los videos de cada proyecto, con reel el código del reel en que se publicó, y video_beats (columnas: project, slug, idx, tag, line), su estructura; own_accounts (columnas: project, username, median, followers) y own_reels (columnas: project, account, code, posted, views, ratio, engagement, video), Mi cuenta de cada proyecto: ratio es el multiplicador (vistas sobre la mediana de la cuenta), engagement la interacción y video el video del proyecto del que salió; insp_accounts, insp_reels (columnas: project, account, code, posted, views, ratio) e insp_beats, Inspiración. Úsalo para comparar, contar, ordenar o buscar entre muchos; para el detalle, abre los archivos.`;
+  `Índice de la app: una base SQLite de solo lectura con todo lo que la app guarda en archivos, de todos los proyectos (filtra siempre por project; el abierto es '${PROJECT}'), que la app mantiene al día (no la escribas): ${PY} tools/studio_sql.py --schema (las tablas y qué significa cada columna) y ${PY} tools/studio_sql.py "SELECT …". Tablas, con los nombres reales de sus columnas más usadas (el resto, en --schema; no adivines nombres): projects; videos (columnas: project, slug, kind, slides, title, style, script, caption, renders, created, updated, reel), las publicaciones de cada proyecto (kind 'video' o 'carousel'; slides, las láminas de un carrusel), con reel el código del reel en que se publicó un video, y video_beats (columnas: project, slug, idx, tag, line), su estructura; own_accounts (columnas: project, username, median, followers) y own_reels (columnas: project, account, code, posted, views, ratio, engagement, video), Mi cuenta de cada proyecto: ratio es el multiplicador (vistas sobre la mediana de la cuenta), engagement la interacción y video el video del proyecto del que salió; insp_accounts, insp_reels (columnas: project, account, code, posted, views, ratio) e insp_beats, Inspiración. Úsalo para comparar, contar, ordenar o buscar entre muchos; para el detalle, abre los archivos.`;
 
 // Only Claude Code has the Chrome integration (TurnOptions.chrome).
 function chromeNote() {
@@ -632,8 +643,50 @@ const MOVE_LINE =
 const checksLine = (slug: string) =>
   `Revisiones del guion, arriba en la página del video: «Alineación con tu audiencia» (audience-check.json, contra su Perfil de audiencia) y «Fuerza del gancho» (hook-check.json: el gancho de 0–10 s con puntaje, criterios, qué cambiar y ganchos alternativos). Las hace el estudio solo unos segundos después de cada cambio de audio/vo.txt; no escribas esos archivos. Léelas con curl -s "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text&project=$REEL_STUDIO_PROJECT_ID" (o audience-check). Para lanzarlas tú y esperar el resultado (puede tardar unos minutos; si el guion no cambió, devuelve la última sin gastar): curl -s -X POST "$REEL_STUDIO_URL/api/reels/${slug}/hook-check?format=text&project=$REEL_STUDIO_PROJECT_ID" -H "Content-Type: application/json" -d '{}' (con {"force":true}, otra vez aunque no haya cambiado). Úsalas cuando escribas o cambies el gancho o el guion, y si te pide aplicarlas, léelas antes.`;
 
+// A carousel's style: its carousel rules (style.json "carousel"; a built-in one from the app's copy if the workspace's is older).
+function carouselStyleLine(key: string) {
+  const st = styleOf(key);
+  if (!st) return '';
+  const c = listStyles().find((x) => x.id === st.id)?.carousel;
+  const rules = c ? [...c.look.map((l) => `- ${l}`), ...(c.avoid.length ? ['Evita:', ...c.avoid.map((l) => `- ${l}`)] : [])].join('\n') : '';
+  return [
+    `Estilo de este carrusel: «${st.name}» (${V()}/${key}/style.txt → styles/${st.id}/style.json): su paleta y lo que significa cada color, sus fuentes y lo que evita mandan en lo visual${st.skill ? `; su skill ${st.skill} es para video, úsala solo por la identidad (componentes, dibujos, tono)` : ''}. Carga sus fuentes en src/Root.tsx (@remotion/google-fonts).`,
+    rules ? `Cómo se ve como carrusel (style.json "carousel"):\n${rules}` : 'Este estilo no tiene reglas propias de carrusel: adapta su style.json a láminas fijas de 4:5.',
+    c?.examples.length ? `Ejemplos de láminas en este estilo: ${c.examples.map((u) => decodeURIComponent(u.replace(/^\/style-files\//, ''))).join(', ')}.` : '',
+    'Si cambia de estilo con láminas ya hechas, pregúntale antes de rehacerlas.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+const CAROUSEL_SYSTEM = (key: string) => {
+  const from = carousel.detailParts(key, [], []).from;
+  return [
+    `${authorName()} te escribe desde Reel Studio, la app local que trabaja sobre esta carpeta. Trabajas en el carrusel ${V()}/${key}/: una publicación de Instagram de varias imágenes (láminas) de 4:5, 1080×1350, no un video. No hay voz, ni guion narrado, ni render de video, ni música.`,
+    projectLine(),
+    `Sigue la skill carousel (.claude/skills/carousel/SKILL.md; si no está en esta carpeta, la de la app: ${resource('.claude/skills/carousel/SKILL.md')}) para el proceso, y LESSONS.md. Ideas (skill content-ideas) y ganchos (skill video-script) valen igual para la portada y el texto.`,
+    `Archivos (todo en ${V()}/${key}/): carousel.json es el borrador: {"width": 1080, "height": 1350, "slides": [{"id", "title", "text", "notes"?}]} en orden. El id (a-z, 0-9 y guiones, p. ej. portada, cifra-real, cta) es estable: nunca lo cambies ni lo reutilices al mover o reescribir una lámina; para una lámina nueva, un id nuevo. text es exactamente lo que dice la lámina (lo lee la auditoría de datos y la UI): mantenlo igual al dibujo. Cada lámina se dibuja en src/slides/<id>.tsx (export default de un componente React con SlideProps de src/lib.ts: id, index, total, title, text); src/lib.ts las encuentra solas por su id, sin lista que mantener. Usa W, H y SAFE de src/lib.ts, no números fijos.`,
+    `Mirar mientras trabajas: ./preview.sh [id…] → out/preview/<id>.png (abre y mira cada imagen). Una versión: ./render.sh "qué cambió" → out/vN/ con NN.png en el orden de carousel.json, version.json y source/ (de qué se hizo). Una versión nunca se toca después: los comentarios y las exportaciones apuntan a ella; para cambiar algo, haz la siguiente. Renderiza una versión cuando termines un cambio que él deba revisar, y dile cuál es. npm install puede seguir corriendo al empezar: no renderices hasta que exista node_modules/.bin/remotion.`,
+    `En la UI ve la lámina elegida en grande, las miniaturas en orden con su número, el selector de versión (el borrador o una out/vN) y las pestañas Caption IG (caption.md), Créditos (CREDITS.md) y Automatización (automatizacion.json: lo que se pega en ManyChat o InstantDM; lo puedes escribir tú, con las claves keyword, reply, dm y link, solo texto, sin notas dentro, vacío lo que falte y sin inventar enlaces). Él puede reordenar, añadir, duplicar o quitar láminas del borrador (te llega una nota): respeta ese orden. Una lámina añadida desde la UI trae un dibujo provisional que debes rehacer en el estilo. Sus comentarios llegan por lámina, con su id, la versión que miraba y la imagen: cambia esa lámina por su id.`,
+    `Escribe el caption en caption.md siguiendo las reglas de caption de su perfil, y los créditos de cada imagen o dato en CREDITS.md. Exportar (las imágenes numeradas de una versión, con caption y créditos) lo hace él desde la UI. Publicar, programar y las métricas de carruseles todavía no están en la app: si te lo pide, díselo y que exporte; no publiques por ninguna otra vía.`,
+    from ? `Partió del video «${from.title ?? from.slug}» (${V()}/${key}/from.txt): su guion está en ${V()}/${from.slug}/audio/vo.txt y su caption en ${V()}/${from.slug}/caption.md. Úsalos como insumo; no cambies nada de ese video.` : '',
+    `El nombre del carrusel en la UI está en ${V()}/${key}/title.txt (una línea): si el tema cambia, actualízalo. El slug (la carpeta) no cambia.`,
+    'Progreso del carrusel (la UI lo muestra; tú lo recibes en la línea [UI: …]): Textos (cada lámina tiene text) → Láminas (cada una tiene src/slides/<id>.tsx) → Render (una versión con el orden actual, posterior a todo lo de src/ y carousel.json) → Caption (caption.md). Se calcula solo desde los archivos.',
+    'Auditoría de datos: la página Auditoría revisa los datos del texto de las láminas (carousel.json) y dice en qué lámina está cada afirmación; si te la adjunta, corrige esa lámina y su text.',
+    carouselStyleLine(key),
+    profileText(),
+    'Del perfil no aplican a un carrusel la duración, el tamaño de video ni la voz.',
+    imagesText(),
+    ...COMMON(),
+  ]
+    .filter(Boolean)
+    .join('\n');
+};
+
 const SYSTEM = (key: string) =>
-  key === GENERAL
+  key !== GENERAL && carousel.isCarousel(key)
+    ? CAROUSEL_SYSTEM(key)
+    : key === GENERAL
     ? [
         `${authorName()} te escribe desde Reel Studio, la app local que trabaja sobre esta carpeta, desde la biblioteca: es la conversación general, no ligada a un video.`,
         'Sirve para todo lo que no es de un video concreto: ideas de temas y ángulos (skill content-ideas), ganchos y guiones (skill video-script, dentro del proceso de la skill reel-studio), mirar el conjunto de videos del proyecto, o crear uno nuevo.',
@@ -642,6 +695,7 @@ const SYSTEM = (key: string) =>
         inspirationNote(),
         researchNote(RESEARCH_TOOL()),
         accountNote(),
+        `Carruseles: el proyecto también tiene carruseles de Instagram (láminas de 4:5), en ${V()}/<slug>/ como los videos, con kind.txt = carousel (kind en la tabla videos del índice). Si te pide uno, créalo con node "${resource('scripts/new-carousel.mjs')}" <slug> [estilo] [--from <slug de un video>] [--title "nombre"] (lo crea en el proyecto abierto; el estilo, uno con bloque "carousel" en su style.json) y esta conversación pasa a él como con un video; o dile que use Biblioteca → Nuevo carrusel.`,
         `Cuando apruebe una idea y te pida crearla, crea el video con scripts/new-video.sh <slug> [estilo] [formato] (lo crea en el proyecto abierto, ${V()}/<slug>/; estilo: el id de una carpeta de styles/; sin él, el predeterminado; queda en ${V()}/<slug>/style.txt; formato: igual con formats/, en format.txt; para saltarte el estilo pasa "") y escribe su guion en ${V()}/<slug>/audio/vo.txt: aparecerá solo en la biblioteca.`,
         MOVE_LINE,
         checksLine('<slug>'),
@@ -670,10 +724,18 @@ const SYSTEM = (key: string) =>
         ...COMMON(),
       ].join('\n');
 
-const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', scheduled: 'Videos programados', ideas: 'Ideas de contenido', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', research: 'Investigación', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', audience: 'Perfil de audiencia', reel: null};
+const PAGES: Record<UiContext['page'], string | null> = {account: 'Mi cuenta', library: 'biblioteca', scheduled: 'Videos programados', ideas: 'Ideas de contenido', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', research: 'Investigación', styles: 'Estilos', formats: 'Formatos', settings: 'Ajustes', new: 'nuevo reel', newCarousel: 'nuevo carrusel', audience: 'Perfil de audiencia', reel: null, carousel: null};
 const fmtCtx = (c: UiContext | undefined, progress?: string, style?: string, voice?: string, kind?: string) => {
   if (!c || typeof c !== 'object') return '';
-  const parts: (string | null | undefined)[] = [PAGES[c.page] ?? (c.slug ? `video ${c.slug}` : null)];
+  const parts: (string | null | undefined)[] = [PAGES[c.page] ?? (c.slug ? `${c.page === 'carousel' ? 'carrusel' : 'video'} ${c.slug}` : null)];
+  if (c.page === 'carousel') {
+    parts.push(typeof c.version === 'string' && /^v\d+$/.test(c.version) ? `viendo la versión out/${c.version}/` : 'viendo el borrador (carousel.json)');
+    if (typeof c.slide === 'string' && carousel.SLIDE_ID.test(c.slide)) parts.push(`lámina ${typeof c.slideN === 'number' ? `${c.slideN} ` : ''}«${c.slide}» en grande`);
+    if (c.tab) parts.push(`pestaña abierta: ${c.tab}`);
+    if (style) parts.push(`estilo: ${style}`);
+    if (progress) parts.push(`progreso: ${progress}`);
+    return `[UI: ${parts.filter(Boolean).join(' · ')}]`;
+  }
   if (c.style) parts.push(`estilo abierto: styles/${c.style}/style.json`);
   if (typeof c.videoFormat === 'string' && /^[a-z0-9-]+$/.test(c.videoFormat)) parts.push(`formato abierto: formats/${c.videoFormat}/format.json`);
   if (typeof c.inspiration === 'string' && /^@[a-z0-9._]+(\/[A-Za-z0-9_-]+)?$/.test(c.inspiration)) {
@@ -795,9 +857,10 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
           .join(', ');
   const st = key === GENERAL ? null : styleOf(key);
   const style = st ? `${st.name} (styles/${st.id}/style.json${st.ready ? '' : st.skill ? `, su skill ${st.skill}` : ', sin skill ni plantilla propias'})` : undefined;
-  const k = key === GENERAL ? null : videoFormatOf(key);
+  const isCarousel = key !== GENERAL && carousel.isCarousel(key);
+  const k = key === GENERAL || isCarousel ? null : videoFormatOf(key);
   const kind = k ? `${k.name} (formats/${k.id}/format.json)` : undefined;
-  const vv = key === GENERAL || k?.footage ? null : videoVoice(key);
+  const vv = key === GENERAL || isCarousel || k?.footage ? null : videoVoice(key);
   const voice = vv ? (!vv.enabled ? 'desactivada' : vv.voiceId ? `${vv.voiceName ?? vv.voiceId}${vv.own ? ' (propia de este video)' : ''}` : 'sin elegir') : undefined;
   // The agent chosen in Ajustes. A conversation whose session belongs to the other one goes on in a new
   // session of this one, which gets what was said so far as text.
@@ -808,7 +871,7 @@ export function send(key: string, {text, comments, refs: rawRefs, ideas: rawIdea
   // A slash command (/compact, /context, a skill…) goes as it is: the CLI only reads one at the start of the prompt.
   const slash = /^\/[^\s/]/.test(text?.trim() ?? '') && !comments?.length && !refs.length && !ideaRefs.length && !images.length;
   // A resumed session keeps the system prompt it started with (Claude Code ignores a new one): what changed goes in the prompt.
-  const brief = prev.briefing && resume ? `[Reel Studio: esta conversación pasó a ser la del video ${V()}/${key}/. Desde ahora valen estas instrucciones, en lugar de las de la conversación general:]\n${SYSTEM(key)}` : '';
+  const brief = prev.briefing && resume ? `[Reel Studio: esta conversación pasó a ser la del ${isCarousel ? 'carrusel' : 'video'} ${V()}/${key}/. Desde ahora valen estas instrucciones, en lugar de las de la conversación general:]\n${SYSTEM(key)}` : '';
   const told = key === GENERAL && resume && !prev.moveTold ? `[Reel Studio: ${MOVE_LINE}]` : '';
   const prompt = slash
     ? text!.trim()

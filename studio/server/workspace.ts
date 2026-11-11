@@ -388,6 +388,7 @@ if (initial && isDir(initial)) apply(path.resolve(initial));
 type Seed = {to: string; from: string};
 const SEED_FIXED: Seed[] = [
   {to: 'template', from: 'template'},
+  {to: 'carousel-template', from: 'carousel-template'},
   {to: 'tools', from: 'tools'},
   {to: 'scripts', from: 'scripts'},
   {to: 'CLAUDE.md', from: 'studio/workspace/CLAUDE.md'},
@@ -403,7 +404,7 @@ const children = (rel: string) => {
 };
 // Only product styles seed new workspaces or ship in the installer. Other folders in this
 // development workspace may be a customer's custom styles and must remain local.
-const BUILTIN_STYLES = ['collage-semitono', 'cuaderno-apuntes', 'panel-de-cifras', 'plano-tecnico'];
+export const BUILTIN_STYLES = ['collage-semitono', 'cuaderno-apuntes', 'panel-de-cifras', 'plano-tecnico'];
 export const seeds = (): Seed[] => [
   ...SEED_FIXED,
   ...BUILTIN_STYLES.map((n) => ({to: `styles/${n}`, from: `styles/${n}`})),
@@ -423,6 +424,19 @@ function seed(dir: string): string[] {
     const from = source(s);
     fs.mkdirSync(path.dirname(path.join(dir, s.to)), {recursive: true});
     fs.cpSync(from, path.join(dir, s.to), {recursive: true, filter: (src) => !SKIP.test(path.relative(from, src))});
+  }
+  return todo.map((s) => s.to);
+}
+
+// What a new feature needs in a workspace that was made before it (e.g. carousel-template/ and its skill): copied
+// in only when missing, never over what's there. Returns what was copied.
+export function seedMissing(only: string[]): string[] {
+  if (!ROOT) return [];
+  const todo = missing(ROOT).filter((s) => only.includes(s.to));
+  for (const s of todo) {
+    const from = source(s);
+    fs.mkdirSync(path.dirname(path.join(ROOT, s.to)), {recursive: true});
+    fs.cpSync(from, path.join(ROOT, s.to), {recursive: true, filter: (src) => !SKIP.test(path.relative(from, src))});
   }
   return todo.map((s) => s.to);
 }

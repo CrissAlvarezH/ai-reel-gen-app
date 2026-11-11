@@ -1,8 +1,9 @@
-// The library as a table (Biblioteca → Tabla): every video of the project in rows, 15 a page, with a search, filters
-// and sortable columns. All of it on what /api/reels already sends (ReelSummary): nothing is asked of the server.
+// The library as a table (Biblioteca → Tabla): every publication of the project (videos and carousels) in rows, 15 a
+// page, with a search, filters and sortable columns. All of it on what /api/reels already sends (ReelSummary): nothing is asked of the server.
 import {useEffect, useMemo, useState} from 'react';
-import {ChevronLeft, ChevronRight, Eye, Film, MoreHorizontal, Search, Trash2, X} from 'lucide-react';
+import {ChevronLeft, ChevronRight, Eye, MoreHorizontal, Search, Trash2, X} from 'lucide-react';
 import {Button} from '@/components/ui/button';
+import {cn} from '@/lib/utils';
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {Input} from '@/components/ui/input';
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/components/ui/table';
@@ -11,9 +12,10 @@ import {useColumns} from './Columns';
 import {FilterSelect, SortHead} from './Inspiration';
 import {ReelProgressRing} from './ReelProgress';
 import {ReleaseLine} from './Release';
+import {KIND, KindIcon, publicationHref} from './PublicationKind';
 
 const PAGE = 15;
-// Video (its picture and title) is always there; these he can hide.
+// Título (its picture, kind and title) is always there; these he can hide. Duración is a carousel's slides.
 const COLUMNS = [
   {key: 'release', label: 'Publicación'},
   {key: 'progress', label: 'Progreso'},
@@ -28,6 +30,11 @@ const COLUMNS = [
 // Publicación: where each one stands; "unfinished" are those without a line (still being made).
 type Stage = NonNullable<ReelSummary['release']>['state'] | 'unfinished';
 const stageOf = (r: ReelSummary): Stage => r.release?.state ?? 'unfinished';
+const KINDS: [string, string][] = [
+  ['any', 'Videos y carruseles'],
+  ['video', 'Videos'],
+  ['carousel', 'Carruseles'],
+];
 const STAGES: [string, string][] = [
   ['any', 'Todas'],
   ['published', 'Publicados'],
@@ -47,7 +54,7 @@ const value = (r: ReelSummary, k: SortKey): string | number | null => {
     case 'release':
       return STAGE_ORDER[stageOf(r)] * 1e13 - (r.release?.at ? Date.parse(r.release.at) : 0);
     case 'seconds':
-      return r.seconds;
+      return r.kind === 'carousel' ? null : r.seconds; // no duration: after the videos, by their slides (rows)
     case 'views':
       return r.instagram?.views ?? null;
     case 'versions':
@@ -71,14 +78,16 @@ const plain = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').t
 export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete: (r: ReelSummary) => void}) {
   const [q, setQ] = useState('');
   const [stage, setStage] = useState('any');
+  const [kind, setKind] = useState('any');
   const [style, setStyle] = useState('any');
   const [format, setFormat] = useState('any');
   const [sort, setSort] = useState<{key: SortKey; desc: boolean}>({key: 'updated', desc: true});
   const [page, setPage] = useState(0);
 
-  // The styles and formats its videos use: a filter only when there's more than one to choose from.
+  // The styles and formats its publications use, and their kinds: a filter only when there's more than one to choose from.
   const styles = useMemo(() => distinct(reels.map((r) => r.style && [r.style.id, r.style.name])), [reels]);
   const formats = useMemo(() => distinct(reels.map((r) => r.videoFormat && [r.videoFormat.id, r.videoFormat.name])), [reels]);
+  const mixed = reels.some((r) => r.kind === 'carousel') && reels.some((r) => r.kind !== 'carousel');
   // The columns he picked (Columnas, kept per project like Mi cuenta's); those no video has anything for stay out too.
   const cols = useColumns('library', COLUMNS);
   const show = {
@@ -97,26 +106,31 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
     const shown = reels.filter(
       (r) =>
         (stage === 'any' || stageOf(r) === stage) &&
+        (kind === 'any' || r.kind === kind) &&
         (style === 'any' || r.style?.id === style) &&
         (format === 'any' || r.videoFormat?.id === format) &&
         words.every((w) => plain(`${r.title ?? ''} ${r.slug} ${r.hook}`).includes(w)),
     );
-    // Those without a value (no views yet) go last either way.
+    // Those without a value (no views yet, a carousel's duration) go last either way; carousels among themselves by slides.
     return shown.sort((a, b) => {
       const x = value(a, sort.key);
       const y = value(b, sort.key);
+      if (x == null && y == null && sort.key === 'seconds') {
+        const c = (a.slideCount ?? 0) - (b.slideCount ?? 0);
+        return sort.desc ? -c : c;
+      }
       if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
       const c = typeof x === 'string' ? x.localeCompare(y as string, 'es') : x - (y as number);
       return sort.desc ? -c : c;
     });
-  }, [reels, q, stage, style, format, sort]);
+  }, [reels, q, stage, kind, style, format, sort]);
 
   // A new search, filter or order starts at the first page; one that shrinks under the current page goes to its last.
-  useEffect(() => setPage(0), [q, stage, style, format, sort]);
+  useEffect(() => setPage(0), [q, stage, kind, style, format, sort]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const pg = Math.min(page, pages - 1);
   const slice = rows.slice(pg * PAGE, pg * PAGE + PAGE);
-  const active = !!q || stage !== 'any' || style !== 'any' || format !== 'any';
+  const active = !!q || stage !== 'any' || kind !== 'any' || style !== 'any' || format !== 'any';
 
   return (
     <section className="flex flex-col gap-3">
@@ -125,6 +139,7 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por título o gancho…" className="h-8 pl-8" aria-label="Buscar" spellCheck={false} />
         </div>
+        {mixed && <FilterSelect value={kind} onChange={setKind} label="Tipo" options={KINDS} />}
         <FilterSelect value={stage} onChange={setStage} label="Publicación" options={STAGES} />
         {styles.length > 1 && <FilterSelect value={style} onChange={setStyle} label="Estilo" options={[['any', 'Todos los estilos'], ...styles]} />}
         {formats.length > 1 && <FilterSelect value={format} onChange={setFormat} label="Formato" options={[['any', 'Todos los formatos'], ...formats]} />}
@@ -135,6 +150,7 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
             onClick={() => {
               setQ('');
               setStage('any');
+              setKind('any');
               setStyle('any');
               setFormat('any');
             }}
@@ -145,7 +161,7 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
         <div className="ml-auto">{cols.picker}</div>
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Ningún video cumple esos filtros.</p>
+        <p className="text-sm text-muted-foreground">Ninguna publicación cumple esos filtros.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
           <Table>
@@ -153,7 +169,7 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
               <TableRow>
                 <TableHead className="w-14" />
                 <SortHead k="title" sort={sort} setSort={setSort}>
-                  Video
+                  Título
                 </SortHead>
                 {show.release && (
                   <SortHead k="release" sort={sort} setSort={setSort}>
@@ -163,7 +179,7 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
                 {show.progress && <TableHead>Progreso</TableHead>}
                 {show.style && <TableHead>Estilo</TableHead>}
                 {show.seconds && (
-                  <SortHead k="seconds" sort={sort} setSort={setSort} title="Estimada al ritmo de su voz">
+                  <SortHead k="seconds" sort={sort} setSort={setSort} title="Un video: estimada al ritmo de su voz. Un carrusel: sus láminas">
                     Dur.
                   </SortHead>
                 )}
@@ -191,78 +207,93 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
               </TableRow>
             </TableHeader>
             <TableBody>
-              {slice.map((r) => (
-                <TableRow key={r.slug} className="cursor-pointer" onClick={() => (location.hash = `#/reel/${r.slug}`)}>
-                  <TableCell className="w-14 min-w-14 py-1.5">
-                    {r.thumb ? (
-                      <img src={r.thumb} alt="" loading="lazy" className="h-14 w-10 max-w-none min-w-10 rounded-sm object-cover object-top" />
-                    ) : (
-                      <div className="grid h-14 w-10 place-items-center rounded-sm bg-muted">
-                        <Film className="size-4 text-muted-foreground" />
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="max-w-0 min-w-56 whitespace-normal">
-                    <a href={`#/reel/${r.slug}`} className="line-clamp-1 font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
-                      {r.title ?? r.slug}
-                    </a>
-                    <p className="line-clamp-1 text-xs text-muted-foreground">{r.hook || 'Sin guion'}</p>
-                  </TableCell>
-                  {show.release && (
-                    <TableCell className="whitespace-nowrap">{r.release && <ReleaseLine r={r.release} compact />}</TableCell>
-                  )}
-                  {show.progress && (
-                    <TableCell>
-                      <ReelProgressRing steps={r.progress} className="size-5" />
-                    </TableCell>
-                  )}
-                  {show.style && (
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {r.style?.name ?? '—'}
-                      {r.videoFormat?.footage && <p className="text-xs">{r.videoFormat.name}</p>}
-                    </TableCell>
-                  )}
-                  {show.seconds && <TableCell className="text-muted-foreground tabular-nums">~{fmtTime(r.seconds)}</TableCell>}
-                  {show.views && (
-                    <TableCell className="whitespace-nowrap tabular-nums">
-                      {r.instagram?.views != null ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Eye className="size-3.5 text-muted-foreground" />
-                          {r.instagram.views.toLocaleString('es')}
-                          {r.instagram.ratio != null && <span className={r.instagram.ratio >= 2 ? 'text-emerald-400' : 'text-muted-foreground'}>· {r.instagram.ratio.toFixed(1)}×</span>}
-                        </span>
+              {slice.map((r) => {
+                const carousel = r.kind === 'carousel';
+                const href = publicationHref(r.kind, r.slug);
+                const K = KIND[r.kind] ?? KIND.video;
+                return (
+                  <TableRow key={r.slug} className="cursor-pointer" onClick={() => (location.hash = href)}>
+                    <TableCell className="w-14 min-w-14 py-1.5">
+                      {/* Same height for both; a carousel's 4:5 slide a little wider than a video's 9:16 still. */}
+                      {r.thumb ? (
+                        <img src={r.thumb} alt="" loading="lazy" className={cn('h-14 max-w-none rounded-sm object-cover', carousel ? 'w-11 min-w-11' : 'w-10 min-w-10 object-top')} />
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <div className={cn('grid h-14 place-items-center rounded-sm bg-muted', carousel ? 'w-11' : 'w-10')}>
+                          <K.icon className="size-4 text-muted-foreground" aria-hidden />
+                        </div>
                       )}
                     </TableCell>
-                  )}
-                  {show.versions && <TableCell className="text-muted-foreground tabular-nums">{r.versionCount}</TableCell>}
-                  {show.created && (
-                    <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums" title={r.created ? new Date(r.created).toLocaleString('es') : undefined}>
-                      {r.created ? createdDay(r.created) : '—'}
+                    <TableCell className="max-w-0 min-w-56 whitespace-normal">
+                      <div className="flex items-center gap-1.5">
+                        <KindIcon kind={r.kind} className="size-3.5 text-muted-foreground" />
+                        <a href={href} className="line-clamp-1 min-w-0 font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
+                          {r.title ?? r.slug}
+                        </a>
+                      </div>
+                      <p className="line-clamp-1 text-xs text-muted-foreground">{r.hook || (carousel ? 'Sin textos' : 'Sin guion')}</p>
                     </TableCell>
-                  )}
-                  {show.updated && (
-                    <TableCell className="whitespace-nowrap text-muted-foreground" title={new Date(r.updated).toLocaleString('es')}>
-                      {fmtAgo(r.updated)}
+                    {show.release && (
+                      <TableCell className="whitespace-nowrap">
+                        {r.release ? <ReleaseLine r={r.release} compact /> : carousel && <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                    )}
+                    {show.progress && (
+                      <TableCell>
+                        <ReelProgressRing steps={r.progress} className="size-5" />
+                      </TableCell>
+                    )}
+                    {show.style && (
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                        {r.style?.name ?? '—'}
+                        {r.videoFormat?.footage && <p className="text-xs">{r.videoFormat.name}</p>}
+                      </TableCell>
+                    )}
+                    {show.seconds && (
+                      <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums">
+                        {carousel ? `${r.slideCount ?? 0} ${r.slideCount === 1 ? 'lámina' : 'láminas'}` : `~${fmtTime(r.seconds)}`}
+                      </TableCell>
+                    )}
+                    {show.views && (
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {r.instagram?.views != null ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Eye className="size-3.5 text-muted-foreground" />
+                            {r.instagram.views.toLocaleString('es')}
+                            {r.instagram.ratio != null && <span className={r.instagram.ratio >= 2 ? 'text-emerald-400' : 'text-muted-foreground'}>· {r.instagram.ratio.toFixed(1)}×</span>}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    )}
+                    {show.versions && <TableCell className="text-muted-foreground tabular-nums">{r.versionCount}</TableCell>}
+                    {show.created && (
+                      <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums" title={r.created ? new Date(r.created).toLocaleString('es') : undefined}>
+                        {r.created ? createdDay(r.created) : '—'}
+                      </TableCell>
+                    )}
+                    {show.updated && (
+                      <TableCell className="whitespace-nowrap text-muted-foreground" title={new Date(r.updated).toLocaleString('es')}>
+                        {fmtAgo(r.updated)}
+                      </TableCell>
+                    )}
+                    <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-sm" title="Más opciones" aria-label={`Más opciones de ${r.title ?? r.slug}`}>
+                            <MoreHorizontal />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem variant="destructive" onSelect={() => onDelete(r)}>
+                            <Trash2 /> Borrar {carousel ? 'carrusel' : 'video'}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
-                  )}
-                  <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-sm" title="Más opciones" aria-label={`Más opciones de ${r.title ?? r.slug}`}>
-                          <MoreHorizontal />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem variant="destructive" onSelect={() => onDelete(r)}>
-                          <Trash2 /> Borrar video
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           <div className="flex items-center justify-end gap-2 border-t px-3 py-2 text-sm text-muted-foreground">

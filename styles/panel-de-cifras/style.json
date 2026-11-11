@@ -110,6 +110,26 @@
     ],
     "example": "styles/panel-de-cifras/examples/miniatura-cesantias.png"
   },
+  "carousel": {
+    "look": [
+      "Lámina 4:5 (1080×1350), fondo liso casi negro como el video; margen de 72 px como mínimo en cada lado y nada importante en las franjas laterales que el perfil recorta a 3:4.",
+      "Portada: la promesa en 5 a 9 palabras en Inter 800 blanco (≈96 px) con la palabra clave en negro sobre un bloque amarillo; debajo, una sola cifra o tarjeta que dé ganas de deslizar.",
+      "Una sola tarjeta protagonista por lámina (recibo crema que se llena por filas, contador, comparativa de dos tarjetas o línea de tiempo), con la cifra exacta en Inter 800 y números tabulares.",
+      "Un titular corto arriba (≤ 10 palabras) y como mucho 30 palabras de texto de apoyo por lámina, en Inter 500 de 34 px o más.",
+      "Serie: barra de progreso de partes arriba (verde las vistas, amarilla la actual, gris las que faltan) y el número de lámina «3/8» pequeño en la esquina.",
+      "Cuando algo no es lo que parece, la cifra tachada en rojo y la real debajo, en la misma lámina.",
+      "Nota de fuente abajo en 28 px como mínimo, en gris, con la entidad y el año.",
+      "Última lámina: la conclusión en una frase y el CTA como un comentario de Instagram con la palabra clave en amarillo («Comenta CUOTA y te mando el simulador»)."
+    ],
+    "avoid": [
+      "Fotos, texturas de papel o recortes.",
+      "Más de una cifra protagonista por lámina, o párrafos largos: en el móvil se lee de un vistazo.",
+      "Repetir la portada en la segunda lámina: la segunda ya entrega algo.",
+      "Usar el rojo, el amarillo o el verde fuera de su significado.",
+      "Texto pegado a los bordes o por fuera del margen de 72 px."
+    ],
+    "examples": ["styles/panel-de-cifras/examples/carrusel-portada.png"]
+  },
   "examples": [],
   "references": [
     "styles/panel-de-cifras/refs/Dewx2OxBqY6.jpg",
