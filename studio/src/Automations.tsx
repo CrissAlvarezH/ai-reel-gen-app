@@ -917,6 +917,70 @@ function SourcesStepFields({n, chosen, onChange}: {n: number; chosen: string[]; 
   );
 }
 
+// The schedule's shortcuts: IA first (he says when in words and the agent writes the cron into the field, with a line
+// on what it does), then the usual ones.
+function CronPresets({onCron}: {onCron: (cron: string) => void}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [note, setNote] = useState('');
+  const convert = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    setErr('');
+    setNote('');
+    try {
+      const r = await automationsApi.cron(text);
+      onCron(r.cron);
+      setNote(r.note);
+    } catch (e) {
+      setErr((e as Error).message.replace(/^./, (c) => c.toUpperCase()));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-1.5">
+        <Button type="button" variant={open ? 'secondary' : 'outline'} size="xs" aria-expanded={open} onClick={() => setOpen(!open)} title="Dilo con tus palabras y la IA escribe el cron">
+          <Sparkles /> IA
+        </Button>
+        {PRESETS.map((p) => (
+          <Button key={p.cron} type="button" variant="outline" size="xs" onClick={() => onCron(p.cron)}>
+            {p.label}
+          </Button>
+        ))}
+      </div>
+      {open && (
+        <div className="flex flex-col gap-1.5 rounded-md border bg-muted/30 p-2">
+          <div className="flex gap-1.5">
+            <Input
+              autoFocus
+              value={text}
+              maxLength={300}
+              disabled={busy}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                void convert();
+              }}
+              placeholder="Martes y jueves a las 7 de la noche"
+              aria-label="Cuándo, en tus palabras"
+              className="h-8 text-sm"
+            />
+            <Button type="button" size="sm" disabled={busy || !text.trim()} onClick={() => void convert()}>
+              {busy ? <Loader2 className="animate-spin" /> : <Sparkles />} Convertir
+            </Button>
+          </div>
+          {err ? <p className="text-xs text-destructive">{err}</p> : note ? <p className="text-xs text-muted-foreground">{note}</p> : <p className="text-xs text-muted-foreground">Dilo con tus palabras; el cron queda en el horario de arriba.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AutomationForm({automation: a, onClose, onSaved}: {automation: Automation | null; onClose: () => void; onSaved: (v: AutomationsView) => void}) {
   const [name, setName] = useState(a?.name ?? '');
   const [cron, setCron] = useState(a?.cron ?? '0 9 * * *');
@@ -975,13 +1039,7 @@ function AutomationForm({automation: a, onClose, onSaved}: {automation: Automati
                     </>
                   )}
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {PRESETS.map((p) => (
-                    <Button key={p.cron} type="button" variant="outline" size="xs" onClick={() => setCron(p.cron)}>
-                      {p.label}
-                    </Button>
-                  ))}
-                </div>
+                <CronPresets onCron={setCron} />
               </div>
             </Point>
             {steps.map((s, i) => (

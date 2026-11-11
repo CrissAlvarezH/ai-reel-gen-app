@@ -424,6 +424,8 @@ export const automationsApi = {
   edit: (id: string, input: AutomationInput) => automationsCall('PUT', `/api/automations/${id}`, input),
   remove: (id: string) => automationsCall('DELETE', `/api/automations/${id}`),
   run: (id: string) => automationsCall('POST', `/api/automations/${id}/run`),
+  // A schedule said in words → {cron, note}.
+  cron: (text: string) => post('/api/automations/cron', {text}) as Promise<{cron: string; note: string}>,
   stop: (run: string) => automationsCall('POST', `/api/automation-runs/${run}/stop`),
   memory: (id: string) => fetch(`/api/automations/${id}/memory`).then((r) => json<AutomationMemory>(r)),
   addMemory: (id: string, input: MemoryInput) => memoryCall('POST', `/api/automations/${id}/memory`, input),

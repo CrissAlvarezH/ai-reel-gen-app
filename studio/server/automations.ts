@@ -19,7 +19,7 @@ import {ALL_EXTERNAL, MAX_ACCOUNT_REELS} from '../shared/types.ts';
 import type {Automation, AutomationInput, AutomationRun, AutomationRunState, AutomationRunStep, AutomationStep, AutomationsView} from '../shared/types.ts';
 import * as account from './account.ts';
 import * as memory from './automation-memory.ts';
-import {AGENTS} from './agent.ts';
+import {AGENTS, agentCli} from './agent.ts';
 import * as chat from './chat.ts';
 import * as insp from './inspiration.ts';
 import * as sources from './sources.ts';
@@ -458,4 +458,26 @@ function tick(now = new Date()) {
 export function startScheduler(onChange: () => void) {
   notify = onChange;
   setInterval(tick, 15_000);
+}
+
+// "IA" in the form's schedule: when he says it in words, as a cron in this computer's local time, with a line on what
+// it does (and what had to be approximated). The studio checks it with the parser that runs it.
+export async function cronFromText(input: unknown) {
+  const raw = (input as {text?: unknown} | null)?.text;
+  const text = typeof raw === 'string' ? raw.trim().slice(0, 300) : '';
+  if (!text) throw httpError(400, 'escribe cuándo quieres que se ejecute');
+  const prompt = `Turn this schedule into a standard 5-field cron expression (minute hour day-of-month month day-of-week, 0 = Sunday), in this computer's local time. Now it is ${new Date().toString()}.
+Schedule: «${text}»
+Answer only with JSON: {"cron": "…", "note": "what it does, in one short sentence in Spanish (only if cron can't do it exactly, also what you approximated)"}. If it isn't a schedule: {"cron": "", "note": "why, in Spanish"}.`;
+  const reply = await agentCli.ask(prompt, 'You answer only with the JSON asked for, nothing else.', {timeout: 90_000});
+  let o: {cron?: unknown; note?: unknown} = {};
+  try {
+    o = JSON.parse(reply.match(/\{[\s\S]*\}/)?.[0] ?? '{}');
+  } catch {
+    /* not JSON: nothing to use */
+  }
+  const cron = typeof o.cron === 'string' ? o.cron.trim().replace(/\s+/g, ' ') : '';
+  const note = typeof o.note === 'string' ? o.note.trim().slice(0, 300) : '';
+  if (!cron || !nextRun(cron)) throw httpError(422, note || 'no pude convertirlo en un horario: dilo de otra forma');
+  return {cron, note};
 }

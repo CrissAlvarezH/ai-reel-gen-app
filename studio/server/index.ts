@@ -497,6 +497,8 @@ app.get('/account-files/:code/:file', (req: Req, res: Response) => {
 app.get('/api/automations', handle(() => automations.view()));
 app.get('/api/automations/agents', handle(() => chat.automationAgents()));
 app.post('/api/automations', handle((req) => automations.add(req.body)));
+// The schedule said in words, as a cron (the form's "IA").
+app.post('/api/automations/cron', handle((req) => automations.cronFromText(req.body)));
 app.put('/api/automations/:id', handle((req) => automations.edit(req.params.id, req.body)));
 app.delete('/api/automations/:id', handle((req) => automations.remove(req.params.id)));
 app.post('/api/automations/:id/run', handle((req) => automations.runNow(req.params.id)));
