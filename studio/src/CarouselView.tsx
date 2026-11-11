@@ -107,7 +107,7 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="listbox"], [role="menu"]')) return;
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"]')) return;
       if (e.key === 'ArrowRight') go(i + 1);
       else if (e.key === 'ArrowLeft') go(i - 1);
       else return;
@@ -117,6 +117,9 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
     return () => window.removeEventListener('keydown', on);
   });
 
+  // The draft doesn't change while the studio renders it (the server refuses too).
+  const locked = !!busy || c.rendering;
+  // to: the place it ends up at.
   const move = (id: string, to: number) => {
     const order = c.slides.map((s) => s.id).filter((x) => x !== id);
     order.splice(Math.max(0, Math.min(order.length, to)), 0, id);
@@ -167,10 +170,12 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
             )}
             {exportName && (
               <>
-                <Button asChild title={`Descarga las imágenes de ${exportName}, numeradas y en orden (${c.width}×${c.height}), con el caption y los créditos`}>
-                  <a href={api.exportUrl(c.slug, exportName)} download>
-                    <Download /> Exportar {exportName}
-                  </a>
+                <Button
+                  title={`Descarga las imágenes de ${exportName}, numeradas y en orden (${c.width}×${c.height}), con el caption y los créditos`}
+                  disabled={busy === 'export'}
+                  onClick={() => run('export', () => download(api.exportUrl(c.slug, exportName), `${c.slug}-${exportName}.zip`))}
+                >
+                  {busy === 'export' ? <Loader2 className="animate-spin" /> : <Download />} Exportar {exportName}
                 </Button>
                 <Button variant="outline" size="icon" aria-label={`Mostrar ${exportName} en su carpeta`} title={`Mostrar ${exportName} en su carpeta`} onClick={() => run('reveal', () => api.revealCarouselVersion(c.slug, exportName).then(() => {}))}>
                   <FolderOpen />
@@ -245,23 +250,23 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
               )}
               {draft && slide && (
                 <div className="flex flex-wrap gap-1.5">
-                  <Button variant="outline" size="sm" onClick={() => move(slide.id, i - 1)} disabled={i === 0 || !!busy} aria-label="Mover la lámina a la izquierda">
+                  <Button variant="outline" size="sm" onClick={() => move(slide.id, i - 1)} disabled={i === 0 || locked} aria-label="Mover la lámina a la izquierda">
                     <MoveLeft /> Antes
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => move(slide.id, i + 1)} disabled={i === shown.length - 1 || !!busy} aria-label="Mover la lámina a la derecha">
+                  <Button variant="outline" size="sm" onClick={() => move(slide.id, i + 1)} disabled={i === shown.length - 1 || locked} aria-label="Mover la lámina a la derecha">
                     Después <MoveRight />
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => run('dup', () => api.addSlide(c.slug, {duplicate: slide.id}).then((r) => (setCur(r.id), r.carousel)))} disabled={!!busy}>
+                  <Button variant="outline" size="sm" onClick={() => run('dup', () => api.addSlide(c.slug, {duplicate: slide.id}).then((r) => (setCur(r.id), r.carousel)))} disabled={locked}>
                     <Copy /> Duplicar
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => run('add', () => api.addSlide(c.slug, {after: slide.id}).then((r) => (setCur(r.id), r.carousel)))} disabled={!!busy}>
+                  <Button variant="outline" size="sm" onClick={() => run('add', () => api.addSlide(c.slug, {after: slide.id}).then((r) => (setCur(r.id), r.carousel)))} disabled={locked}>
                     <Plus /> Añadir después
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
                     className="text-muted-foreground"
-                    disabled={!!busy}
+                    disabled={locked}
                     onClick={async () => {
                       if (!(await confirm({title: `¿Quitar la lámina ${i + 1}?`, description: 'Sale del borrador; su dibujo (src/slides) y las versiones que la tienen se quedan como están.', action: 'Quitar lámina', destructive: true}))) return;
                       void run('remove', () => api.removeSlide(c.slug, slide.id));
@@ -287,7 +292,7 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
             {shown.map((s, k) => (
               <li
                 key={s.id}
-                draggable={draft && !busy}
+                draggable={draft && !locked}
                 onDragStart={(e) => {
                   setDragging(s.id);
                   e.dataTransfer.effectAllowed = 'move';
@@ -300,7 +305,9 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
                 onDragLeave={() => setOver((o) => (o === k ? null : o))}
                 onDrop={(e) => {
                   e.preventDefault();
-                  if (dragging && dragging !== s.id) move(dragging, k);
+                  // Dropped on a thumbnail: before it (where the line shows).
+                  const from = shown.findIndex((x) => x.id === dragging);
+                  if (dragging && dragging !== s.id) move(dragging, from < k ? k - 1 : k);
                   setDragging(null);
                   setOver(null);
                 }}
@@ -326,10 +333,25 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
               </li>
             ))}
             {draft && (
-              <li className="flex-none">
+              // Also where a slide is dropped to put it last.
+              <li
+                className={cn('relative flex-none', over === shown.length && 'before:absolute before:inset-y-0 before:-left-1.5 before:w-0.5 before:rounded before:bg-primary')}
+                onDragOver={(e) => {
+                  if (!dragging) return;
+                  e.preventDefault();
+                  setOver(shown.length);
+                }}
+                onDragLeave={() => setOver((o) => (o === shown.length ? null : o))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragging) move(dragging, shown.length - 1);
+                  setDragging(null);
+                  setOver(null);
+                }}
+              >
                 <button
                   onClick={() => run('add', () => api.addSlide(c.slug, {}).then((r) => (setCur(r.id), r.carousel)))}
-                  disabled={!!busy}
+                  disabled={locked}
                   className="grid w-24 place-items-center rounded-md border-2 border-dashed text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
                   style={{aspectRatio: `${c.width} / ${c.height}`}}
                   aria-label="Añadir lámina al final"
@@ -501,13 +523,17 @@ function CarouselStyle({carousel: c, onChanged}: {carousel: CarouselDetail; onCh
   const styles = useStyles()?.filter((s) => s.carousel);
   const s = styles?.find((x) => x.id === c.style?.id);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   const change = async (id: string) => {
     if (id === c.style?.id) return;
     if (c.versionCount > 0 && !(await confirm({title: '¿Cambiar el estilo?', description: 'El carrusel ya tiene láminas hechas en el estilo actual. No se rehacen solas: el agente lo verá en tu próximo mensaje y te preguntará antes.', action: 'Cambiar estilo'}))) return;
     setBusy(true);
+    setErr('');
     try {
       await api.setStyle(c.slug, id);
       onChanged();
+    } catch (e) {
+      setErr((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -535,6 +561,7 @@ function CarouselStyle({carousel: c, onChanged}: {carousel: CarouselDetail; onCh
             </SelectContent>
           </Select>
         </div>
+        {err && <p role="alert" className="text-sm text-destructive">{err}</p>}
         <span className="font-medium">{s?.name ?? c.style?.name ?? 'Sin estilo'}</span>
         {s?.carousel?.look[0] && <p className="line-clamp-2 text-sm text-muted-foreground">{s.carousel.look[0]}</p>}
         {s && (
@@ -594,4 +621,17 @@ function CarouselTexts({carousel: c}: {carousel: CarouselDetail}) {
       </CardContent>
     </Card>
   );
+}
+
+// A file from the server, saved by the browser; its error (a version that's gone, an image of the wrong size) is
+// thrown to be shown instead of being saved as the file.
+async function download(url: string, name: string) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(((await r.json().catch(() => null)) as {error?: string} | null)?.error ?? `no se pudo exportar (${r.status})`);
+  const href = URL.createObjectURL(await r.blob());
+  const a = Object.assign(document.createElement('a'), {href, download: name});
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 10_000);
 }

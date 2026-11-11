@@ -204,8 +204,14 @@ export function detailParts(slug: string, vers: CarouselVersion[], slides: Carou
 
 /* ───── Changes from the editor ───── */
 
+// Not while the studio renders it: the version being made is the draft as it was when it started.
+function editable(slug: string) {
+  if (renders.has(slug)) throw httpError(409, 'espera a que termine el render para cambiar las láminas');
+}
+
 // A new order: the same ids, each once.
 export function reorder(slug: string, order: unknown) {
+  editable(slug);
   const {slides} = manifest(slug);
   if (!Array.isArray(order) || order.length !== slides.length || new Set(order).size !== order.length || !order.every((id) => slides.some((s) => s.id === id)))
     throw httpError(400, 'el orden tiene que nombrar cada lámina una vez');
@@ -239,6 +245,7 @@ export default function Slide({index, total, title}: SlideProps) {
 
 // A new slide after another (or at the end), with a placeholder picture the agent replaces; or a copy of one.
 export function addSlide(slug: string, body: {after?: unknown; duplicate?: unknown; title?: unknown}) {
+  editable(slug);
   const {slides} = manifest(slug);
   if (slides.length >= MAX_SLIDES) throw httpError(400, `un carrusel lleva ${MAX_SLIDES} láminas como mucho`);
   const of = typeof body.duplicate === 'string' ? slides.find((s) => s.id === body.duplicate) : undefined;
@@ -258,6 +265,7 @@ export function addSlide(slug: string, body: {after?: unknown; duplicate?: unkno
 
 // Out of the draft; its file stays in src/slides/ (and in every version that has it).
 export function removeSlide(slug: string, id: string) {
+  editable(slug);
   const {slides} = manifest(slug);
   if (!slides.some((s) => s.id === id)) throw httpError(404, 'esa lámina no está en el carrusel');
   saveManifest(slug, slides.filter((s) => s.id !== id));
@@ -372,7 +380,8 @@ export function exportVersion(slug: string, name: unknown) {
 // The carousel's text, one line per slide, for the audit (fact-audit.ts) and the agent: "Lámina 2 (id): text".
 // Slides without text are left out, keeping each one's real number.
 export function scriptOf(slides: CarouselSlideEntry[]) {
-  return slides.flatMap((s, i) => (s.text.trim() ? [`Lámina ${i + 1} (${s.id}${s.title ? `, «${s.title}»` : ''}): ${s.text.replace(/\s+/g, ' ').trim()}`] : [])).join('\n');
+  const line = (t: string) => t.replace(/\s+/g, ' ').trim();
+  return slides.flatMap((s, i) => (s.text.trim() ? [`Lámina ${i + 1} (${s.id}${line(s.title) ? `, «${line(s.title)}»` : ''}): ${line(s.text)}`] : [])).join('\n');
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9%$.,]+/g, ' ').trim();

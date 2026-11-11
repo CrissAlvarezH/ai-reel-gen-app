@@ -19,7 +19,7 @@ import * as voice from './voice.ts';
 import {create, createCarousel, installing} from './create.ts';
 import {AGENTS, agentUsage, currentAgent, setAgent} from './agent.ts';
 import * as beats from './beats.ts';
-import {listStyles, isStyleFile} from './styles.ts';
+import {carouselStyle, listStyles, isStyleFile} from './styles.ts';
 import {listFormats, isFormatFile} from './formats.ts';
 import * as footage from './footage.ts';
 import {loadShellPath, reveal} from './platform.ts';
@@ -239,6 +239,7 @@ app.put('/api/reels/:slug/file', reel, handle((req) => {
 // The video's visual style (style.txt). The agent sees it in the [UI: …] line of the next message; the
 // transcript gets a line so the change shows in the conversation.
 app.put('/api/reels/:slug/style', reel, handle((req) => {
+  if (carousel.isCarousel(req.params.slug) && !carouselStyle(String(req.body?.style ?? ''))) throw httpError(400, 'ese estilo no tiene versión para carruseles');
   const s = setStyle(req.params.slug, req.body?.style);
   chat.note(req.params.slug, `Estilo cambiado a «${s.name}».`);
   send({type: 'changed', slug: req.params.slug});

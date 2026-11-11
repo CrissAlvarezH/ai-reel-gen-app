@@ -283,12 +283,16 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
             <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
               Publicaciones <span className="tabular-nums">{rows.length}</span>
             </p>
-            {/* Faint until the header is hovered or the + focused; stays while its menu is open. */}
+            {/* Faint until the header is hovered or the + focused; stays while its menu is open, and always when the
+                list is empty (it's the way to start one from here). */}
             <NewPublicationMenu>
               <button
                 title="Nueva publicación"
                 aria-label="Nueva publicación"
-                className="-my-1.5 flex-none rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity group-hover/videos:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100 data-[state=open]:bg-muted data-[state=open]:text-foreground data-[state=open]:opacity-100"
+                className={cn(
+                  '-my-1.5 flex-none rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity group-hover/videos:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100 data-[state=open]:bg-muted data-[state=open]:text-foreground data-[state=open]:opacity-100',
+                  loaded && rows.length === 0 && 'opacity-100',
+                )}
               >
                 <Plus className="size-4" />
               </button>

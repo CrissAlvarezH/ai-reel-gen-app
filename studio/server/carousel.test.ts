@@ -230,3 +230,35 @@ test('each project keeps its own: a carousel of «uno» is not in «dos»', () =
   assert.equal(reels.summary(slug).slideCount, 3);
   assert.equal(fs.readFileSync(path.join(dir('dos', slug), 'style.txt'), 'utf8').trim(), 'cuaderno-apuntes');
 });
+
+test('version.mjs: a version from the snapshot render.sh took, in a path with spaces, and two at once never share a vN', async () => {
+  const {execFile} = await import('node:child_process');
+  const run = (cwd: string, ...args: string[]) =>
+    new Promise<string>((resolve, reject) => execFile(process.execPath, [path.join(cwd, 'version.mjs'), ...args], (e, out, err) => (e ? reject(new Error(err)) : resolve(out.trim()))));
+  const c = path.join(root, 'Reel Studio', 'mi carrusel');
+  fs.mkdirSync(c, {recursive: true});
+  fs.copyFileSync(path.join(repo, 'carousel-template/version.mjs'), path.join(c, 'version.mjs'));
+  // The draft has since changed (another order); the snapshot is what was rendered.
+  write(path.join(c, 'carousel.json'), JSON.stringify({slides: [{id: 'b', text: 'después'}, {id: 'a', text: 'antes'}]}));
+  const snap = path.join(root, 'snap with space');
+  write(path.join(snap, 'carousel.json'), JSON.stringify({width: 1080, height: 1350, slides: [{id: 'a', title: 'A', text: 'antes'}, {id: 'b', text: 'b'}]}));
+  write(path.join(snap, 'src/slides/a.tsx'), 'a');
+  write(path.join(snap, 'src/slides/b.tsx'), 'b');
+  const frames = path.join(root, 'frames x');
+  fs.mkdirSync(frames);
+  for (const n of ['element-0.png', 'element-1.png']) fs.writeFileSync(path.join(frames, n), png(4, 5));
+  const outs = await Promise.all([run(c, frames, snap, 'una'), run(c, frames, snap, 'otra')]);
+  assert.deepEqual(outs.sort(), ['out/v1', 'out/v2']);
+  const v = JSON.parse(fs.readFileSync(path.join(c, 'out/v1/version.json'), 'utf8'));
+  assert.deepEqual(v.slides.map((s: {id: string; file: string}) => [s.id, s.file]), [['a', '01.png'], ['b', '02.png']]);
+  assert.equal(v.slides[0].source, crypto.createHash('sha256').update('a').digest('hex').slice(0, 16));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(c, 'out/v1/source/carousel.json'), 'utf8')).slides[0].id, 'a');
+  // Frames that don't match the slides are not a version.
+  fs.rmSync(path.join(frames, 'element-1.png'));
+  await assert.rejects(run(c, frames, snap), /1 imágenes para 2 láminas/);
+});
+
+test('a title on several lines stays on its slide\'s line of the audit', () => {
+  const script = carousel.scriptOf([{id: 'a', title: 'Dos\nlíneas', text: 'uno\ndos'}]);
+  assert.equal(script, 'Lámina 1 (a, «Dos líneas»): uno dos');
+});

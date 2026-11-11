@@ -10,5 +10,7 @@ n=$(node -p "require('./carousel.json').slides.length")
 [ "$n" -gt 0 ] || { echo "carousel.json no tiene láminas todavía" >&2; exit 1; }
 npx tsc -p .
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+# What this version is made from, as it is now: version.mjs records it even if the draft changes during the render.
+mkdir "$tmp/snapshot"; cp carousel.json "$tmp/snapshot/"; cp -R src "$tmp/snapshot/src"
 npx remotion render src/index.ts Carousel "$tmp/frames" --sequence --image-format=png $gl --concurrency=${CONCURRENCY:-2} --log=${RENDER_LOG:-error}
-node version.mjs "$tmp/frames" "$*"
+node version.mjs "$tmp/frames" "$tmp/snapshot" "$*"

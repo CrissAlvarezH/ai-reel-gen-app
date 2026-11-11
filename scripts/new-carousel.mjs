@@ -52,7 +52,9 @@ export function scaffoldCarousel({root, project = projectDir(root), slug, style,
   if (fs.existsSync(dir)) throw new Error(`${path.relative(root, dir)} ya existe`);
   const tpl = templateDir(root);
   if (!tpl) throw new Error('no existe la plantilla carousel-template');
-  if (from && !(validSlug(from) && fs.existsSync(path.join(project, 'videos', from)))) throw new Error(`no existe el video ${from}`);
+  const fromDir = from && path.join(project, 'videos', from);
+  if (from && !(validSlug(from) && fs.existsSync(fromDir))) throw new Error(`no existe el video ${from}`);
+  if (from && fs.existsSync(path.join(fromDir, 'kind.txt')) && fs.readFileSync(path.join(fromDir, 'kind.txt'), 'utf8').trim() !== 'video') throw new Error(`${from} no es un video`);
   fs.cpSync(tpl, dir, {recursive: true, filter: (src) => !/(^|[\\/])(node_modules|out)([\\/]|$)/.test(path.relative(tpl, src))});
   const pkg = path.join(dir, 'package.json');
   if (fs.existsSync(pkg)) fs.writeFileSync(pkg, fs.readFileSync(pkg, 'utf8').replace('"name":"carousel"', `"name":${JSON.stringify(slug)}`));

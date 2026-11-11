@@ -49,6 +49,9 @@ function readScript(project: string, slug: string): string {
   if (!fs.existsSync(scriptFile(project, slug))) throw new Error('sin carousel.json');
   return scriptOf(manifestIn(pubDir(project, slug)).slides);
 }
+// What counts as a change: the words. A carousel's slide numbers, ids and titles are left out, so reordering or renaming
+// slides doesn't call for a new audit (a video's narration has no such prefix: its hash is as before).
+const textHash = (script: string) => hash(script.split('\n').map((l) => l.replace(/^L[áa]mina \d+ \([a-z0-9-]+(?:, «.*?»)?\): /, '')).join('\n'));
 // The slide a finding is on, from the report's own text (ids as they were when it ran: a later reorder doesn't move it).
 function slideOf(r: FactReport, claim: string) {
   const slides: {id: string; title: string; text: string}[] = [];
@@ -288,7 +291,7 @@ function enqueue(project: string, s: Store, slug: string, trigger: 'manual' | 'a
   }
   if (!script || withProject(project, () => isPlaceholder(slug, script))) return null;
   const id = newId();
-  s.seen[slug] = hash(script);
+  s.seen[slug] = textHash(script);
   s.reports.push({
     id,
     slug,
@@ -296,7 +299,7 @@ function enqueue(project: string, s: Store, slug: string, trigger: 'manual' | 'a
     title: withProject(project, () => title(slug)) ?? slug,
     trigger,
     script,
-    scriptHash: hash(script),
+    scriptHash: textHash(script),
     prompt: s.settings.prompt,
     created: Date.now(),
     finished: null,
@@ -328,7 +331,7 @@ export function view(): FactAuditView {
     .map((r) => {
       const cut = (r.status === 'running' || r.status === 'queued') && !busy(PROJECT, r.id);
       const script = scripts.get(r.slug);
-      return {...r, status: cut ? ('interrupted' as const) : r.status, stale: script !== undefined && !!script && hash(script) !== r.scriptHash};
+      return {...r, status: cut ? ('interrupted' as const) : r.status, stale: script !== undefined && !!script && textHash(script) !== r.scriptHash};
     })
     .reverse();
   const videos: FactAuditVideo[] = [...scripts].map(([slug, script]) => {
@@ -346,7 +349,7 @@ export function view(): FactAuditView {
       script: !!script && !isPlaceholder(slug, script),
       updated: Math.round(updated),
       lastAudit: last?.finished ?? null,
-      stale: !!last && hash(script) !== last.scriptHash,
+      stale: !!last && textHash(script) !== last.scriptHash,
       busy: reports.some((r) => r.slug === slug && (r.status === 'queued' || r.status === 'running')),
     };
   });
@@ -376,7 +379,7 @@ export function setSettings(input: unknown) {
       if (i.auto)
         for (const slug of listSlugs()) {
           const script = lastScript(slug);
-          if (script) s.seen[slug] = hash(script);
+          if (script) s.seen[slug] = textHash(script);
         }
     }
   });
@@ -465,7 +468,7 @@ function scan() {
       try {
         const st = fs.statSync(scriptFile(p.id, slug));
         const script = readScript(p.id, slug);
-        return !!script && s.seen[slug] !== hash(script) && Date.now() - st.mtimeMs >= STABLE && !s.reports.some((r) => r.slug === slug && busy(p.id, r.id));
+        return !!script && s.seen[slug] !== textHash(script) && Date.now() - st.mtimeMs >= STABLE && !s.reports.some((r) => r.slug === slug && busy(p.id, r.id));
       } catch {
         return false;
       }
@@ -476,7 +479,7 @@ function scan() {
         if (!enqueue(p.id, st, slug, 'auto')) {
           // A placeholder: seen, so it isn't looked at again until it changes.
           try {
-            st.seen[slug] = hash(readScript(p.id, slug));
+            st.seen[slug] = textHash(readScript(p.id, slug));
           } catch {
             /* gone */
           }
@@ -504,7 +507,7 @@ export function agentText(slug: string): string {
   const r = read(PROJECT).reports.filter((x) => x.slug === slug && x.status === 'done' && x.state === 'open').pop();
   if (!r) return '';
   const flagged = r.findings.filter((f) => f.verdict !== 'ok');
-  const changed = hash(lastScript(slug)) !== r.scriptHash;
+  const changed = textHash(lastScript(slug)) !== r.scriptHash;
   const slides = r.kind === 'carousel';
   return [
     `Auditoría de datos ${slides ? 'del texto de las láminas' : 'del guion'} (página Auditoría, ${new Date(r.finished ?? r.created).toLocaleString('es')}; tres revisores independientes con fuentes web)${changed ? `. Ojo: ${slides ? 'el texto de las láminas' : 'el guion'} cambió después de esta auditoría, compáralo con ${slides ? 'carousel.json' : 'audio/vo.txt'}` : ''}.`,
