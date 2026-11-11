@@ -88,7 +88,7 @@ export function Audit() {
           </Button>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Tres agentes revisan, cada uno por su lado y sin ver lo que dicen los otros, que los datos de un video sean correctos, con fuentes en la web. Luego se unen sus hallazgos en un reporte: errores, matices y datos correctos. Solo verifica datos: no juzga el estilo, el gancho ni los consejos.
+          Tres agentes revisan, cada uno por su lado y sin ver lo que dicen los otros, que los datos de una publicación (el guion de un video o el texto de las láminas de un carrusel) sean correctos, con fuentes en la web. Luego se unen sus hallazgos en un reporte: errores, matices y datos correctos. Solo verifica datos: no juzga el estilo, el gancho ni los consejos.
         </p>
       </div>
       {err && <p className="text-sm text-destructive">{err}</p>}
@@ -102,16 +102,16 @@ export function Audit() {
                 <Label htmlFor="audit-auto" className="font-medium">
                   Auditoría automática
                 </Label>
-                <p className="mt-1 text-sm text-muted-foreground">Audita cada video cuando se guarda su guion, y otra vez cuando cambie. Solo corre con Reel Studio abierto.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Audita cada publicación cuando se guarda su guion o el texto de sus láminas, y otra vez cuando cambie. Solo corre con Reel Studio abierto.</p>
               </div>
             </section>
             <section className="flex flex-col items-start gap-3 rounded-lg border bg-card p-4">
               <div>
                 <h2 className="font-medium">Empezar auditoría</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Elige los videos que quieres auditar, o audítalos todos.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Elige las publicaciones que quieres auditar, o audítalas todas.</p>
               </div>
               <Button size="sm" disabled={!auditable} onClick={() => setDialog('start')}>
-                <ShieldCheck /> Elegir videos
+                <ShieldCheck /> Elegir publicaciones
               </Button>
             </section>
           </div>
@@ -245,7 +245,7 @@ function StartDialog({onClose, view, act, thumbs}: {onClose: () => void; view: F
       <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Empezar auditoría</DialogTitle>
-          <DialogDescription>Elige los videos. Se auditan uno tras otro, cada uno con su guion de ahora.</DialogDescription>
+          <DialogDescription>Elige las publicaciones. Se auditan una tras otra, cada una con su texto de ahora.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => setPicked(ready.filter((v) => !v.lastAudit || v.stale).map((v) => v.slug))}>

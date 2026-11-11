@@ -45,6 +45,16 @@ the player hold the Instagram caption, ready to copy, and the fields for a comme
 
 ![Video player with its acts timeline next to the script](docs/screenshots/reel.webp)
 
+### Carousels
+
+Instagram carousels (still slides, 4:5, 1080×1350) live in the same library, under **Publicaciones**, next to the videos;
+an icon tells them apart and **Nuevo carrusel** starts one from an idea, a saved idea, the audience profile or a video's
+script. Its agent writes and draws each slide in Remotion in the carousel's style (`carousel-template/`, skill
+`carousel`). The editor shows the selected slide large with the others in order: drag to reorder, add, duplicate or
+remove, and press **Comentar aquí** on a slide; comments follow the slide by its id even after it moves. Every render is
+a fixed version (`out/vN/`) and **Exportar** downloads its numbered images with the caption and credits. Publishing
+carousels to Instagram is not in the app yet.
+
 ### Claude panel
 
 Ask for a video in plain language and follow each step the agent takes while it researches, writes and renders. Each
@@ -125,6 +135,7 @@ The app checks what this computer needs (Node, ffmpeg, Python and its packages, 
 styles/           visual styles: style.json, and for collage-semitono its SKILL.md and examples
 LESSONS.md        local lessons and preferences (gitignored; starter in studio/workspace/)
 template/         starting point for a new reel (Remotion + collage kit + paper-foley mix)
+carousel-template/ starting point for a new carousel (Remotion stills: render.sh → out/vN/, preview.sh)
 tools/            shared Python: cutout.py (photo → halftone cutout), image search (commons.py, openverse.py,
                   pexels.py, pixabay.py, unsplash.py), social.py (Instagram scraper, via the studio),
                   tts.py (ElevenLabs, voice from the project's config/voice.json),
@@ -136,7 +147,7 @@ projects/<id>/    one per channel (the studio's project selector): videos/<slug>
                   Customer data: ignored by Git, never shipped with the app.
 config/           local preferences for projects without their own images.json, social.json (gitignored)
 .reel-studio/     the studio's SQLite index of all of it, every project (index.sqlite; tools/studio_sql.py)
-scripts/          new-video.sh (into the open project, REEL_STUDIO_PROJECT)
+scripts/          new-video.sh (into the open project, REEL_STUDIO_PROJECT), new-carousel.mjs
 ```
 
 ## Setup

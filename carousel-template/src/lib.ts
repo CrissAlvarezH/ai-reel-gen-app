@@ -11,14 +11,19 @@ export const CAROUSEL = carousel as Carousel;
 export const W = CAROUSEL.width || 1080;
 export const H = CAROUSEL.height || 1350;
 export const SLIDES = CAROUSEL.slides;
+// Instagram crops a 4:5 post to a 3:4 tile in the profile grid and puts its own UI on the edges: keep text inside
+// the safe area (SAFE px from each side).
+export const SAFE = 72;
 
 // What every slide component gets: its id, where it is (0-based) and how many there are, and its entry's title and text.
 export type SlideProps = {id: string; index: number; total: number; title: string; text: string};
 
 // Every src/slides/<id>.tsx, found by the bundler: a new or duplicated slide needs no list to keep in sync.
 declare const require: {context(dir: string, deep: boolean, re: RegExp): {keys(): string[]; (k: string): {default?: React.FC<SlideProps>}}};
+// Each one is loaded when it's first drawn, not here: slides (and a src/kit.tsx they share) import this file, so
+// loading them while it loads would find W, H or SAFE not set yet.
 const files = require.context('./slides', false, /\.tsx$/);
-const byId = new Map(files.keys().map((k) => [k.replace(/^\.\//, '').replace(/\.tsx$/, ''), files(k).default]));
+const keyOf = new Map(files.keys().map((k) => [k.replace(/^\.\//, '').replace(/\.tsx$/, ''), k]));
 
 const Missing: React.FC<SlideProps> = ({id, index, total}) =>
   React.createElement(
@@ -26,8 +31,7 @@ const Missing: React.FC<SlideProps> = ({id, index, total}) =>
     {style: {width: W, height: H, background: '#1C1C1E', color: '#F5F5F5', display: 'grid', placeItems: 'center', fontFamily: 'Inter, sans-serif', fontSize: 48, textAlign: 'center', padding: 80}},
     `Lámina ${index + 1}/${total}: falta src/slides/${id}.tsx`,
   );
-export const slideComponent = (id: string): React.FC<SlideProps> => byId.get(id) ?? Missing;
-
-// Instagram crops a 4:5 post to a 3:4 tile in the profile grid and puts its own UI on the edges: keep text inside
-// the safe area (SAFE px from each side).
-export const SAFE = 72;
+export const slideComponent = (id: string): React.FC<SlideProps> => {
+  const k = keyOf.get(id);
+  return (k && files(k).default) || Missing;
+};
