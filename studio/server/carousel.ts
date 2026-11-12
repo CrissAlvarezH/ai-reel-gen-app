@@ -24,7 +24,7 @@ export const MANIFEST = 'carousel.json';
 export const WIDTH = 1080;
 export const HEIGHT = 1350;
 export const SLIDE_ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
-export const MAX_SLIDES = 20; // Instagram takes up to 20 images in a carousel
+export const MAX_SLIDES = 10; // the most Instagram's API publishes in a carousel (its app takes 20)
 
 const httpError = (status: number, message: string) => Object.assign(new Error(message), {status});
 const dirOf = (slug: string) => path.join(VIDEOS, slug);

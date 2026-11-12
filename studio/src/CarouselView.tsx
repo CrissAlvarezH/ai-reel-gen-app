@@ -1,7 +1,7 @@
 // A carousel's page: the selected slide big, the slides in order as thumbnails with their number, a counter and the
 // arrows (← →) to go through them, in place of a video's player and timeline. The draft (carousel.json) can be
 // reordered (drag a thumbnail, or move the selected one), added to or duplicated; a version (out/vN/) is fixed and is
-// what gets exported. «Comentar aquí» notes the slide shown (its stable id, its number and the version) for the next
+// what gets exported and published. «Comentar aquí» notes the slide shown (its stable id, its number and the version) for the next
 // message, like a video's frame comments. Below: progress, the fact audit by slide, the style, and the caption, credits
 // and comment automation.
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
@@ -23,6 +23,7 @@ import {useStyles} from './StylePicker';
 import {Poster} from './Styles';
 import {projectKey, useStudio} from './studio';
 import {useConfirm} from './confirm';
+import {PublicationList, PublishButton, usePublications} from './Publish';
 
 const DRAFT = 'draft';
 
@@ -86,6 +87,7 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
   const go = (n: number) => shown.length && setCur(shown[(n + shown.length) % shown.length].id);
   const [busy, setBusy] = useState('');
   const [actionErr, setActionErr] = useState('');
+  const pubs = usePublications(c.slug);
   const run = async (what: string, fn: () => Promise<CarouselDetail | void>) => {
     setBusy(what);
     setActionErr('');
@@ -183,6 +185,7 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
                 </Button>
               </>
             )}
+            <PublishButton slug={c.slug} kind="carousel" version={exportName ?? null} slides={c.versions.find((v) => v.name === exportName)?.slides.length} data={pubs.data} posted={null} onDone={pubs.load} />
           </div>
         </div>
         {c.from && (
@@ -361,6 +364,7 @@ function Slides({carousel: c, comments, onComment, onChanged}: {carousel: Carous
           </ol>
         )}
         {draft && shown.length > 1 && <p className="-mt-1 text-xs text-muted-foreground">Arrastra las miniaturas para cambiar el orden del borrador; el agente lo verá en tu próximo mensaje. Una versión nueva lo recoge al renderizar.</p>}
+        <PublicationList slug={c.slug} data={pubs.data} onChange={pubs.load} />
       </CardContent>
     </Card>
   );

@@ -1,7 +1,8 @@
-// Publicar: a finished version of a video (out/<name>.mp4) to the project's Instagram account, now or at a time,
-// through his Reel Studio account (cloud.ts). Here only the upload and the record of what was sent,
-// videos/<slug>/publicaciones.json (it travels with the video's sync); the account has the truth and does the rest,
-// a scheduled one at its time with this app closed. The cover is out/miniatura.*, as a JPEG (Instagram's only kind).
+// Publicar: a finished version of a video (out/<name>.mp4) or of a carousel (out/<name>/NN.png) to the project's
+// Instagram account, now or at a time, through his Reel Studio account (cloud.ts). Here only the upload and the record
+// of what was sent, videos/<slug>/publicaciones.json (it travels with the video's sync); the account has the truth and
+// does the rest, a scheduled one at its time with this app closed. A video's cover is out/miniatura.*, and a carousel's
+// slides go, all as JPEGs (Instagram's only kind of image).
 import {execFile} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import fs from 'node:fs';
@@ -10,6 +11,7 @@ import path from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {promisify} from 'node:util';
 import * as account from './account.ts';
+import {MAX_SLIDES, kindIn, versionsIn} from './carousel.ts';
 import * as cloud from './cloud.ts';
 import type {CloudPublication, PresignedPut} from './cloud.ts';
 import {writeJson} from './platform.ts';
@@ -23,6 +25,7 @@ const FINAL: ReadonlySet<PublicationStatus> = new Set(['published', 'error', 'ca
 const MAX_VIDEO = 300 * 1024 * 1024; // Instagram's limits
 const MAX_COVER = 8 * 1024 * 1024;
 const MAX_CAPTION = 2200;
+const MIN_SLIDES = 2;
 const THUMB = /^miniatura\.(png|jpe?g|webp)$/i;
 // How a publication for now is followed until it's out; tests shorten them.
 export const timing = {follow: 5000, followFor: 20 * 60_000, retry: 2000};
@@ -49,7 +52,8 @@ function update(dir: string, id: string, set: Partial<VideoPublication>) {
 const noting = new Set<string>();
 async function noteOut(dir: string, r: VideoPublication) {
   const project = path.basename(path.dirname(path.dirname(dir))); // projects/<id>/videos/<slug>
-  if (!r.permalink || noting.has(r.id)) return;
+  // Mi cuenta keeps the account's reels: a carousel isn't one.
+  if (!r.permalink || noting.has(r.id) || kindIn(dir) === 'carousel') return;
   noting.add(r.id);
   let cover: Awaited<ReturnType<typeof coverJpeg>> = null;
   try {
@@ -125,7 +129,7 @@ export function refreshDue(now = Date.now()) {
   for (const slug of slugs) if (recordsOf(path.join(VIDEOS, slug)).some(due)) list(slug).catch(() => {});
 }
 
-// Videos programados: what every video of the project sent, as its publicaciones.json has it, at once. Each video is
+// Publicaciones programadas: what every video and carousel of the project sent, as its publicaciones.json has it, at once. Each video is
 // then refreshed like its page does, in the background (the account takes seconds to answer): a change rewrites the
 // file and the page, told by the watcher, reads it again. Asked about once every ASK_EVERY at most, so those reads
 // don't ask again. Canceled ones stay out.
@@ -146,7 +150,7 @@ export async function calendar(now = Date.now()): Promise<CalendarPublication[]>
     }
     const shown = recordsOf(dir).filter((p) => p.status !== 'canceled');
     if (!shown.length) return [];
-    const head = {slug, title: titleOf(slug) ?? slug, cover: coverUrl(slug), caption: captionOf(dir)};
+    const head = {slug, kind: kindIn(dir), title: titleOf(slug) ?? slug, cover: coverUrl(slug), caption: captionOf(dir)};
     return shown.map((p) => ({...p, ...head, at: p.scheduledAt ?? p.createdAt}));
   });
   return all.flat().sort((a, b) => a.at.localeCompare(b.at));
@@ -157,7 +161,7 @@ export async function calendar(now = Date.now()): Promise<CalendarPublication[]>
 function parse(input: unknown): PublishInput {
   const b = (input ?? {}) as Record<string, unknown>;
   const version = typeof b.version === 'string' ? b.version : '';
-  if (!version || /[/\\]/.test(version) || /\.raw$/i.test(version)) throw httpError(400, 'elige una versión del video');
+  if (!version || /[/\\]/.test(version) || /\.raw$/i.test(version) || version.startsWith('.')) throw httpError(400, 'elige una versión');
   const scheduledAt = b.scheduledAt == null || b.scheduledAt === '' ? null : String(b.scheduledAt);
   if (scheduledAt && Number.isNaN(Date.parse(scheduledAt))) throw httpError(400, 'la fecha de publicación no es válida');
   return {version, scheduledAt, shareToFeed: b.shareToFeed !== false};
@@ -187,39 +191,95 @@ async function coverJpeg(dir: string): Promise<{file: string; size: number; temp
   return {file, size, temp};
 }
 
+// A carousel's version as JPEGs in a temp folder, in its order, made by ffmpeg from its PNGs. 2 to MAX_SLIDES of them.
+async function slidesJpeg(dir: string, slug: string, version: string): Promise<{files: string[]; sizes: number[]; tmp: string}> {
+  const v = versionsIn(dir, slug).find((x) => x.name === version);
+  if (!v) throw httpError(404, 'esa versión ya no está: renderiza el carrusel de nuevo');
+  if (v.slides.length < MIN_SLIDES) throw httpError(400, `un carrusel lleva al menos ${MIN_SLIDES} láminas`);
+  if (v.slides.length > MAX_SLIDES) throw httpError(400, `Instagram publica como mucho ${MAX_SLIDES} láminas por carrusel, y ${version} tiene ${v.slides.length}`);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-studio-carrusel-'));
+  try {
+    const files: string[] = [];
+    const sizes: number[] = [];
+    for (const [i, s] of v.slides.entries()) {
+      const file = path.join(tmp, `${String(i + 1).padStart(2, '0')}.jpg`);
+      try {
+        await run('ffmpeg', ['-v', 'error', '-y', '-i', path.join(dir, 'out', version, s.file), '-q:v', '2', file], {timeout: 60_000});
+      } catch {
+        throw httpError(500, `no se pudo preparar la lámina ${i + 1} como JPEG (¿está instalado ffmpeg?)`);
+      }
+      const size = fs.statSync(file).size;
+      if (size > MAX_COVER) throw httpError(413, `la lámina ${i + 1} pesa más de 8 MB, el máximo de Instagram`);
+      files.push(file);
+      sizes.push(size);
+    }
+    return {files, sizes, tmp};
+  } catch (e) {
+    fs.rmSync(tmp, {recursive: true, force: true});
+    throw e;
+  }
+}
+
+// What one publication uploads: the files, and what the account is told about them.
+type Prepared = {kind: 'video' | 'carousel'; size: number; slides?: number[]; coverSize: number | null; files: string[]; done: () => void};
+
+async function prepare(dir: string, slug: string, version: string): Promise<Prepared> {
+  if (kindIn(dir) === 'carousel') {
+    const j = await slidesJpeg(dir, slug, version);
+    return {kind: 'carousel', size: j.sizes.reduce((a, b) => a + b, 0), slides: j.sizes, coverSize: null, files: j.files, done: () => fs.rmSync(j.tmp, {recursive: true, force: true})};
+  }
+  const file = path.join(dir, 'out', `${version}.mp4`);
+  const size = fs.statSync(file, {throwIfNoEntry: false})?.size;
+  if (!size) throw httpError(404, 'esa versión ya no está: renderiza el video de nuevo');
+  if (size > MAX_VIDEO) throw httpError(413, 'el video pesa más de 300 MB, el máximo de Instagram');
+  const cover = await coverJpeg(dir);
+  return {kind: 'video', size, coverSize: cover?.size ?? null, files: cover ? [file, cover.file] : [file], done: () => void (cover?.temp && fs.rmSync(cover.file, {force: true}))};
+}
+
 export async function publish(slug: string, input: unknown): Promise<VideoPublication> {
   const dir = path.join(VIDEOS, slug); // pinned: the project may change before the upload ends
   const v = parse(input);
   if (!cloud.signedIn()) throw httpError(401, 'inicia sesión con tu cuenta de Reel Studio en Ajustes → Cuenta para publicar');
   const link = cloud.linkedAccount();
   if (!link) throw httpError(409, 'elige la cuenta de Instagram de este proyecto en Ajustes → Cuenta');
-  const file = path.join(dir, 'out', `${v.version}.mp4`);
-  const size = fs.statSync(file, {throwIfNoEntry: false})?.size;
-  if (!size) throw httpError(404, 'esa versión ya no está: renderiza el video de nuevo');
-  if (size > MAX_VIDEO) throw httpError(413, 'el video pesa más de 300 MB, el máximo de Instagram');
   const caption = captionOf(dir);
   if (caption.length > MAX_CAPTION) throw httpError(400, `el caption pasa de ${MAX_CAPTION} caracteres`);
 
-  const cover = await coverJpeg(dir);
-  const done = () => cover?.temp && fs.rmSync(cover.file, {force: true});
+  const p = await prepare(dir, slug, v.version);
+  const carousel = p.kind === 'carousel';
   let r: Awaited<ReturnType<typeof cloud.publicationsApi.create>>;
   try {
     const title = fs.existsSync(path.join(dir, 'title.txt')) ? fs.readFileSync(path.join(dir, 'title.txt'), 'utf8').trim().slice(0, 200) : '';
-    r = await cloud.publicationsApi.create({accountId: link.accountId, size, caption, title: title || slug, coverSize: cover?.size ?? null, shareToFeed: v.shareToFeed, scheduledAt: v.scheduledAt});
+    r = await cloud.publicationsApi.create({
+      accountId: link.accountId,
+      ...(carousel ? {kind: 'carousel' as const, slides: p.slides} : {}),
+      size: p.size,
+      caption,
+      title: title || slug,
+      coverSize: p.coverSize,
+      shareToFeed: carousel || v.shareToFeed,
+      scheduledAt: v.scheduledAt,
+    });
   } catch (e) {
-    done();
+    p.done();
     throw e;
   }
-  // A server from before scheduling ignores the time and would publish as soon as it's uploaded: upload nothing.
-  // Its row stays "uploading" and the account's cleanup gives it up.
+  // A server from before scheduling ignores the time and would publish as soon as it's uploaded, and one from before
+  // carousels would take its images for a video: upload nothing. Its row stays "uploading" and the account's cleanup
+  // gives it up.
   if (v.scheduledAt && !r.scheduledAt) {
-    done();
+    p.done();
     throw httpError(409, 'tu cuenta de Reel Studio aún no permite programar: publícalo ahora o inténtalo más tarde');
+  }
+  const puts = carousel ? (r.slides ?? []) : [r.upload, ...(r.cover ? [r.cover] : [])];
+  if ((carousel && !Array.isArray(r.slides)) || puts.length !== p.files.length || puts.some((x) => !x)) {
+    p.done();
+    throw httpError(409, carousel ? 'tu cuenta de Reel Studio aún no publica carruseles: inténtalo más tarde' : 'tu cuenta de Reel Studio no dio dónde subir el video: inténtalo otra vez');
   }
   const rec: VideoPublication = {id: r.id, version: v.version, account: link.username, scheduledAt: r.scheduledAt ?? null, createdAt: new Date().toISOString(), status: 'uploading', error: null, permalink: null};
   writeJson(path.join(dir, FILE), [rec, ...rawOf(dir)].slice(0, KEEP));
   sending.add(r.id);
-  void send(dir, r.id, r.upload, file, r.cover, cover?.file ?? null)
+  void send(dir, r.id, puts.map((u, i) => [u!, p.files[i]] as const))
     .catch((e) => {
       update(dir, r.id, {status: 'error', error: `No se pudo subir: ${(e as Error).message}`});
       // A scheduled one can be called off, so its copy doesn't wait in the account; one for now just stays behind.
@@ -227,14 +287,14 @@ export async function publish(slug: string, input: unknown): Promise<VideoPublic
     })
     .finally(() => {
       sending.delete(r.id);
-      done();
+      p.done();
     });
   return rec;
 }
 
-async function send(dir: string, id: string, upload: PresignedPut, file: string, coverPut: PresignedPut | null, coverFile: string | null) {
-  await put(upload, file);
-  if (coverPut && coverFile) await put(coverPut, coverFile);
+// files: each upload with its file (a video and its cover, or a carousel's images in order).
+async function send(dir: string, id: string, files: (readonly [PresignedPut, string])[]) {
+  for (const [u, file] of files) await put(u, file);
   let p = await cloud.publicationsApi.uploaded(id);
   update(dir, id, fromCloud(p));
   // One for now: followed until it's out, so it's published even if nobody looks at the page.

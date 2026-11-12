@@ -55,7 +55,7 @@ function useRoute() {
   return {page: page as 'account' | 'library' | 'scheduled' | 'ideas' | 'audience' | 'automations' | 'audit' | 'sources' | 'inspiration' | 'research' | 'styles' | 'formats' | 'settings' | 'new' | 'newCarousel', slug: null};
 }
 
-const PAGE_TITLES: Record<string, string> = {scheduled: 'Videos programados', account: 'Mi cuenta', ideas: 'Ideas de contenido', audience: 'Perfil de audiencia', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', research: 'Investigación', styles: 'Estilos y formatos', formats: 'Estilos y formatos', settings: 'Ajustes', new: 'Nuevo reel', newCarousel: 'Nuevo carrusel'};
+const PAGE_TITLES: Record<string, string> = {scheduled: 'Publicaciones programadas', account: 'Mi cuenta', ideas: 'Ideas de contenido', audience: 'Perfil de audiencia', automations: 'Automatizaciones', audit: 'Auditoría', sources: 'Fuentes de información', inspiration: 'Inspiración', research: 'Investigación', styles: 'Estilos y formatos', formats: 'Estilos y formatos', settings: 'Ajustes', new: 'Nuevo reel', newCarousel: 'Nuevo carrusel'};
 
 function App() {
   const {page, slug} = useRoute();

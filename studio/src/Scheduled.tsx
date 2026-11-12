@@ -1,9 +1,9 @@
-// Videos programados: a month calendar of what the project's videos were sent to Instagram from here (Publicar),
-// each on the day and hour it goes out (or went out), with its title and whether it's out yet. A video opens its
-// details (cover, caption, state…) with a link to its page, where it can be moved or canceled; a day's number opens
-// that day's list. The scheduled ones go out from the account, with this app closed.
+// Publicaciones programadas: a month calendar of what the project's videos and carousels were sent to Instagram from
+// here (Publicar), each on the day and hour it goes out (or went out), with its kind's icon, its title and whether it's
+// out yet. One opens its details (cover, caption, state…) with a link to its page, where it can be moved or canceled;
+// a day's number opens that day's list. The scheduled ones go out from the account, with this app closed.
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clapperboard, ExternalLink, Loader2, TriangleAlert} from 'lucide-react';
+import {ArrowRight, CalendarDays, ChevronLeft, ChevronRight, ExternalLink, Loader2, TriangleAlert} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from '@/components/ui/dialog';
@@ -11,6 +11,7 @@ import {cn} from '@/lib/utils';
 import EmptyState from '@/components/common/EmptyState';
 import {api, useLive, type CalendarPublication} from './api';
 import {MOVING, STATUS} from './Publish';
+import {KIND, KindIcon, publicationHref} from './PublicationKind';
 import {InstagramGlyph} from './Sidebar';
 import {useStudio} from './studio';
 
@@ -20,7 +21,7 @@ const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 const hourOf = (iso: string) => new Date(iso).toLocaleTimeString('es', {hour: '2-digit', minute: '2-digit'});
 const longDay = (d: Date) => d.toLocaleDateString('es', {weekday: 'long', day: 'numeric', month: 'long'});
-const reelHref = (slug: string) => `#/reel/${encodeURIComponent(slug)}`;
+const count = (n: number) => `${n} ${n === 1 ? 'publicación' : 'publicaciones'}`;
 
 // The weeks shown for a month: from the Monday on or before the 1st to the Sunday on or after its last day.
 function weeksOf(year: number, month: number) {
@@ -131,13 +132,13 @@ export function Scheduled() {
                 <button
                   type="button"
                   onClick={() => setDay(d)}
-                  title={list.length ? `Ver los ${list.length === 1 ? 'videos' : `${list.length} videos`} del ${longDay(d)}` : longDay(d)}
-                  aria-label={`${longDay(d)}: ${list.length ? `${list.length} video${list.length > 1 ? 's' : ''}` : 'sin videos'}`}
+                  title={list.length ? `Ver ${list.length === 1 ? 'la publicación' : `las ${count(list.length)}`} del ${longDay(d)}` : longDay(d)}
+                  aria-label={`${longDay(d)}: ${list.length ? count(list.length) : 'sin publicaciones'}`}
                   className={cn('grid size-6 shrink-0 place-items-center rounded-full text-xs transition-colors', k === today ? 'bg-primary font-semibold text-primary-foreground' : cn('hover:bg-muted hover:text-foreground', out ? 'text-muted-foreground/60' : 'text-muted-foreground'))}
                 >
                   {d.getDate()}
                 </button>
-                {/* Only the videos scroll when they don't fit; the day's number stays. */}
+                {/* Only the publications scroll when they don't fit; the day's number stays. */}
                 {!!list.length && (
                   <div className="-mx-1.5 -mb-1.5 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1.5 pb-1.5">
                     {list.map((p) => (
@@ -155,7 +156,7 @@ export function Scheduled() {
       <DetailDialog p={shown} onClose={() => setShown(null)} />
 
       {items && !items.length && (
-        <EmptyState icon={CalendarDays} className="rounded-lg py-8" title="Todavía no has programado ningún video." description="Abre un video renderizado y pulsa Publicar → Programar: aparecerá aquí en su día." />
+        <EmptyState icon={CalendarDays} className="rounded-lg py-8" title="Todavía no has programado ninguna publicación." description="Abre un video o un carrusel renderizado y pulsa Publicar → Programar: aparecerá aquí en su día." />
       )}
     </main>
   );
@@ -173,13 +174,25 @@ function State({p, className}: {p: CalendarPublication; className?: string}) {
   );
 }
 
-const Cover = ({p, className}: {p: CalendarPublication; className?: string}) => (
-  <div className={cn('grid aspect-[9/16] shrink-0 place-items-center overflow-hidden rounded-md bg-muted', className)}>
-    {p.cover ? <img src={p.cover} alt="" loading="lazy" className="size-full object-cover" /> : <Clapperboard className="size-5 text-muted-foreground" />}
-  </div>
+// A video's still is 9:16; a carousel's first slide, 4:5.
+const Cover = ({p, className}: {p: CalendarPublication; className?: string}) => {
+  const Icon = (KIND[p.kind] ?? KIND.video).icon;
+  return (
+    <div className={cn('grid shrink-0 place-items-center overflow-hidden rounded-md bg-muted', p.kind === 'carousel' ? 'aspect-[4/5]' : 'aspect-[9/16]', className)}>
+      {p.cover ? <img src={p.cover} alt="" loading="lazy" className="size-full object-cover" /> : <Icon className="size-5 text-muted-foreground" />}
+    </div>
+  );
+};
+
+// A title led by its kind's icon, in the text's flow: a long title wraps under it.
+const Title = ({p, className}: {p: CalendarPublication; className?: string}) => (
+  <span className={className}>
+    <KindIcon kind={p.kind} className="mr-1 size-[1.05em] align-[-0.2em] text-muted-foreground" />
+    {p.title}
+  </span>
 );
 
-// One publication in its day: its title, and under it how it's going and its hour. Opens its details.
+// One publication in its day: its kind and title, and under it how it's going and its hour. Opens its details.
 function Item({p, onOpen}: {p: CalendarPublication; onOpen: () => void}) {
   return (
     <button
@@ -188,7 +201,7 @@ function Item({p, onOpen}: {p: CalendarPublication; onOpen: () => void}) {
       title={p.title}
       className={cn('flex min-w-0 shrink-0 flex-col gap-1 rounded-md border bg-card px-2 py-1.5 text-left transition-colors hover:bg-muted/60', p.status === 'error' && 'border-destructive/60')}
     >
-      <span className="line-clamp-2 text-xs leading-snug font-medium">{p.title}</span>
+      <Title p={p} className="line-clamp-2 text-xs leading-snug font-medium" />
       <span className="flex min-w-0 items-center gap-1 text-[11px]">
         <State p={p} className="min-w-0" />
         <span className="ml-auto shrink-0 text-muted-foreground">{hourOf(p.at)}</span>
@@ -197,14 +210,14 @@ function Item({p, onOpen}: {p: CalendarPublication; onOpen: () => void}) {
   );
 }
 
-// A day's videos, each with its cover, state, hour and the start of its caption; one opens its details.
+// A day's publications, each with its cover, kind, state, hour and the start of its caption; one opens its details.
 function DayDialog({day, items, onClose, onOpen}: {day: Date | null; items: CalendarPublication[]; onClose: () => void; onOpen: (p: CalendarPublication) => void}) {
   return (
     <Dialog open={!!day} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="first-letter:uppercase">{day ? longDay(day) : ''}</DialogTitle>
-          <DialogDescription>{items.length ? `${items.length} video${items.length > 1 ? 's' : ''} este día.` : 'No hay videos este día. Prográmalos desde la página de cada video con Publicar.'}</DialogDescription>
+          <DialogDescription>{items.length ? `${count(items.length)} este día.` : 'No hay publicaciones este día. Prográmalas desde la página de cada video o carrusel con Publicar.'}</DialogDescription>
         </DialogHeader>
         {!!items.length && (
           <ul className="-mx-2 flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
@@ -213,7 +226,7 @@ function DayDialog({day, items, onClose, onOpen}: {day: Date | null; items: Cale
                 <button type="button" onClick={() => onOpen(p)} className="flex w-full gap-3 rounded-lg p-2 text-left transition-colors hover:bg-muted/60">
                   <Cover p={p} className="w-14" />
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="line-clamp-2 text-sm font-medium">{p.title}</span>
+                    <Title p={p} className="line-clamp-2 text-sm font-medium" />
                     <span className="flex items-center gap-2 text-xs">
                       <span className="font-medium">{hourOf(p.at)}</span>
                       <State p={p} />
@@ -239,7 +252,9 @@ function DetailDialog({p, onClose}: {p: CalendarPublication | null; onClose: () 
         {p && s && (
           <>
             <DialogHeader>
-              <DialogTitle className="pr-6">{p.title}</DialogTitle>
+              <DialogTitle className="pr-6">
+                <Title p={p} />
+              </DialogTitle>
               <DialogDescription className="sr-only">Detalles de la publicación</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-4 sm:flex-row">
@@ -273,8 +288,8 @@ function DetailDialog({p, onClose}: {p: CalendarPublication | null; onClose: () 
                 </Button>
               )}
               <Button asChild>
-                <a href={reelHref(p.slug)} onClick={onClose}>
-                  Ir al video <ArrowRight />
+                <a href={publicationHref(p.kind, p.slug)} onClick={onClose}>
+                  {p.kind === 'carousel' ? 'Ir al carrusel' : 'Ir al video'} <ArrowRight />
                 </a>
               </Button>
             </DialogFooter>

@@ -90,7 +90,7 @@ function Posted({p}: {p: NonNullable<ReelSummary['instagram']>}) {
   );
 }
 
-// Scheduled on Instagram (publicaciones.json): opens Videos programados. Its time in a tooltip that waits a moment
+// Scheduled on Instagram (publicaciones.json): opens Publicaciones programadas. Its time in a tooltip that waits a moment
 // (a quick one gets in the way while moving over the list).
 function Scheduled({at}: {at: string}) {
   const when = new Date(at).toLocaleString('es', {weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit'});
@@ -123,7 +123,7 @@ const GROUPS: {label: string; pages: {href: string; icon: typeof UserRound; labe
     label: 'Crear',
     pages: [
       {href: '#/', icon: LayoutGrid, label: 'Biblioteca', is: ['library']},
-      {href: '#/programados', icon: CalendarDays, label: 'Videos programados', is: ['scheduled']},
+      {href: '#/programados', icon: CalendarDays, label: 'Publicaciones programadas', is: ['scheduled']},
       {href: '#/ideas', icon: Lightbulb, label: 'Ideas de contenido', is: ['ideas']},
       {href: '#/estilos', icon: Palette, label: 'Estilos y formatos', is: ['styles', 'formats']},
     ],

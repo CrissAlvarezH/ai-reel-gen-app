@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {ArrowLeft, Bookmark, Check, ChevronLeft, ChevronRight, Clock, Copy, Download, Settings2, ExternalLink, Eye, FileText, Heart, Lightbulb, Loader2, MessageCircle, Plus, RefreshCw, Search, Share2, Sparkles, Square, Telescope, ThumbsDown, ThumbsUp, Trash2, Users, X} from 'lucide-react';
+import {ArrowLeft, Bookmark, Check, ChevronLeft, ChevronRight, Clock, Copy, Download, ExternalLink, Eye, FileText, Heart, Lightbulb, Loader2, MessageCircle, Plus, RefreshCw, Search, Settings, Share2, Sparkles, Square, Telescope, ThumbsDown, ThumbsUp, Trash2, Users, X} from 'lucide-react';
 import {Alert, AlertDescription} from '@/components/ui/alert';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -144,7 +144,7 @@ function ResearchList() {
             </Button>
           )}
           <Button variant="outline" size="icon" onClick={() => setConfiguring(true)} aria-label="Configuración" title="Configuración: los modelos del agente para cada tarea">
-            <Settings2 />
+            <Settings />
           </Button>
         </div>
       </div>

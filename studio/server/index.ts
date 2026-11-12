@@ -283,8 +283,6 @@ app.post('/api/reels/:slug/reveal-version', reel, handle((req) => {
 app.get('/api/publications', handle(() => publish.calendar()));
 app.get('/api/reels/:slug/publications', reel, handle((req) => publish.list(req.params.slug)));
 app.post('/api/reels/:slug/publications', reel, handle((req) => {
-  // Publishing carousels comes later: the cloud's publishing takes one video file.
-  if (carousel.isCarousel(req.params.slug)) throw httpError(400, 'publicar carruseles todavía no está disponible: exporta sus imágenes desde el carrusel');
   return publish.publish(req.params.slug, req.body);
 }));
 app.patch('/api/reels/:slug/publications/:id', reel, handle((req) => publish.reschedule(req.params.slug, req.params.id, req.body?.scheduledAt)));
