@@ -20,14 +20,14 @@ import {KIND, KindIcon, publicationHref} from './PublicationKind';
 // "1 video", "2 carruseles": a count with its noun.
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-// Both doors, side by side: a video (the usual one, primary) and a carousel.
+// Both doors, side by side and with the same weight: a video and a carousel.
 function NewButtons({first}: {first?: boolean}) {
   return (
     <div className="flex flex-none flex-wrap justify-center gap-2">
       {(['video', 'carousel'] as const).map((k) => {
         const I = KIND[k].icon;
         return (
-          <Button key={k} asChild variant={k === 'video' ? 'default' : 'outline'}>
+          <Button key={k} asChild variant="outline">
             <a href={KIND[k].href}>
               <I /> {first ? (k === 'video' ? 'Crear un video' : 'Crear un carrusel') : KIND[k].new}
             </a>
