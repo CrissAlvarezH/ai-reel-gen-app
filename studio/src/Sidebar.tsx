@@ -320,14 +320,15 @@ export function Sidebar({slug, page}: {slug: string | null; page: Page}) {
                     )}
                   </span>
                 </button>
-                <div className="mr-1 flex flex-none flex-col items-center self-start pt-0.5">
+                {/* As tall as the title's line and as far from the top (the row's py-2), so the mark sits centered on it. */}
+                <div className="mt-2 mr-1 flex h-5 flex-none items-center self-start">
                   {/* One mark: published, else scheduled, else the progress ring (once it's out, the steps no longer matter). */}
                   {reels[a.slug!]?.instagram ? (
                     <Posted p={reels[a.slug!].instagram!} />
                   ) : reels[a.slug!]?.release?.state === 'scheduled' && reels[a.slug!].release!.at ? (
                     <Scheduled at={reels[a.slug!].release!.at!} />
                   ) : reels[a.slug!]?.progress.length ? (
-                    <ReelProgressRing steps={reels[a.slug!].progress} className="m-1.5 mb-1" />
+                    <ReelProgressRing steps={reels[a.slug!].progress} className="mx-1" />
                   ) : null}
                 </div>
               </div>
