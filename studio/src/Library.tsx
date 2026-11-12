@@ -114,8 +114,8 @@ function DeleteReel({reel: r, onClose, onDeleted}: {reel: ReelSummary; onClose: 
 }
 
 type View = 'grid' | 'table';
-// Cards a page in Cuadrícula (the table pages its own, also 15).
-const GRID_PAGE = 15;
+// Cards a page in Cuadrícula (the table pages its own, 15).
+const GRID_PAGE = 16;
 const VIEW_KEY = 'studio.library.view';
 
 export function Library() {

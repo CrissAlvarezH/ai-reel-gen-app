@@ -129,14 +129,16 @@ export function Scheduled() {
             const list = byDay.get(k) ?? [];
             return (
               <div key={k} className={cn('flex min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden border-b p-1.5 [contain:size]', i % 7 !== 6 && 'border-r', out && 'bg-muted/30', Math.floor(i / 7) === Math.floor((days.length - 1) / 7) && 'border-b-0')}>
+                {/* The day's header, all of it a button to its list: the number and, to the right, how many of each kind. */}
                 <button
                   type="button"
                   onClick={() => setDay(d)}
                   title={list.length ? `Ver ${list.length === 1 ? 'la publicación' : `las ${count(list.length)}`} del ${longDay(d)}` : longDay(d)}
                   aria-label={`${longDay(d)}: ${list.length ? count(list.length) : 'sin publicaciones'}`}
-                  className={cn('grid size-6 shrink-0 place-items-center rounded-full text-xs transition-colors', k === today ? 'bg-primary font-semibold text-primary-foreground' : cn('hover:bg-muted hover:text-foreground', out ? 'text-muted-foreground/60' : 'text-muted-foreground'))}
+                  className={cn('group/day flex shrink-0 items-center gap-2 rounded-full pr-2 text-xs transition-colors hover:bg-muted', out ? 'text-muted-foreground/60' : 'text-muted-foreground')}
                 >
-                  {d.getDate()}
+                  <span className={cn('grid size-6 shrink-0 place-items-center rounded-full', k === today ? 'bg-primary font-semibold text-primary-foreground' : 'group-hover/day:text-foreground')}>{d.getDate()}</span>
+                  {!!list.length && <KindCounts list={list} />}
                 </button>
                 {/* Only the publications scroll when they don't fit; the day's number stays. */}
                 {!!list.length && (
@@ -211,6 +213,22 @@ function Item({p, onOpen}: {p: CalendarPublication; onOpen: () => void}) {
 }
 
 // A day's publications, each with its cover, kind, state, hour and the start of its caption; one opens its details.
+// "2 🎞", "1 🎞 y 3 🂠": how many of each kind a day has, videos first.
+function KindCounts({list}: {list: CalendarPublication[]}) {
+  const kinds = (['video', 'carousel'] as const).map((k) => [k, list.filter((p) => (p.kind ?? 'video') === k).length] as const).filter(([, n]) => n > 0);
+  return (
+    <span className="ml-auto flex min-w-0 items-center gap-1 tabular-nums">
+      {kinds.map(([k, n], i) => (
+        <span key={k} className="flex items-center gap-1">
+          {i > 0 && <span>y</span>}
+          {n}
+          <KindIcon kind={k} className="size-3.5" />
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function DayDialog({day, items, onClose, onOpen}: {day: Date | null; items: CalendarPublication[]; onClose: () => void; onOpen: (p: CalendarPublication) => void}) {
   return (
     <Dialog open={!!day} onOpenChange={(o) => !o && onClose()}>
