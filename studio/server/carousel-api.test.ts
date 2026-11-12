@@ -1,5 +1,5 @@
 // Videos and carousels as the running server shows them: one list of publications, each its own routes, a carousel's
-// editor calls, its export, and no publishing it yet. Temp workspace, its own port, no cloud, no agent.
+// editor calls and its export. Temp workspace, its own port, no cloud, no agent.
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import fs from 'node:fs';
@@ -138,10 +138,10 @@ test('export: a zip of the version\'s numbered images; an unknown version is ref
   assert.equal((await fetch(`${url}/api/carousels/carrusel-qa/export?version=v7`)).status, 404);
 });
 
-test('a carousel cannot be published yet; deleting it removes only it', async () => {
+test('a carousel is published like a video (here, without a version it says so); deleting it removes only it', async () => {
   const p = await json('POST', '/api/reels/carrusel-qa/publications', {when: 'now'});
   assert.equal(p.status, 400);
-  assert.match(p.body.error ?? '', /publicar carruseles todavía no está disponible/);
+  assert.match(p.body.error ?? '', /elige una versión/);
   assert.equal((await json('DELETE', '/api/reels/carrusel-qa')).status, 200);
   const {body} = await json('GET', '/api/reels');
   assert.deepEqual((body as unknown as {slug: string}[]).map((r) => r.slug), ['video-viejo']);

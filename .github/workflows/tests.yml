@@ -32,6 +32,8 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: studio/package-lock.json
+      # Publicar convierte portadas y láminas de carrusel a JPEG con ffmpeg (publish.test.ts lo usa de verdad).
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm ci
       - run: npm run typecheck
       - run: npm test

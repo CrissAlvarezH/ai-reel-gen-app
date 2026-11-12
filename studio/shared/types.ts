@@ -972,7 +972,7 @@ export type VideoPublication = {
 };
 // account: the project's Instagram account (null: none chosen); cover: out/miniatura.* exists and goes as the cover.
 export type VideoPublications = {signedIn: boolean; account: string | null; caption: string; cover: boolean; items: VideoPublication[]};
-// Videos programados: every publication of the project's videos, on its day (scheduledAt, or when it was sent).
-// caption: the video's caption.md now (what it was sent with isn't kept).
-export type CalendarPublication = VideoPublication & {slug: string; title: string; cover: string | null; caption: string; at: string};
+// Publicaciones programadas: every publication of the project's videos and carousels, on its day (scheduledAt, or when
+// it was sent). caption: its caption.md now (what it was sent with isn't kept).
+export type CalendarPublication = VideoPublication & {slug: string; kind: PublicationKind; title: string; cover: string | null; caption: string; at: string};
 export type PublishInput = {version: string; scheduledAt: string | null; shareToFeed: boolean};

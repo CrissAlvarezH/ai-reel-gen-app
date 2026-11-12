@@ -675,9 +675,12 @@ export type CloudPublication = {id: string; status: PublicationStatus; scheduled
 const pubPath = (id: string) => `/api/studio/publications/${encodeURIComponent(id)}`;
 export const publicationsApi = {
   // scheduledAt is echoed only by a server that schedules; an older one would publish at once.
-  create: (b: {accountId: number; size: number; caption: string; title?: string; coverSize: number | null; shareToFeed: boolean; scheduledAt: string | null}) =>
-    call<{id: string; scheduledAt?: string | null; upload: PresignedPut; cover: PresignedPut | null}>('/api/studio/publications', {body: b, timeout: 30_000}),
-  uploaded: (id: string) => call<CloudPublication>(`${pubPath(id)}/uploaded`, {body: {}, timeout: 60_000}),
+  // A carousel: kind "carousel" and slides (each JPEG's size, in order); size is their total, so a server from before
+  // carousels answers with a video's upload (and no slides) instead of failing, and the studio uploads nothing.
+  create: (b: {accountId: number; kind?: 'carousel'; size: number; slides?: number[]; caption: string; title?: string; coverSize: number | null; shareToFeed: boolean; scheduledAt: string | null}) =>
+    call<{id: string; scheduledAt?: string | null; upload: PresignedPut | null; cover: PresignedPut | null; slides?: PresignedPut[] | null}>('/api/studio/publications', {body: b, timeout: 30_000}),
+  // A carousel's handover makes a container per image and waits for them: longer than a video's.
+  uploaded: (id: string) => call<CloudPublication>(`${pubPath(id)}/uploaded`, {body: {}, timeout: 120_000}),
   get: (id: string) => call<CloudPublication>(pubPath(id), {timeout: 30_000}),
   reschedule: (id: string, at: string) => call<CloudPublication>(pubPath(id), {method: 'PATCH', body: {scheduledAt: at}, timeout: 30_000, routeIsNew: true}),
   cancel: (id: string) => call<CloudPublication>(pubPath(id), {method: 'DELETE', timeout: 30_000, routeIsNew: true}),

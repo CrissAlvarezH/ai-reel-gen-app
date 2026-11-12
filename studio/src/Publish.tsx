@@ -1,9 +1,9 @@
-// Publicar: a version of the video to the project's Instagram account, now or at a time (server/publish.ts). The
-// button opens the form; under the player, what was sent from this video and how it's going. A scheduled one goes out
-// from the account at its time, with the app closed; until then it can be moved or canceled.
+// Publicar: a version of the video or of the carousel to the project's Instagram account, now or at a time
+// (server/publish.ts). The button opens the form; under the player (or the slides), what was sent and how it's going. A
+// scheduled one goes out from the account at its time, with the app closed; until then it can be moved or canceled.
 import {useCallback, useEffect, useState} from 'react';
 import {CalendarClock, CircleCheck, ExternalLink, Loader2, Send} from 'lucide-react';
-import {api, type PostedReel, type PublicationStatus, type VideoPublication, type VideoPublications} from './api';
+import {api, type PostedReel, type PublicationKind, type PublicationStatus, type VideoPublication, type VideoPublications} from './api';
 import {useConfirm} from './confirm';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -90,8 +90,19 @@ export function usePublications(slug: string) {
   return {data, load};
 }
 
+// The words that change between a video and a carousel.
+const WORDS = {
+  video: {this: 'este video', This: 'Este video', render: 'Renderiza el video para publicarlo', below: 'debajo del video'},
+  carousel: {this: 'este carrusel', This: 'Este carrusel', render: 'Renderiza una versión del carrusel para publicarla', below: 'debajo de las láminas'},
+};
+
 // posted: the reel Mi cuenta found it posted as, when it was posted some other way (or before this button existed).
-export function PublishButton({slug, version, data, posted, onDone}: {slug: string; version: string | null; data: VideoPublications | null; posted: PostedReel | null; onDone: () => void}) {
+// A carousel: its slides (the version's count): Instagram's API takes 2 to MAX_CAROUSEL; no cover, no "feed" switch.
+export const MAX_CAROUSEL = 10;
+export function PublishButton({slug, version, data, posted, onDone, kind = 'video', slides}: {slug: string; version: string | null; data: VideoPublications | null; posted: PostedReel | null; onDone: () => void; kind?: PublicationKind; slides?: number}) {
+  const w = WORDS[kind];
+  const carousel = kind === 'carousel';
+  const tooMany = carousel && slides != null && (slides > MAX_CAROUSEL || slides < 2);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'now' | 'later'>('now');
   const [when, setWhen] = useState(() => whenOf(nextHour()));
@@ -133,7 +144,7 @@ export function PublishButton({slug, version, data, posted, onDone}: {slug: stri
         variant="outline"
         disabled={!version}
         className={cn('shrink-0', (last?.status === 'published' || outside) && 'text-emerald-600 dark:text-emerald-400', last?.status === 'scheduled' && 'text-violet-600 dark:text-violet-400')}
-        title={!version ? 'Renderiza el video para publicarlo' : last ? `${STATUS[last.status].label}: abre para ver o publicar otra vez` : outside ? `Publicado en Instagram${postedOn ? ` el ${postedOn}` : ''} (lo encontró Mi cuenta): abre para publicar otra vez` : 'Publicar esta versión en Instagram, ahora o programada'}
+        title={!version ? w.render : last ? `${STATUS[last.status].label}: abre para ver o publicar otra vez` : outside ? `Publicado en Instagram${postedOn ? ` el ${postedOn}` : ''} (lo encontró Mi cuenta): abre para publicar otra vez` : 'Publicar esta versión en Instagram, ahora o programada'}
         onClick={() => {
           setMode('now');
           setWhen(whenOf(nextHour()));
@@ -166,7 +177,8 @@ export function PublishButton({slug, version, data, posted, onDone}: {slug: stri
             <DialogDescription>
               {ready ? (
                 <>
-                  Versión <span className="font-medium text-foreground">{version}</span> en <span className="font-medium text-foreground">@{data!.account}</span>.
+                  Versión <span className="font-medium text-foreground">{version}</span>
+                  {carousel && slides != null ? ` (${slides} ${slides === 1 ? 'lámina' : 'láminas'})` : ''} en <span className="font-medium text-foreground">@{data!.account}</span>.
                 </>
               ) : (
                 'Para publicar, inicia sesión con tu cuenta y elige la cuenta de Instagram de este proyecto.'
@@ -174,6 +186,11 @@ export function PublishButton({slug, version, data, posted, onDone}: {slug: stri
             </DialogDescription>
           </DialogHeader>
 
+          {ready && tooMany && (
+            <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {slides! < 2 ? 'Un carrusel lleva al menos 2 láminas.' : `Instagram publica como mucho ${MAX_CAROUSEL} láminas por carrusel, y esta versión tiene ${slides}. Quita láminas y renderiza otra versión.`}
+            </p>
+          )}
           {ready && outside && (
             <div className="flex flex-col gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
               <span>Este video ya está en Instagram{postedOn ? ` desde el ${postedOn}` : ''}, según Mi cuenta: si lo publicas otra vez, saldrá repetido.</span>
@@ -188,7 +205,7 @@ export function PublishButton({slug, version, data, posted, onDone}: {slug: stri
                 {last.status === 'published'
                   ? `Esta versión ya está en Instagram (${fmtWhen(last.createdAt)}): si la publicas otra vez, saldrá repetida.`
                   : last.status === 'scheduled' && last.scheduledAt
-                    ? `Esta versión ya está programada para el ${fmtWhen(last.scheduledAt)}. Cámbiala o cancélala debajo del video.`
+                    ? `Esta versión ya está programada para el ${fmtWhen(last.scheduledAt)}. Cámbiala o cancélala ${w.below}.`
                     : 'Esta versión se está publicando ahora mismo.'}
               </span>
               {last.permalink && (
@@ -233,14 +250,20 @@ export function PublishButton({slug, version, data, posted, onDone}: {slug: stri
                 {data!.caption ? (
                   <p className="max-h-28 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">{data!.caption}</p>
                 ) : (
-                  <p className="text-xs text-amber-600 dark:text-amber-400">Este video no tiene caption: saldrá sin texto. Escríbelo en la pestaña Caption IG.</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">{w.This} no tiene caption: saldrá sin texto. Escríbelo en la pestaña Caption IG.</p>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">{data!.cover ? 'Portada: la miniatura del video.' : 'Sin miniatura: Instagram elige la portada del video.'}</p>
-              <label className="flex items-center justify-between gap-3 text-sm">
-                Mostrar también en el feed
-                <Switch checked={feed} onCheckedChange={setFeed} />
-              </label>
+              {carousel ? (
+                <p className="text-xs text-muted-foreground">Las láminas salen en su orden, como JPEG. La primera es la portada.</p>
+              ) : (
+                <>
+                  <p className="text-xs text-muted-foreground">{data!.cover ? 'Portada: la miniatura del video.' : 'Sin miniatura: Instagram elige la portada del video.'}</p>
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    Mostrar también en el feed
+                    <Switch checked={feed} onCheckedChange={setFeed} />
+                  </label>
+                </>
+              )}
             </div>
           )}
 
@@ -254,7 +277,7 @@ export function PublishButton({slug, version, data, posted, onDone}: {slug: stri
               Cancelar
             </Button>
             {ready && (
-              <Button disabled={busy || !version} onClick={submit}>
+              <Button disabled={busy || !version || tooMany} onClick={submit}>
                 {busy && <Loader2 className="animate-spin" />}
                 {mode === 'now' ? (last || outside ? 'Publicar otra vez' : 'Publicar ahora') : last || outside ? 'Programar otra vez' : 'Programar'}
               </Button>

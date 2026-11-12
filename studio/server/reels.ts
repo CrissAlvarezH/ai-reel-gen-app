@@ -287,7 +287,8 @@ function carouselSummary(slug: string): ReelSummary & {parts: ReturnType<typeof 
     voice: null,
     pace: 0,
     instagram: null,
-    release: null,
+    // What it sent to Instagram, like a video's (Mi cuenta doesn't keep carousels).
+    release: releaseOf(recordsOf(path.join(VIDEOS, slug)), null, c.progress.every((x) => x.done)),
     parts: c,
   };
 }

@@ -1,5 +1,6 @@
 // Publicar against a fake account (a small HTTP server standing for the cloud and for S3) in a temp workspace.
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -12,7 +13,8 @@ process.env.REEL_STUDIO_WORKSPACE = root;
 process.env.REEL_STUDIO_CONFIG_DIR = path.join(root, '.cfg');
 
 type Pub = {id: string; body: Record<string, unknown>; status: string; scheduledAt: string | null; gets: number};
-const ctl = {old: false, putStatus: 0, pubs: new Map<string, Pub>(), puts: new Map<string, number>(), n: 0};
+// noCarousels: a server from before carousels (it takes one for a video). heads: the first bytes each PUT brought.
+const ctl = {old: false, noCarousels: false, putStatus: 0, pubs: new Map<string, Pub>(), puts: new Map<string, number>(), heads: new Map<string, string>(), n: 0};
 const server = http.createServer(async (req, res) => {
   const chunks: Buffer[] = [];
   for await (const c of req) chunks.push(c as Buffer);
@@ -22,6 +24,7 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith('/s3/')) {
     if (ctl.putStatus) return res.writeHead(ctl.putStatus).end('<Error><Code>Nope</Code></Error>');
     ctl.puts.set(url.slice(4), raw.length);
+    ctl.heads.set(url.slice(4), raw.subarray(0, 2).toString('hex'));
     return res.writeHead(200).end();
   }
   if (req.headers.authorization !== 'Bearer tok') return send(401, {error: 'no'});
@@ -32,6 +35,8 @@ const server = http.createServer(async (req, res) => {
     const p: Pub = {id, body, status: 'uploading', scheduledAt: ctl.old ? null : (body.scheduledAt ?? null), gets: 0};
     ctl.pubs.set(id, p);
     const put = (k: string, type: string) => ({url: `${base}/s3/${k}`, method: 'PUT', headers: {'Content-Type': type}});
+    if (body.kind === 'carousel' && !ctl.noCarousels)
+      return send(200, {id, scheduledAt: p.scheduledAt, upload: null, cover: null, slides: (body.slides as number[]).map((_, i) => put(`${id}-0${i + 1}.jpg`, 'image/jpeg'))});
     return send(200, {id, ...(ctl.old ? {} : {scheduledAt: p.scheduledAt}), upload: put(`${id}.mp4`, 'video/mp4'), cover: body.coverSize ? put(`${id}.jpg`, 'image/jpeg') : null});
   }
   const m = /^\/api\/studio\/publications\/(\w+)(\/uploaded)?$/.exec(url);
@@ -87,9 +92,10 @@ const until = async (fn: () => boolean, ms = 3000) => {
 const records = () => JSON.parse(fs.readFileSync(path.join(video, 'publicaciones.json'), 'utf8')) as {id: string; status: string; scheduledAt: string | null; permalink: string | null}[];
 
 beforeEach(() => {
-  Object.assign(ctl, {old: false, putStatus: 0, n: ctl.n});
+  Object.assign(ctl, {old: false, noCarousels: false, putStatus: 0, n: ctl.n});
   ctl.pubs.clear();
   ctl.puts.clear();
+  ctl.heads.clear();
   fs.rmSync(path.join(video, 'publicaciones.json'), {force: true});
   fs.mkdirSync(path.dirname(link), {recursive: true});
   fs.writeFileSync(link, JSON.stringify({accountId: 7, username: 'entiende.finanzas.ya'}));
@@ -231,4 +237,59 @@ test('the calendar answers with the files at once and asks the account in the ba
   assert.equal(records()[0].status, 'scheduled');
   await publish.calendar(now + 3000);
   await until(() => records()[0].status === 'published');
+});
+
+/* ───── Carousels ───── */
+
+// A carousel next to the video: kind.txt, and versions of n PNG slides (a real PNG, so ffmpeg makes JPEGs of them).
+const carousel = path.join(dir, 'videos', 'mi-carrusel');
+const png = path.join(root, 'lamina.png');
+execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=0x1f6feb:s=1080x1350', '-frames:v', '1', png]);
+fs.mkdirSync(carousel, {recursive: true});
+fs.writeFileSync(path.join(carousel, 'kind.txt'), 'carousel\n');
+fs.writeFileSync(path.join(carousel, 'caption.md'), 'Tu presupuesto en 3 cajas #ahorro\n');
+const slidesVersion = (name: string, n: number) => {
+  const out = path.join(carousel, 'out', name);
+  fs.mkdirSync(out, {recursive: true});
+  const slides = Array.from({length: n}, (_, i) => ({id: `l${i + 1}`, title: `Lámina ${i + 1}`, text: '', file: `${String(i + 1).padStart(2, '0')}.png`, source: null}));
+  for (const sl of slides) fs.copyFileSync(png, path.join(out, sl.file));
+  fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify({name, created: 1, width: 1080, height: 1350, slides}));
+};
+slidesVersion('v1', 3);
+slidesVersion('v2', 11);
+slidesVersion('v3', 1);
+const carouselRecords = () => JSON.parse(fs.readFileSync(path.join(carousel, 'publicaciones.json'), 'utf8')) as {id: string; status: string; permalink: string | null}[];
+
+test('a carousel: its version goes as one JPEG per slide, in order, and is followed until it is out; Mi cuenta is not told', async () => {
+  fs.writeFileSync(path.join(dir, 'config', 'account.json'), JSON.stringify({username: 'entiende.finanzas.ya'}));
+  fs.rmSync(path.join(carousel, 'publicaciones.json'), {force: true});
+  const r = await publish.publish('mi-carrusel', {version: 'v1', scheduledAt: null, shareToFeed: false});
+  const sent = ctl.pubs.get(r.id)!.body as {kind: string; slides: number[]; size: number; coverSize: null; shareToFeed: boolean; caption: string};
+  assert.equal(sent.kind, 'carousel');
+  assert.equal(sent.slides.length, 3);
+  assert.equal(sent.size, sent.slides.reduce((a, b) => a + b, 0));
+  assert.deepEqual([sent.coverSize, sent.shareToFeed, sent.caption], [null, true, 'Tu presupuesto en 3 cajas #ahorro']);
+  await until(() => carouselRecords()[0].status === 'published');
+  for (const [i, size] of sent.slides.entries()) {
+    assert.equal(ctl.puts.get(`${r.id}-0${i + 1}.jpg`), size);
+    assert.equal(ctl.heads.get(`${r.id}-0${i + 1}.jpg`), 'ffd8'); // a JPEG, not the PNG
+  }
+  assert.ok(!fs.existsSync(path.join(dir, 'account', 'entiende.finanzas.ya', `R${r.id}code`)));
+  fs.rmSync(path.join(dir, 'config', 'account.json'));
+
+  const cal = (await publish.calendar()).find((p) => p.id === r.id)!;
+  assert.equal(cal.kind, 'carousel');
+  assert.equal((await publish.calendar()).find((p) => p.slug === 'mi-video')?.kind ?? 'video', 'video');
+});
+
+test('a carousel the account cannot take yet, or of more than 10 slides or fewer than 2, gets nothing uploaded', async () => {
+  ctl.noCarousels = true;
+  await assert.rejects(publish.publish('mi-carrusel', {version: 'v1', scheduledAt: null}), /aún no publica carruseles/);
+  assert.equal(ctl.puts.size, 0);
+  ctl.noCarousels = false;
+  const before = ctl.pubs.size;
+  await assert.rejects(publish.publish('mi-carrusel', {version: 'v2', scheduledAt: null}), /como mucho 10 láminas/);
+  await assert.rejects(publish.publish('mi-carrusel', {version: 'v3', scheduledAt: null}), /al menos 2 láminas/);
+  await assert.rejects(publish.publish('mi-carrusel', {version: 'v9', scheduledAt: null}), /renderiza el carrusel/);
+  assert.equal(ctl.pubs.size, before);
 });
