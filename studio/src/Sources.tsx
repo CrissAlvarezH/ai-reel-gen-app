@@ -35,7 +35,7 @@ const STATES: Record<SourceItemState, {label: string; className: string}> = {
   used: {label: 'Usado', className: 'border-emerald-500/40 text-emerald-400'},
   discarded: {label: 'Descartado', className: 'text-muted-foreground line-through'},
 };
-const PAGE = 25;
+const PAGE = 10;
 
 function useItemHash() {
   const [hash, setHash] = useState(location.hash);
