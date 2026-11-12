@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {Eye, LayoutGrid, Loader2, MoreHorizontal, Table2, Trash2} from 'lucide-react';
+import {ChevronLeft, ChevronRight, Eye, LayoutGrid, Loader2, MoreHorizontal, Table2, Trash2} from 'lucide-react';
 import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle} from '@/components/ui/alert-dialog';
 import {Button} from '@/components/ui/button';
@@ -20,14 +20,15 @@ import {KIND, KindIcon, publicationHref} from './PublicationKind';
 // "1 video", "2 carruseles": a count with its noun.
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-// Both doors, side by side: a video (the usual one, primary) and a carousel.
+// Both doors, side by side and with the same weight (the primary button, like every page's "Nuevo …"): a video
+// and a carousel, each with its kind's icon.
 function NewButtons({first}: {first?: boolean}) {
   return (
     <div className="flex flex-none flex-wrap justify-center gap-2">
       {(['video', 'carousel'] as const).map((k) => {
         const I = KIND[k].icon;
         return (
-          <Button key={k} asChild variant={k === 'video' ? 'default' : 'outline'}>
+          <Button key={k} asChild>
             <a href={KIND[k].href}>
               <I /> {first ? (k === 'video' ? 'Crear un video' : 'Crear un carrusel') : KIND[k].new}
             </a>
@@ -113,6 +114,8 @@ function DeleteReel({reel: r, onClose, onDeleted}: {reel: ReelSummary; onClose: 
 }
 
 type View = 'grid' | 'table';
+// Cards a page in Cuadrícula (the table pages its own, also 15).
+const GRID_PAGE = 15;
 const VIEW_KEY = 'studio.library.view';
 
 export function Library() {
@@ -131,6 +134,10 @@ export function Library() {
   };
   useEffect(() => void load(), [load]);
   useLive(load);
+  // One that shrinks under the current page (deleting its last card) goes to its last.
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil((reels?.length ?? 0) / GRID_PAGE));
+  const pg = Math.min(page, pages - 1);
   const carousels = reels?.filter((r) => r.kind === 'carousel').length ?? 0;
   const videos = (reels?.length ?? 0) - carousels;
 
@@ -181,8 +188,9 @@ export function Library() {
       ) : view === 'table' ? (
         <LibraryTable reels={reels} onDelete={setDeleting} />
       ) : (
+        <>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
-          {reels.map((r, i) => {
+          {reels.slice(pg * GRID_PAGE, pg * GRID_PAGE + GRID_PAGE).map((r, i) => {
             const carousel = r.kind === 'carousel';
             const K = KIND[r.kind] ?? KIND.video;
             return (
@@ -252,6 +260,23 @@ export function Library() {
             );
           })}
         </div>
+        {pages > 1 && (
+          <div className="mt-4 flex items-center justify-end gap-2 text-sm text-muted-foreground">
+            <span className="mr-auto tabular-nums">
+              {pg * GRID_PAGE + 1}–{Math.min(reels.length, pg * GRID_PAGE + GRID_PAGE)} de {reels.length}
+            </span>
+            <Button variant="ghost" size="icon-sm" disabled={pg === 0} onClick={() => setPage(pg - 1)} aria-label="Página anterior">
+              <ChevronLeft />
+            </Button>
+            <span className="tabular-nums">
+              {pg + 1} / {pages}
+            </span>
+            <Button variant="ghost" size="icon-sm" disabled={pg >= pages - 1} onClick={() => setPage(pg + 1)} aria-label="Página siguiente">
+              <ChevronRight />
+            </Button>
+          </div>
+        )}
+        </>
       )}
       {deleting && (
         <DeleteReel

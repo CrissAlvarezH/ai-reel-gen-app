@@ -10,15 +10,13 @@ import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@/c
 import {fmtAgo, fmtTime, type ReelSummary} from './api';
 import {useColumns} from './Columns';
 import {FilterSelect, SortHead} from './Inspiration';
-import {ReelProgressRing} from './ReelProgress';
-import {ReleaseLine} from './Release';
+import {StageIcon, stageText} from './Stage';
 import {KIND, KindIcon, publicationHref} from './PublicationKind';
 
 const PAGE = 15;
 // Título (its picture, kind and title) is always there; these he can hide. Duración is a carousel's slides.
 const COLUMNS = [
-  {key: 'release', label: 'Publicación'},
-  {key: 'progress', label: 'Progreso'},
+  {key: 'stage', label: 'Estado'},
   {key: 'style', label: 'Estilo'},
   {key: 'seconds', label: 'Duración'},
   {key: 'views', label: 'Vistas'},
@@ -27,9 +25,9 @@ const COLUMNS = [
   {key: 'updated', label: 'Actualizado'},
 ] as const satisfies {key: string; label: string}[];
 
-// Publicación: where each one stands; "unfinished" are those without a line (still being made).
+// Estado: where each one stands; "unfinished" are those still being made.
 type Stage = NonNullable<ReelSummary['release']>['state'] | 'unfinished';
-const stageOf = (r: ReelSummary): Stage => r.release?.state ?? 'unfinished';
+const stageOf = (r: ReelSummary): Stage => (r.instagram ? 'published' : (r.release?.state ?? 'unfinished'));
 const KINDS: [string, string][] = [
   ['any', 'Videos y carruseles'],
   ['video', 'Videos'],
@@ -44,15 +42,18 @@ const STAGES: [string, string][] = [
   ['unfinished', 'En progreso'],
 ];
 
-type SortKey = 'title' | 'release' | 'seconds' | 'views' | 'versions' | 'created' | 'updated';
-// Publicación sorts by stage (on its way, scheduled, out, ready, in progress), then by its date.
+type SortKey = 'title' | 'stage' | 'seconds' | 'views' | 'versions' | 'created' | 'updated';
+// Estado sorts by stage (on its way, scheduled, out, ready, in progress), then by its date, and those in progress by
+// how far along they are.
 const STAGE_ORDER: Record<Stage, number> = {publishing: 0, scheduled: 1, published: 2, ready: 3, unfinished: 4};
 const value = (r: ReelSummary, k: SortKey): string | number | null => {
   switch (k) {
     case 'title':
       return (r.title ?? r.slug).toLocaleLowerCase('es');
-    case 'release':
-      return STAGE_ORDER[stageOf(r)] * 1e13 - (r.release?.at ? Date.parse(r.release.at) : 0);
+    case 'stage': {
+      const at = r.instagram?.posted ?? r.release?.at;
+      return STAGE_ORDER[stageOf(r)] * 1e13 - (at ? Date.parse(at) : r.progress.filter((p) => p.done).length);
+    }
     case 'seconds':
       return r.kind === 'carousel' ? null : r.seconds; // no duration: after the videos, by their slides (rows)
     case 'views':
@@ -91,8 +92,7 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
   // The columns he picked (Columnas, kept per project like Mi cuenta's); those no video has anything for stay out too.
   const cols = useColumns('library', COLUMNS);
   const show = {
-    release: cols.shown('release'),
-    progress: cols.shown('progress'),
+    stage: cols.shown('stage'),
     style: cols.shown('style') && (styles.length > 0 || reels.some((r) => r.videoFormat?.footage)),
     seconds: cols.shown('seconds'),
     views: cols.shown('views') && reels.some((r) => r.instagram),
@@ -140,7 +140,7 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por título o gancho…" className="h-8 pl-8" aria-label="Buscar" spellCheck={false} />
         </div>
         {mixed && <FilterSelect value={kind} onChange={setKind} label="Tipo" options={KINDS} />}
-        <FilterSelect value={stage} onChange={setStage} label="Publicación" options={STAGES} />
+        <FilterSelect value={stage} onChange={setStage} label="Estado" options={STAGES} />
         {styles.length > 1 && <FilterSelect value={style} onChange={setStyle} label="Estilo" options={[['any', 'Todos los estilos'], ...styles]} />}
         {formats.length > 1 && <FilterSelect value={format} onChange={setFormat} label="Formato" options={[['any', 'Todos los formatos'], ...formats]} />}
         {active && (
@@ -171,12 +171,11 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
                 <SortHead k="title" sort={sort} setSort={setSort}>
                   Título
                 </SortHead>
-                {show.release && (
-                  <SortHead k="release" sort={sort} setSort={setSort}>
-                    Publicación
+                {show.stage && (
+                  <SortHead k="stage" sort={sort} setSort={setSort}>
+                    Estado
                   </SortHead>
                 )}
-                {show.progress && <TableHead>Progreso</TableHead>}
                 {show.style && <TableHead>Estilo</TableHead>}
                 {show.seconds && (
                   <SortHead k="seconds" sort={sort} setSort={setSort} title="Un video: estimada al ritmo de su voz. Un carrusel: sus láminas">
@@ -232,14 +231,12 @@ export function LibraryTable({reels, onDelete}: {reels: ReelSummary[]; onDelete:
                       </div>
                       <p className="line-clamp-1 text-xs text-muted-foreground">{r.hook || (carousel ? 'Sin textos' : 'Sin guion')}</p>
                     </TableCell>
-                    {show.release && (
+                    {show.stage && (
                       <TableCell className="whitespace-nowrap">
-                        {r.release ? <ReleaseLine r={r.release} compact /> : carousel && <span className="text-muted-foreground">—</span>}
-                      </TableCell>
-                    )}
-                    {show.progress && (
-                      <TableCell>
-                        <ReelProgressRing steps={r.progress} className="size-5" />
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <StageIcon r={r} className="size-4 flex-none" />
+                          {stageText(r, {table: true}) ?? '—'}
+                        </span>
                       </TableCell>
                     )}
                     {show.style && (

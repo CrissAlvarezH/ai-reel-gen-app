@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
-import {Archive, Check, CheckCircle2, ChevronDown, ExternalLink, Film, Loader2, MessageSquare, RotateCcw, Settings as SettingsIcon, ShieldCheck, Square, Trash2, Undo2, Zap} from 'lucide-react';
+import {Archive, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Film, Loader2, MessageSquare, RotateCcw, Settings as SettingsIcon, ShieldCheck, Square, Trash2, Undo2, Zap} from 'lucide-react';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from '@/components/ui/dialog';
@@ -299,10 +299,19 @@ function StartDialog({onClose, view, act, thumbs}: {onClose: () => void; view: F
   );
 }
 
+// Reports a page; the pager shows once there's more than one.
+const REPORTS_PAGE = 10;
+
 function Reports({view, act, thumbs, posted}: {view: FactAuditView; act: Act; thumbs: Thumbs; posted: Record<string, PostedReel>}) {
   const [filter, setFilter] = useState<FactReportState | 'all'>('open');
+  const [page, setPage] = useState(0);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, f.id === 'all' ? view.reports.length : view.reports.filter((r) => r.state === f.id).length])), [view.reports]);
   const list = filter === 'all' ? view.reports : view.reports.filter((r) => r.state === filter);
+  // Another filter starts at the first page; one that shrinks under the current page (archiving its last) goes to its last.
+  useEffect(() => setPage(0), [filter]);
+  const pages = Math.max(1, Math.ceil(list.length / REPORTS_PAGE));
+  const pg = Math.min(page, pages - 1);
+  const slice = list.slice(pg * REPORTS_PAGE, pg * REPORTS_PAGE + REPORTS_PAGE);
   // "Enviar al agente" sends a video's latest finished report still pending (server/fact-audit.ts agentText).
   const latest = useMemo(() => {
     const m = new Map<string, string>();
@@ -335,7 +344,27 @@ function Reports({view, act, thumbs, posted}: {view: FactAuditView; act: Act; th
           description={filter === 'open' || filter === 'all' ? 'Empieza una auditoría arriba, o activa la automática.' : undefined}
         />
       ) : (
-        list.map((r) => <ReportCard key={r.id} report={r} act={act} thumb={thumbs[r.slug] ?? null} posted={posted[r.slug]} sendable={latest.get(r.slug) === r.id} exists={view.videos.some((v) => v.slug === r.slug)} />)
+        <>
+          {slice.map((r) => (
+            <ReportCard key={r.id} report={r} act={act} thumb={thumbs[r.slug] ?? null} posted={posted[r.slug]} sendable={latest.get(r.slug) === r.id} exists={view.videos.some((v) => v.slug === r.slug)} />
+          ))}
+          {pages > 1 && (
+            <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+              <span className="mr-auto tabular-nums">
+                {pg * REPORTS_PAGE + 1}–{pg * REPORTS_PAGE + slice.length} de {list.length}
+              </span>
+              <Button variant="ghost" size="icon-sm" disabled={pg === 0} onClick={() => setPage(pg - 1)} aria-label="Página anterior">
+                <ChevronLeft />
+              </Button>
+              <span className="tabular-nums">
+                {pg + 1} / {pages}
+              </span>
+              <Button variant="ghost" size="icon-sm" disabled={pg >= pages - 1} onClick={() => setPage(pg + 1)} aria-label="Página siguiente">
+                <ChevronRight />
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

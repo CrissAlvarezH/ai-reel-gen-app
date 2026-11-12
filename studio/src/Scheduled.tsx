@@ -12,7 +12,7 @@ import EmptyState from '@/components/common/EmptyState';
 import {api, useLive, type CalendarPublication} from './api';
 import {MOVING, STATUS} from './Publish';
 import {KIND, KindIcon, publicationHref} from './PublicationKind';
-import {InstagramGlyph} from './Sidebar';
+import {InstagramGlyph} from './Stage';
 import {useStudio} from './studio';
 
 // A week's least height: the day's number and a card.
