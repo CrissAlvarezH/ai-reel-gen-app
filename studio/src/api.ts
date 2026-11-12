@@ -165,14 +165,15 @@ export const chatApi = {
 
 export const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 export const fmtSize = (b: number) => (b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.round(b / 1e3)} KB`);
-export function fmtAgo(ms: number) {
-  const m = Math.round((Date.now() - ms) / 60000);
-  if (m < 1) return 'ahora';
-  if (m < 60) return `hace ${m} min`;
+// `bare` drops the "hace" for tight spots (the sidebar), where "3 h" alone reads fine.
+export function fmtAgo(ms: number, bare = false) {
+  const p = bare ? '' : 'hace ';
+  const m = Math.max(1, Math.round((Date.now() - ms) / 60000));
+  if (m < 60) return `${p}${m} min`;
   const h = Math.round(m / 60);
-  if (h < 24) return `hace ${h} h`;
+  if (h < 24) return `${p}${h} h`;
   const d = Math.round(h / 24);
-  return d < 30 ? `hace ${d} d` : new Date(ms).toLocaleDateString('es');
+  return d < 30 ? `${p}${d} d` : new Date(ms).toLocaleDateString('es');
 }
 
 /* ───── Agents (sidebar) ───── */

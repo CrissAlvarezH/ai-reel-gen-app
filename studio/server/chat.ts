@@ -316,7 +316,9 @@ export function markSeen(key: string, chat: string) {
 // The agent's state for the sidebar, derived from its conversations: working (any running now) · otherwise
 // from the latest one: needs (ended on a question you haven't answered) · review (finished, not seen yet)
 // · error · idle · new (no conversation yet).
-const asks = (text: string) => /\?/.test(text.trim().split(/\n\s*\n/).pop() ?? '');
+// Links out: a markdown link keeps its text, a bare URL goes (a "?p=123" in a source isn't a question).
+const prose = (text: string) => text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/https?:\/\/\S+/g, '');
+const asks = (text: string) => /\?/.test(prose(text).trim().split(/\n\s*\n/).pop() ?? '');
 export function agent(key: string): AgentInfo {
   const s = load(key);
   const running = s.chats.map((c) => ({c, r: runs.get(runKey(key, c.id))})).filter((x) => x.r);
@@ -341,7 +343,7 @@ export function agent(key: string): AgentInfo {
   else if ((last.ts ?? 0) > (c.seenAt ?? 0)) st = 'review';
   else st = 'idle';
   // The end of what it said is what matters (its question or conclusion); strip markdown noise.
-  const plain = (r?.live || said).replace(/[*_`#>|-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const plain = prose(r?.live || said).replace(/[*_`#>|-]+/g, ' ').replace(/\s+/g, ' ').trim();
   return {
     key,
     state: st,
